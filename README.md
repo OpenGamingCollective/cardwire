@@ -1,10 +1,10 @@
 # cardwire
 
-GPU manager for Linux (laptops and workstations) using eBPF LSM hooks to block/unblock GPUs.
+a GPU manager for Linux using eBPF LSM hooks to block GPUs
 
 ## Status
 
-**Experimental / Work in Progress**
+**Experimental**
 
 The project is currently being rebuilt using parts of a previous demo (see cardwire on asus-linux gitlab, or chainsaw on my github). While the core architecture (CLI, Daemon, eBPF) is established:
 - eBPF LSM logic is partially implemented but not yet fully wired into the daemon's D-Bus methods
