@@ -10,3 +10,4 @@ description = "Core library for cardwire GPU management"
 
 [dependencies]
 thiserror = { workspace = true }
+cardwire-ebpf = { path = "../cardwire-ebpf" }

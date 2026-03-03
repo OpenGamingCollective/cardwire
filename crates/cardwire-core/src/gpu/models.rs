@@ -1,6 +1,6 @@
 #[derive(Clone)]
 pub struct Gpu {
-    pub id: usize,
+    pub id: u32,
     pub name: String,
     pub pci: String,
     pub render: String,
@@ -17,7 +17,7 @@ impl Gpu {
         self.default
     }
 
-    pub fn id(&self) -> usize {
+    pub fn id(&self) -> u32 {
         self.id
     }
 

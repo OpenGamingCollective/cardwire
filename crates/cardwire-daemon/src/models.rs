@@ -42,7 +42,7 @@ impl Daemon {
                 config: tokio::sync::RwLock::new(config),
                 _pci_devices: pci_devices,
                 gpu_list,
-                _ebpf_blocker: tokio::sync::Mutex::new(ebpf_blocker),
+                ebpf_blocker: tokio::sync::Mutex::new(ebpf_blocker),
             },
         })
     }
@@ -53,7 +53,7 @@ pub struct DaemonState {
     pub gpu_list: HashMap<usize, gpu::Gpu>,
     // for future uses, related to vfio
     pub _pci_devices: HashMap<String, Device>,
-    pub _ebpf_blocker: Mutex<EbpfBlocker>,
+    pub ebpf_blocker: Mutex<EbpfBlocker>,
 }
 impl DaemonState {
     pub async fn get_mode(&self) -> Modes {

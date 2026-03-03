@@ -14,14 +14,14 @@ pub fn read_gpu(pci_devices: &HashMap<String, Device>) -> io::Result<HashMap<usi
         .filter(|device| device.class.as_str() == "0x030000")
         .enumerate()
     {
-        let gpu = build_gpu(id, device)?;
+        let gpu = build_gpu(id as u32, device)?;
         gpu_map.insert(id, gpu);
     }
 
     Ok(gpu_map)
 }
 
-fn build_gpu(id: usize, device: &Device) -> io::Result<Gpu> {
+fn build_gpu(id: u32, device: &Device) -> io::Result<Gpu> {
     let boot_vga_path = Path::new("/sys/bus/pci/devices")
         .join(&device.pci_address)
         .join("boot_vga");

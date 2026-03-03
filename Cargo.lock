@@ -316,6 +316,7 @@ dependencies = [
 name = "cardwire-core"
 version = "0.1.0"
 dependencies = [
+ "cardwire-ebpf",
  "thiserror 2.0.18",
 ]
 
