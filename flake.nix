@@ -21,12 +21,6 @@
           inherit system;
           overlays = [ rust-overlay.overlays.default ];
         };
-
-        mkRustToolchain =
-          pkgs:
-          pkgs.rust-bin.stable.latest.default.override {
-            extensions = [ "rust-src" ];
-          };
       in
       {
         packages.default = pkgs.rustPlatform.buildRustPackage {
@@ -50,7 +44,7 @@
             description = "A program to block dgpu on Linux";
             homepage = "https://github.com/luytan/cardwire";
             license = licenses.mit;
-            mainProgram = "luytan";
+            mainProgram = "cardwire";
             platforms = platforms.linux;
           };
           # Patch the source code to point to the correct hwdata location in the Nix store
@@ -78,14 +72,13 @@
           with lib;
           let
             cfg = config.services.cardwire;
-            package = mkPackage (pkgsFor pkgs.system) true;
           in
           {
             options.services.cardwire = {
               enable = mkEnableOption "cardwire daemon";
               package = mkOption {
                 type = types.package;
-                default = package;
+                default = self.packages.${pkgs.system}.default;
                 description = "cardwire daemon package";
               };
             };
@@ -139,7 +132,7 @@
             rustfmt
             clippy
           ];
-shellHook = ''
+          shellHook = ''
             DBUS_FILE="/tmp/cardwire_dbus"
 
             start_bus() {
