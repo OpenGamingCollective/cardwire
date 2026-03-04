@@ -4,10 +4,11 @@ use std::error::Error;
 use std::fmt;
 
 use crate::config::Config;
-use cardwire_core::gpu;
+use cardwire_core::gpu::{self, block_gpu};
 use cardwire_core::iommu;
 use cardwire_core::iommu::Device;
 use cardwire_ebpf::EbpfBlocker;
+use log::warn;
 use tokio::sync::{Mutex, RwLock};
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy)]
@@ -35,7 +36,22 @@ impl Daemon {
     pub fn new(config: Config) -> Result<Self, Box<dyn Error>> {
         let pci_devices = iommu::read_pci_devices()?;
         let gpu_list = gpu::read_gpu(&pci_devices)?;
-        let ebpf_blocker = cardwire_ebpf::EbpfBlocker::new()?;
+        let mut ebpf_blocker = cardwire_ebpf::EbpfBlocker::new()?;
+
+        // Apply config mode at startup
+        match config.mode {
+            Modes::Integrated | Modes::Hybrid => {
+                let block = config.mode == Modes::Integrated;
+                for gpu in gpu_list.values() {
+                    if !gpu.is_default() {
+                        if let Err(err) = block_gpu(&mut ebpf_blocker, gpu, block) {
+                            warn!("Failed to apply config mode {} at startup: {}", config.mode, err);
+                        }
+                    }
+                }
+            }
+            Modes::Manual => {}
+        }
 
         Ok(Self {
             state: DaemonState {
