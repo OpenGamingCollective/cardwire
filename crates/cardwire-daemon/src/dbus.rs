@@ -97,8 +97,9 @@ impl Daemon {
     pub(crate) async fn list_gpus(&self) -> Vec<GpuRow> {
         //self.list_gpu_rows().await
         let mut rows = Vec::with_capacity(self.state.gpu_list.len());
+        let mut blocker = self.state.ebpf_blocker.lock().await;
         for gpu in self.state.gpu_list.values() {
-            let blocked = false;
+            let blocked: bool = is_gpu_blocked(&mut blocker, gpu).expect("Couldn't check gpu's lock state");
             rows.push((
                 gpu.id() as u32,
                 gpu.name().to_string(),
