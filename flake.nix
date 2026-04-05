@@ -2,7 +2,6 @@
   description = "Cardwire, a GPU manager for laptop and workstation";
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
     fenix = {
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -13,46 +12,46 @@
       self,
       nixpkgs,
       fenix,
-      flake-utils,
     }:
     let
       supportedSystems = [
         "x86_64-linux"
         "aarch64-linux"
       ];
-      packagesPerSystem = flake-utils.lib.eachSystem supportedSystems (
+      forAllSystems = fn: nixpkgs.lib.genAttrs supportedSystems (system: fn system);
+      pkgs = system: nixpkgs.legacyPackages.${system};
+      fenixpkgs = system: fenix.packages.${system};
+      toolchainFor =
         system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
-          fenixPkgs = fenix.packages.${system};
-
-          toolchain = fenixPkgs.combine [
-            fenixPkgs.stable.cargo
-            fenixPkgs.stable.rustc
-            fenixPkgs.stable.rustfmt
-            fenixPkgs.stable.clippy
-            fenixPkgs.stable.rust-src
+        (fenixpkgs system).combine [
+          (fenixpkgs system).stable.cargo
+          (fenixpkgs system).stable.rustc
+          (fenixpkgs system).stable.rustfmt
+          (fenixpkgs system).stable.clippy
+          (fenixpkgs system).stable.rust-src
+        ];
+    in
+    {
+      packages = forAllSystems (system: {
+        default = (pkgs system).callPackage ./nix { toolchain = toolchainFor system; };
+      });
+      devShells = forAllSystems (system: {
+        default = (pkgs system).mkShell {
+          packages = [
+            (toolchainFor system)
+            (pkgs system).clang
+            (pkgs system).libbpf
           ];
-        in
-        {
-          packages.default = pkgs.callPackage ./nix { inherit toolchain; };
-          devShells.default = pkgs.mkShell {
-            packages = [ toolchain pkgs.clang pkgs.libbpf ];
-            RUST_SRC_PATH = "${fenixPkgs.stable.rust-src}/lib/rustlib/src/rust/library";
-            RUST_BACKTRACE = "1";
-          };
-        }
-      );
-      nixosConfigurationsPerSystem = nixpkgs.lib.genAttrs supportedSystems (
+          RUST_SRC_PATH = "${(fenixpkgs system).stable.rust-src}/lib/rustlib/src/rust/library";
+          RUST_BACKTRACE = "1";
+        };
+      });
+      nixosModules.default = import ./nix/nixos-module.nix self;
+      nixosConfigurations = nixpkgs.lib.genAttrs supportedSystems (
         system:
         import ./nix/test-vm.nix {
           inherit nixpkgs self system;
         }
       );
-    in
-    packagesPerSystem
-    // {
-      nixosModules.default = import ./nix/nixos-module.nix self;
-      nixosConfigurations = nixosConfigurationsPerSystem;
     };
 }

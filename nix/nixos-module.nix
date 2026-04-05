@@ -1,13 +1,11 @@
 self:
 {
   lib,
-  system,
   config,
   pkgs,
   ...
 }:
 let
-  inherit system;
   cfg = config.services.cardwire;
 in
 {
@@ -41,6 +39,6 @@ in
         ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/cardwired";
       };
       wantedBy = [ "multi-user.target" ];
-    };    
+    };
   };
 }

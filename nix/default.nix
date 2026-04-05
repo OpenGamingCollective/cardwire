@@ -1,15 +1,11 @@
 {
   lib,
-  stdenv,
   pkgs,
   toolchain,
 }:
 let
-  cargoToml = builtins.fromTOML (builtins.readFile ../Cargo.toml);
+  cargoToml = fromTOML (builtins.readFile ../Cargo.toml);
   version = cargoToml.workspace.package.version;
-  runtimeDeps = [
-    pkgs.hwdata
-  ];
 in
 (pkgs.makeRustPlatform {
   cargo = toolchain;
@@ -27,6 +23,9 @@ in
     buildInputs = [
       pkgs.hwdata
       pkgs.libbpf
+    ];
+    runtimeDeps = [
+      pkgs.hwdata
     ];
 
     meta = {
