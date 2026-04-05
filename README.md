@@ -97,7 +97,7 @@ When a GPU is "blocked," the eBPF program returns `-ENOENT` for any `open` sysca
 *   **Instant App Startup:** Prevents applications (like Electron apps) from attempting to initialize the GPU, this eliminates the 3–4 second "hang" typically caused by waiting for a sleeping GPU to power up
 *   **Power Efficiency:** By blocking access at the syscall level, the GPU is never woken from its lowest power state (D3cold), extending battery life for laptops
 *   **Non-Invasive:** Unlike traditional methods that might require driver unloading, risky unbind or complex X11/Wayland configurations, this approach is transparent to the rest of the system and easily toggled
-Also works with games
+*   Also works with games
 
 ## Project Structure
 
