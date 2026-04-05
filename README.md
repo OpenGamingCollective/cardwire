@@ -69,10 +69,14 @@ nix develop
 
 # Build the project
 nix build
+
+# Build the vm and enter
+nix build .#nixosConfigurations.x86_64-linux.config.system.build.vm
+./result/bin/run-nixos-vm
 ```
 
 ### Manual Compilation
-If you don't use Nix, ensure you have `clang`, `llvm`, and `cargo` installed (needed for eBPF compilation during the Rust build)
+If you don't use Nix, ensure you have `clang`, `libbpf` and `cargo` installed (needed for eBPF compilation during the Rust build)
 
 ```bash
 # Build the project

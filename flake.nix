@@ -16,31 +16,25 @@
       flake-utils,
     }:
     let
-      packagesPerSystem = flake-utils.lib.eachDefaultSystem (system: {
+      supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
+      packagesPerSystem = flake-utils.lib.eachSystem supportedSystems (system: {
         packages.default =
           let
             toolchain = fenix.packages.${system}.minimal.toolchain;
             pkgs = nixpkgs.legacyPackages.${system};
           in
-          pkgs.callPackage ./nix { inherit toolchain; };
-      });
+           pkgs.callPackage ./nix { inherit toolchain; };
+       });
+      nixosConfigurationsPerSystem = nixpkgs.lib.genAttrs supportedSystems (
+        system:
+        import ./nix/test-vm.nix {
+          inherit nixpkgs self system;
+        }
+      );
     in
     packagesPerSystem
     // {
       nixosModules.default = import ./nix/nixos-module.nix self;
-      nixosConfigurations.test-vm = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        modules = [
-          self.nixosModules.default
-          {
-            services.cardwire.enable = true;
-            boot.loader.grub.device = "nodev";
-            fileSystems."/" = {
-              device = "/dev/null";
-              fsType = "ext4";
-            };
-          }
-        ];
-      };
+      nixosConfigurations = nixosConfigurationsPerSystem;
     };
 }

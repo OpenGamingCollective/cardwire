@@ -22,19 +22,25 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
+    # DBUS
+    services.dbus.enable = true;
+    services.dbus.packages = [ cfg.package ];
+    # Cardwire package
+    environment.systemPackages = [ cfg.package ];
     # systemd
     systemd.services.cardwired = {
       unitConfig = {
-        description = "Cardwire Daemon";
-        before = [
+        Description = "Cardwire Daemon";
+        Before = [
           "graphical.target"
         ];
       };
       serviceConfig = {
         Type = "dbus";
-        BusName = "com.github.luytan.cardwire";
+        BusName = "com.cardwire.daemon";
         ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/cardwired";
       };
+      wantedBy = [ "multi-user.target" ];
     };    
   };
 }
