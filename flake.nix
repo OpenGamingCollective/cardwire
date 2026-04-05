@@ -37,7 +37,7 @@
         {
           packages.default = pkgs.callPackage ./nix { inherit toolchain; };
           devShells.default = pkgs.mkShell {
-            packages = [ toolchain ];
+            packages = [ toolchain pkgs.clang pkgs.libbpf ];
             RUST_SRC_PATH = "${fenixPkgs.stable.rust-src}/lib/rustlib/src/rust/library";
             RUST_BACKTRACE = "1";
           };
