@@ -17,12 +17,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match args.command {
         Commands::Set { mode } => {
-            let response = client.set_mode(mode).await?;
-            println!("{}", response);
+            //let response = client.set_mode(mode).await;
+            match client.set_mode(mode).await{
+                Ok(response) => println!("{}", response),
+                Err(zbus::Error::MethodError(name, description, _)) => {
+                    println!("{}", description.unwrap_or_else(|| name.to_string()))
+                }
+                Err(e) => println!("Error: {e:?}"),
+            };
         }
         Commands::Get => {
-            let response = client.get_mode().await?;
-            println!("{}", response);
+            let response_result = client.get_mode().await;
+            match response_result{
+                Ok(response) => println!("{}", response),
+                Err(e) => println!("Error: {e:?}"),
+            };
         }
         Commands::List => {
             let mut response = client.list_gpus().await?;
