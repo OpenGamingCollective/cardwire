@@ -9,10 +9,11 @@
   # VM stuffs
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
+  # Why john? idk i was reading some manwha and the dude was named john doe
   users.users.john = {
     isNormalUser = true;
     extraGroups = [ "wheel" ];
-    initialPassword = "password";
+    initialPassword = "doe";
   };
   boot.kernelParams = [
     "intel_iommu=on"

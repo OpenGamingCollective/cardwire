@@ -27,7 +27,8 @@ in
     runtimeDeps = [
       pkgs.hwdata
     ];
-
+    doCheck = false;
+    doInstallCheck = true;
     meta = {
       description = "a GPU manager for laptop and workstation";
       homepage = "https://github.com/luytan/cardwire";

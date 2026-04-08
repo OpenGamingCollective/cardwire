@@ -53,5 +53,11 @@
           inherit nixpkgs self system;
         }
       );
+      checks = forAllSystems (system: {
+        vm-test = import ./nix/integration-test.nix {
+          inherit pkgs system self;
+          lib = nixpkgs.lib;
+        };
+      });
     };
 }
