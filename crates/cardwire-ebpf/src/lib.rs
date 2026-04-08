@@ -174,7 +174,7 @@ impl EbpfBlocker {
     pub fn is_nvidia_blocked(&self, id: u32) -> Result<bool, Box<dyn std::error::Error>> {
         let map: HashMap<_, u32, u8> = HashMap::try_from(
             self.ebpf
-                .map("BLOCKED_NVIDIARID")
+                .map("BLOCKED_NVIDIAID")
                 .ok_or_else(|| Self::missing_entity("map", "BLOCKED_NVIDIAID"))?,
         )?;
         match map.get(&id, 0) {
