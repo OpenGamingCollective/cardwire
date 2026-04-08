@@ -55,7 +55,7 @@ fn drm_node_path(pci_address: &str, node_kind: &str) -> io::Result<String> {
     Ok(fs::canonicalize(by_path)?.to_string_lossy().into_owned())
 }
 fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
-    let nvidia_driver_proc = Path::new("/proc/driver/nvidia/gpus/").join(pci_address);
+    let nvidia_driver_proc = Path::new("/proc/driver/nvidia/gpus/").join(pci_address).join("information");
     let information =
         fs::read_to_string(nvidia_driver_proc).expect("Couldn't read nvidia information");
     information
