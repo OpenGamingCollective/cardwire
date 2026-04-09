@@ -9,7 +9,9 @@ use crate::iommu::Device;
 pub fn read_gpu(pci_devices: &HashMap<String, Device>) -> io::Result<HashMap<usize, Gpu>> {
     let mut gpus: Vec<Gpu> = pci_devices
         .values()
-        .filter(|device| device.class.as_str() == "0x030000")
+        .filter(|device| {
+            device.class.as_str() == "0x030000" || // VGA compatible controller
+            device.class.as_str() == "0x380000"})  // Display controller
         .map(|device| build_gpu(device))
         .collect::<io::Result<Vec<_>>>()?;
 
