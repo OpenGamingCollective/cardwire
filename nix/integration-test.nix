@@ -29,11 +29,14 @@
       networking.useDHCP = false;
       networking.interfaces = lib.mkForce{ };
     };
-  #enableDebugHook = true;
 
   testScript = ''
     machine.start()
     machine.wait_for_unit("default.target")
+    with subtest("Wait for boot and services"):
+        machine.wait_for_unit("multi-user.target")
+        machine.wait_for_unit("dbus.service")
+        machine.wait_for_unit("cardwired.service")
 
     with subtest("Check for DRM Devices"):
       # Check the DRM devices
@@ -43,8 +46,6 @@
       t.assertIn("card1", machine.succeed("ls -a /dev/dri"), "Missing DRM")
 
     with subtest("Ensure cardwire is started"):
-      # Cardwire check dbus connection
-      machine.wait_for_unit("cardwired.service")
       machine.wait_until_succeeds("su - john -c 'cardwire help'")
 
     with subtest("Switch to Integrated mode"):

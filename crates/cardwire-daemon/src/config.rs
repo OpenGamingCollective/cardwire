@@ -3,10 +3,11 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::Path;
+use std::path::PathBuf;
 use tokio::fs;
 use toml;
 
-pub const CONFIG_PATH: &str = "/etc/cardwire.toml";
+const CONFIG_PATH: &str = "/var/lib/cardwire/cardwire.toml";
 
 #[derive(Deserialize, Serialize)]
 pub struct Config {
@@ -53,6 +54,10 @@ impl Config {
 
     pub fn save_mode_to_config(&self) -> Result<(), Box<dyn Error>> {
         let toml: String = toml::to_string(self)?;
+        let config_path = PathBuf::from(CONFIG_PATH);
+        if let Some(parent) = config_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         std::fs::write(CONFIG_PATH, toml)?;
         Ok(())
     }

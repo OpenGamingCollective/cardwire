@@ -1,6 +1,6 @@
 [Unit]
 Description=Cardwire Daemon
-Before=graphical.target
+After=multi-user.target
 
 
 [Service]
@@ -11,4 +11,4 @@ Restart=on-failure
 RestartSec=5s
 
 [Install]
-WantedBy=display-manager.service
+WantedBy=default.target

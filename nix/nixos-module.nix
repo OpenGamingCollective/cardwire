@@ -29,8 +29,8 @@ in
     systemd.services.cardwired = {
       unitConfig = {
         Description = "Cardwire Daemon";
-        Before = [
-          "graphical.target"
+        After = [
+          "multi-user.target"
         ];
       };
       serviceConfig = {
@@ -38,7 +38,7 @@ in
         BusName = "com.github.luytan.cardwire";
         ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/cardwired";
       };
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = [ "default.target" ];
     };
   };
 }

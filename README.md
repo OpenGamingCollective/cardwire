@@ -55,10 +55,10 @@ cardwire gpu 1 info
 
 ## Configuration
 
-The daemon reads its configuration from `/etc/cardwire.toml`. If the file is missing, it defaults to `Manual` mode. (Config parsing not tested yet)
+The daemon reads its configuration from `/var/lib/cardwire/cardwire.toml`. If the file is missing, it defaults to `Manual` mode. (Config parsing not tested yet)
 
 ```toml
-# /etc/cardwire.toml
+# /var/lib/cardwire/cardwire.toml
 mode = "Manual"
 ```
 
