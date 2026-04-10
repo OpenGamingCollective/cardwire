@@ -1,4 +1,4 @@
-name: Clippy check
+name: clippy-check
 on:
   pull_request:
 env:
