@@ -1,10 +1,7 @@
 name: format-check
-on: 
-  push:
-    branches:
-      - main
-      - dev
+on:
   pull_request:
+
 jobs:
   format-check:
     runs-on: ubuntu-latest
@@ -12,4 +9,4 @@ jobs:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
       - name: Check code format
-        run: nix flake check
+        run: nix build -L .#checks.x86_64-linux.pre-commit-check
