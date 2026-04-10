@@ -73,6 +73,12 @@ nix develop
 # Build the project
 nix build
 
+# Run formatting checks
+nix build .#checks.x86_64-linux.pre-commit-check
+
+# Run integration tests in VM
+nix build .#checks.x86_64-linux.vm-test
+
 # Build the vm and enter
 nix run .#nixosConfigurations.x86_64-linux.config.system.build.vm
 ```
