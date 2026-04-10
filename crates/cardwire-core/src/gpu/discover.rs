@@ -10,7 +10,8 @@ pub fn read_gpu(pci_devices: &HashMap<String, Device>) -> io::Result<HashMap<usi
         .values()
         .filter(|device| {
             device.class.as_str() == "0x030000" || // VGA compatible controller
-            device.class.as_str() == "0x038000"})  // Display controller
+            device.class.as_str() == "0x038000"
+        }) // Display controller
         .map(|device| build_gpu(device))
         .collect::<io::Result<Vec<_>>>()?;
 
@@ -43,10 +44,9 @@ fn drm_node_path(pci_address: &str, node_kind: &str) -> io::Result<String> {
     Ok(fs::canonicalize(by_path)?.to_string_lossy().into_owned())
 }
 fn check_default(pci_address: &str) -> io::Result<bool> {
-    let fb0_path =format!("/sys/class/graphics/fb0");
+    let fb0_path = format!("/sys/class/graphics/fb0");
     match fs::canonicalize(fb0_path) {
-        Ok(content) => Ok(content.to_string_lossy().
-            contains(pci_address)),
-        Err(_) => Ok(false)
+        Ok(content) => Ok(content.to_string_lossy().contains(pci_address)),
+        Err(_) => Ok(false),
     }
 }

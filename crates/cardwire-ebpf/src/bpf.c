@@ -10,27 +10,27 @@ char __license[] SEC("license") = "GPL";
 
 // kernel type definitions
 struct qstr {
-    union {
-        struct {
-            __u32 hash;
-            __u32 len;
-        };
-        __u64 hash_len;
-    };
-    const unsigned char *name;
+	union {
+		struct {
+			__u32 hash;
+			__u32 len;
+		};
+		__u64 hash_len;
+	};
+	const unsigned char *name;
 } __attribute__((preserve_access_index));
 
 struct dentry {
-    struct qstr d_name;
-    struct dentry *d_parent;
+	struct qstr d_name;
+	struct dentry *d_parent;
 } __attribute__((preserve_access_index));
 
 struct path {
-    struct dentry *dentry;
+	struct dentry *dentry;
 } __attribute__((preserve_access_index));
 
 struct file {
-    struct path f_path;
+	struct path f_path;
 } __attribute__((preserve_access_index));
 
 // EBPF maps

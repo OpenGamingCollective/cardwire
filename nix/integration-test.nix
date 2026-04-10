@@ -27,7 +27,7 @@
       ];
       virtualisation.memorySize = 1024;
       networking.useDHCP = false;
-      networking.interfaces = lib.mkForce{ };
+      networking.interfaces = lib.mkForce { };
     };
 
   testScript = ''
