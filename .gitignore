@@ -19,3 +19,4 @@ target
 # Nix build
 result
 .direnv
+.pre-commit-config.yaml

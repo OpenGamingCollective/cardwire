@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io;
-use std::path::Path;
 
 use crate::gpu::models::Gpu;
 use crate::iommu::Device;
@@ -11,7 +10,8 @@ pub fn read_gpu(pci_devices: &HashMap<String, Device>) -> io::Result<HashMap<usi
         .values()
         .filter(|device| {
             device.class.as_str() == "0x030000" || // VGA compatible controller
-            device.class.as_str() == "0x380000"})  // Display controller
+            device.class.as_str() == "0x038000"
+        }) // Display controller
         .map(|device| build_gpu(device))
         .collect::<io::Result<Vec<_>>>()?;
 
@@ -29,10 +29,6 @@ pub fn read_gpu(pci_devices: &HashMap<String, Device>) -> io::Result<HashMap<usi
 }
 
 fn build_gpu(device: &Device) -> io::Result<Gpu> {
-    let boot_vga_path = Path::new("/sys/bus/pci/devices")
-        .join(&device.pci_address)
-        .join("boot_vga");
-    let is_default = fs::read_to_string(boot_vga_path)?.trim() == "1";
     let nvidia: bool = &device.vendor_id == "0x10de";
     let nvidia_minor: u32 = if nvidia {
         nvidia_get_minor(&device.pci_address).unwrap_or(99)
@@ -49,6 +45,7 @@ fn build_gpu(device: &Device) -> io::Result<Gpu> {
         default: is_default,
         nvidia: nvidia,
         nvidia_minor: nvidia_minor,
+        default: check_default(&device.pci_address)?,
     })
 }
 
@@ -68,4 +65,10 @@ fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
         .trim()
         .parse::<u32>()
         .ok()
+fn check_default(pci_address: &str) -> io::Result<bool> {
+    let fb0_path = format!("/sys/class/graphics/fb0");
+    match fs::canonicalize(fb0_path) {
+        Ok(content) => Ok(content.to_string_lossy().contains(pci_address)),
+        Err(_) => Ok(false),
+    }
 }

@@ -30,7 +30,7 @@ in
       unitConfig = {
         Description = "Cardwire Daemon";
         After = [
-          "multi-user.target"
+          "default.target"
         ];
       };
       serviceConfig = {

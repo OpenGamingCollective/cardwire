@@ -52,7 +52,9 @@ fn read_group_devices(group_dir: &Path) -> Result<Vec<String>, IommuError> {
         let Ok(name_str) = device_entry.file_name().into_string() else {
             continue;
         };
-        devices.push(name_str);
+        if name_str.starts_with("0000:") {
+            devices.push(name_str);
+        }
     }
 
     Ok(devices)
