@@ -12,6 +12,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
       - name: Run Clippy
-        run: | 
+        run: |
           nix develop -c \
           cargo clippy --all-targets --all-features

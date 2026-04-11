@@ -1,7 +1,6 @@
 name: format-check
 on:
   pull_request:
-
 jobs:
   format-check:
     runs-on: ubuntu-latest
