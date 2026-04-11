@@ -6,7 +6,7 @@ use thiserror::Error;
 
 pub enum IommuError {
     #[error("IOMMU Not Enabled")]
-    NotEnabled,
+    IOMMUNotEnabled,
 
     #[error("Missing 'devices' directory in group path: {0}")]
     MissingDevicesDir(PathBuf),

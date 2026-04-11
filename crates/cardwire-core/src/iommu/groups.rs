@@ -8,11 +8,10 @@ pub struct IommuGroup {
     pub id: usize,
     pub devices: Vec<String>,
 }
-
 pub fn read_iommu_groups() -> Result<BTreeMap<usize, IommuGroup>, IommuError> {
     let base_path = Path::new("/sys/kernel/iommu_groups");
-    if !base_path.exists() {
-        return Err(IommuError::NotEnabled);
+    if base_path.read_dir()?.next().is_none() {
+        return Err(IommuError::IOMMUNotEnabled);
     }
 
     let mut groups: BTreeMap<usize, IommuGroup> = BTreeMap::new();
