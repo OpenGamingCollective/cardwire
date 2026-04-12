@@ -8,7 +8,6 @@
 #   https://clang.llvm.org/docs/ClangFormat.html
 #   https://clang.llvm.org/docs/ClangFormatStyleOptions.html
 #
----
 AccessModifierOffset: -4
 AlignAfterOpenBracket: Align
 AlignConsecutiveAssignments: false
@@ -63,7 +62,6 @@ DerivePointerAlignment: false
 DisableFormat: false
 ExperimentalAutoDetectBinPacking: false
 FixNamespaceComments: false
-
 # Taken from:
 #   git grep -h '^#define [^[:space:]]*for_each[^[:space:]]*(' include/ tools/ \
 #   | sed "s,^#define \([^[:space:]]*for_each[^[:space:]]*\)(.*$,  - '\1'," \
@@ -750,7 +748,6 @@ ForEachMacros:
   - 'ynl_attr_for_each_payload'
   - 'zorro_for_each_dev'
   - 'zpci_bus_for_each'
-
 IncludeBlocks: Preserve
 IncludeCategories:
   - Regex: '.*'
@@ -772,7 +769,6 @@ ObjCBinPackProtocolList: Auto
 ObjCBlockIndentWidth: 8
 ObjCSpaceAfterProperty: true
 ObjCSpaceBeforeProtocolList: true
-
 # Taken from git's rules
 PenaltyBreakAssignment: 10
 PenaltyBreakBeforeFirstCallParameter: 30
@@ -781,7 +777,6 @@ PenaltyBreakFirstLessLess: 0
 PenaltyBreakString: 10
 PenaltyExcessCharacter: 100
 PenaltyReturnTypeOnItsOwnLine: 60
-
 PointerAlignment: Right
 ReflowComments: false
 SortIncludes: false
@@ -803,4 +798,3 @@ SpacesInSquareBrackets: false
 Standard: Cpp03
 TabWidth: 8
 UseTab: Always
-...

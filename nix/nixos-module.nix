@@ -29,14 +29,18 @@ in
     systemd.services.cardwired = {
       unitConfig = {
         Description = "Cardwire Daemon";
+        Wants = [ "systemd-udev-settle.service" ];
         After = [
           "dbus.service"
+          "systemd-udev-settle.service"
         ];
       };
       serviceConfig = {
         Type = "dbus";
         BusName = "com.github.luytan.cardwire";
         ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/cardwired";
+        Restart = "on-failure";
+        RestartSec = "5s";
       };
       wantedBy = [ "multi-user.target" ];
     };

@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.1"
+version = "0.4.0"
 authors = ["Luytan <luytan@khora.me>"]
 repository = "https://github.com/Luytan/cardwire"
 edition = "2024"
@@ -21,9 +21,13 @@ zbus = { version = "5.14.0", features = ["tokio"] }
 clap = { version = "4.5.60", features = ["derive"] }
 config = { version = "0.15.19", features = ["toml"] }
 serde = { version = "1.0.228", features = ["derive"] }
-log = { version = "0.4.29" }
-thiserror = { version = "2.0.18" }
-
+log = "0.4.29"
+thiserror = "2.0.18"
+clap_complete = "4.6.1" 
+anyhow = "1.0.102"
+env_logger = "0.11"
+toml = "1.0.3"
+aya = "0.13.1"
 [profile.dev]
 panic = "abort"
 overflow-checks = true

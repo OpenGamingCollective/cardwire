@@ -9,5 +9,6 @@ license.workspace = true
 description = "Core library for cardwire GPU management"
 
 [dependencies]
-thiserror = { workspace = true }
 cardwire-ebpf = { path = "../cardwire-ebpf" }
+thiserror.workspace= true
+log.workspace = true

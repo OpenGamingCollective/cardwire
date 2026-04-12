@@ -1,56 +1,79 @@
-use crate::gpu::models::Gpu;
+use crate::gpu::{GpuResult, errors::GpuError, models::Gpu};
 use cardwire_ebpf::EbpfBlocker;
-use std::io::{Error as IoError, ErrorKind};
-use std::path::Path;
+use std::{
+    io::{Error as IoError, ErrorKind}, path::Path
+};
 
-pub fn is_gpu_blocked(
-    blocker: &EbpfBlocker,
-    gpu: &Gpu,
-) -> Result<bool, Box<dyn std::error::Error>> {
-    let (card_id, render_id) = gpu_node_ids(gpu)?;
-    Ok(blocker.is_pci_blocked(gpu.pci_address())?
-        && blocker.is_card_blocked(card_id)?
-        && blocker.is_render_blocked(render_id)?
+pub struct GpuBlocker {
+    inner: EbpfBlocker,
+}
+
+impl GpuBlocker {
+    pub fn new() -> GpuResult<Self> {
+        Ok(Self {
+            inner: EbpfBlocker::new()?,
+        })
+    }
+
+    pub fn set_vulkan_block(&mut self, block: bool) -> GpuResult<()> {
+        self.inner.set_vulkan_block(block).map_err(map_gpu_error)?;
+        Ok(())
+    }
+}
+
+pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &Gpu) -> GpuResult<bool> {
+    let (card_id, render_id) = gpu_node_ids(gpu).map_err(map_gpu_error)?;
+    Ok(blocker
+        .inner
+        .is_pci_blocked(gpu.pci_address())
+        .map_err(map_gpu_error)?
+        && blocker
+            .inner
+            .is_card_blocked(card_id)
+            .map_err(map_gpu_error)?
+        && blocker
+            .inner
+            .is_render_blocked(render_id)
+            .map_err(map_gpu_error)?
         && if gpu.nvidia {
-            blocker.is_nvidia_blocked(*gpu.nvidia_minor())?
+            blocker
+                .inner
+                .is_nvidia_blocked(*gpu.nvidia_minor())
+                .map_err(map_gpu_error)?
         } else {
             true
         })
 }
 
-pub fn block_gpu(
-    blocker: &mut EbpfBlocker,
-    gpu: &Gpu,
-    block: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &Gpu, block: bool) -> GpuResult<()> {
     let (card_id, render_id) = gpu_node_ids(gpu)?;
 
     if block {
-        blocker.block_card(card_id)?;
-        blocker.block_render(render_id)?;
-        blocker.block_pci(gpu.pci_address())?;
+        blocker.inner.block_card(card_id)?;
+        blocker.inner.block_render(render_id)?;
+        blocker.inner.block_pci(gpu.pci_address())?;
         if gpu.nvidia {
-            blocker.block_nvidia(*gpu.nvidia_minor())?
+            blocker.inner.block_nvidia(*gpu.nvidia_minor())?
         }
         Ok(())
     } else {
-        blocker.unblock_card(card_id)?;
-        blocker.unblock_render(render_id)?;
-        blocker.unblock_pci(gpu.pci_address())?;
+        blocker.inner.unblock_card(card_id)?;
+        blocker.inner.unblock_render(render_id)?;
+        blocker.inner.unblock_pci(gpu.pci_address())?;
         if gpu.nvidia {
-            blocker.unblock_nvidia(*gpu.nvidia_minor())?
+            blocker.inner.unblock_nvidia(*gpu.nvidia_minor())?
         }
         Ok(())
     }
 }
 
-fn gpu_node_ids(gpu: &Gpu) -> Result<(u32, u32), Box<dyn std::error::Error>> {
+fn gpu_node_ids(gpu: &Gpu) -> GpuResult<(u32, u32)> {
     let card_id = parse_node_id(gpu.card_node(), "card")?;
     let render_id = parse_node_id(gpu.render_node(), "renderD")?;
     Ok((card_id, render_id))
 }
 
-fn parse_node_id(node_path: &str, prefix: &str) -> Result<u32, Box<dyn std::error::Error>> {
+fn parse_node_id(node_path: &str, prefix: &str) -> GpuResult<u32> {
     let node = Path::new(node_path)
         .file_name()
         .and_then(|name| name.to_str())
@@ -74,4 +97,8 @@ fn parse_node_id(node_path: &str, prefix: &str) -> Result<u32, Box<dyn std::erro
         .into());
     }
     Ok(id.parse()?)
+}
+
+fn map_gpu_error(err: impl std::fmt::Display) -> GpuError {
+    GpuError::UnknownBlockState(err.to_string())
 }

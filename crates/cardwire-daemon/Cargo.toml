@@ -10,14 +10,15 @@ description = "Daemon for cardwire GPU management"
 
 [dependencies]
 cardwire-core = { path = "../cardwire-core" }
-cardwire-ebpf = { path = "../cardwire-ebpf" }
 tokio.workspace = true
 zbus.workspace = true
 config.workspace = true
 serde.workspace = true
 log.workspace = true
-env_logger = "0.11"
-toml = "1.0.3"
+thiserror.workspace = true
+anyhow.workspace = true
+env_logger.workspace = true
+toml.workspace = true
 
 [[bin]]
 name = "cardwired"

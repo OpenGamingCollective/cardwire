@@ -19,6 +19,7 @@ in
     nativeBuildInputs = [
       pkgs.clang
       toolchain
+      pkgs.installShellFiles
     ];
     buildInputs = [
       pkgs.hwdata
@@ -36,12 +37,14 @@ in
     };
     # Point to the correct hwdata location
     postPatch = ''
-      substituteInPlace crates/cardwire-core/src/iommu/pci.rs \
+      substituteInPlace crates/cardwire-core/src/pci/pci_device.rs \
       --replace "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
     '';
-    # Copy dbus conf
+    # Copy dbus conf, systemd service and make shell completion
     postInstall = ''
-      install -Dm444 ./assets/com.github.luytan.cardwire.conf \
-      $out/share/dbus-1/system.d/com.github.luytan.cardwire.conf
+         install -Dm444 ./assets/com.github.luytan.cardwire.conf \
+         $out/share/dbus-1/system.d/com.github.luytan.cardwire.conf
+      installShellCompletion --cmd cardwire \
+         --fish <($out/bin/cardwire completion fish)
     '';
   }

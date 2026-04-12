@@ -1,6 +1,8 @@
 [Unit]
 Description=Cardwire Daemon
 After=dbus.service
+Wants=systemd-udev-settle.service
+After=systemd-udev-settle.service
 
 
 [Service]

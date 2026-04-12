@@ -8,7 +8,5 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-aya = "0.13.1"
-flate2 = "1.1.9"
-thiserror = { workspace = true }
-tokio.workspace = true
+thiserror.workspace = true
+aya.workspace = true

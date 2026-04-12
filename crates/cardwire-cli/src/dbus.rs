@@ -17,7 +17,7 @@ impl<'a> DaemonClient<'a> {
         Ok(Self { proxy })
     }
 
-    pub async fn set_mode(&self, mode: String) -> zbus::Result<String> {
+    pub async fn set_mode(&self, mode: &String) -> zbus::Result<()> {
         self.proxy.call("SetMode", &(mode,)).await
     }
 
@@ -29,11 +29,7 @@ impl<'a> DaemonClient<'a> {
         self.proxy.call("ListGpus", &()).await
     }
 
-    pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::Result<String> {
+    pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::Result<()> {
         self.proxy.call("SetGpuBlock", &(id, blocked)).await
-    }
-
-    pub async fn get_gpu_info(&self) -> zbus::Result<String> {
-        self.proxy.call("GetGpuInfo", &()).await
     }
 }

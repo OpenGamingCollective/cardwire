@@ -2,20 +2,20 @@ mod config;
 mod dbus;
 mod models;
 
-use std::{error::Error, future::pending};
-
 use crate::models::Daemon;
+use anyhow::Result;
 use config::Config;
 use log::info;
+use std::future::pending;
 use zbus::connection;
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<()> {
     // log
-    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .format_timestamp_millis()
-        .try_init();
-    let config: Config = Config::new().await;
-    let daemon = Daemon::new(config)?;
+    env_logger::builder()
+        .format_timestamp_nanos()
+        .filter_level(log::LevelFilter::Info)
+        .init();
+    let daemon = Daemon::new(Config::new().await)?;
 
     let conn_builder = connection::Builder::system()?;
     let _conn = conn_builder

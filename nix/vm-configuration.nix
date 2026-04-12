@@ -22,6 +22,7 @@
   security.sudo.wheelNeedsPassword = false;
   environment.systemPackages = with pkgs; [
     pciutils
+    fish
   ];
   services.getty.autologinUser = "john";
   virtualisation.vmVariant = {

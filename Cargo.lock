@@ -3,12 +3,6 @@
 version = 4
 
 [[package]]
-name = "adler2"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -310,32 +304,36 @@ checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
 name = "cardwire-cli"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
+ "anyhow",
  "cardwire-core",
  "clap",
+ "clap_complete",
  "tokio",
  "zbus",
 ]
 
 [[package]]
 name = "cardwire-core"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "cardwire-ebpf",
+ "log",
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "cardwire-daemon"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
+ "anyhow",
  "cardwire-core",
- "cardwire-ebpf",
  "config",
  "env_logger",
  "log",
  "serde",
+ "thiserror 2.0.18",
  "tokio",
  "toml",
  "zbus",
@@ -343,12 +341,10 @@ dependencies = [
 
 [[package]]
 name = "cardwire-ebpf"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "aya",
- "flate2",
  "thiserror 2.0.18",
- "tokio",
 ]
 
 [[package]]
@@ -377,6 +373,15 @@ dependencies = [
  "anstyle",
  "clap_lex",
  "strsim",
+]
+
+[[package]]
+name = "clap_complete"
+version = "4.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "406e68b4de5c59cfb8f750a7cbd4d31ae153788b8352167c1e5f4fc26e8c91e9"
+dependencies = [
+ "clap",
 ]
 
 [[package]]
@@ -643,16 +648,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a043dc74da1e37d6afe657061213aa6f425f855399a11d3463c6ecccc4dfda1f"
 
 [[package]]
-name = "flate2"
-version = "1.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
-dependencies = [
- "crc32fast",
- "miniz_oxide",
-]
-
-[[package]]
 name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -888,16 +883,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "miniz_oxide"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
-dependencies = [
- "adler2",
- "simd-adler32",
 ]
 
 [[package]]
@@ -1310,12 +1295,6 @@ dependencies = [
  "errno",
  "libc",
 ]
-
-[[package]]
-name = "simd-adler32"
-version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "703d5c7ef118737c72f1af64ad2f6f8c5e1921f818cdcb97b8fe6fc69bf66214"
 
 [[package]]
 name = "slab"

@@ -52,10 +52,10 @@
       # Check if cardwire detect both video card
       t.assertIn("renderD128", machine.succeed("su - john -c 'cardwire list'"), "Missing RenderD128 in cardwire")
       machine.succeed("test -e /dev/dri/renderD129")
-      t.assertIn("Set mode to Integrated", machine.succeed("su - john -c 'cardwire set integrated'"), "Couldn't set to integrated mode")
+      t.assertIn("Mode has been set to integrated", machine.succeed("su - john -c 'cardwire set integrated'"), "Couldn't set to integrated mode")
       machine.fail(": < /dev/dri/renderD129")
     with subtest("Switchback to hybrid mode"):
-      t.assertIn("Set mode to Hybrid", machine.succeed("su - john -c 'cardwire set hybrid'"), "Couldn't set to hybrid mode")
+      t.assertIn("Mode has been set to hybrid", machine.succeed("su - john -c 'cardwire set hybrid'"), "Couldn't set to hybrid mode")
       machine.succeed(": < /dev/dri/renderD129")
   '';
 }
