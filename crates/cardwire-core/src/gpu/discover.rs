@@ -5,7 +5,7 @@ use std::{
 };
 
 pub fn read_gpu(pci_devices: &HashMap<String, PciDevice>) -> io::Result<HashMap<usize, Gpu>> {
-    let mut gpus: Vec<Gpu> = pci_devices
+    let gpus: Vec<Gpu> = pci_devices
         .values()
         .filter(|device| {
             device.class.as_deref() == Some("0x030000") || // VGA compatible controller
@@ -21,9 +21,6 @@ pub fn read_gpu(pci_devices: &HashMap<String, PciDevice>) -> io::Result<HashMap<
             }
         })
         .collect();
-
-    // Default GPU gets ID 0, rest ordered by PCI address
-    gpus.sort_by(|a, b| b.default.cmp(&a.default).then(a.pci.cmp(&b.pci)));
 
     Ok(gpus
         .into_iter()
@@ -146,5 +143,18 @@ pub fn check_default_drm_class(gpu_list: &mut HashMap<usize, Gpu>) -> io::Result
             gpu.default = Some(true);
         }
     }
+
+    // Default GPU gets ID 0, rest ordered by PCI address
+    let mut gpus: Vec<Gpu> = gpu_list.drain().map(|(_, gpu)| gpu).collect();
+    gpus.sort_by(|a, b| b.default.cmp(&a.default).then(a.pci.cmp(&b.pci)));
+    *gpu_list = gpus
+        .into_iter()
+        .enumerate()
+        .map(|(id, mut gpu)| {
+            gpu.id = id as u32;
+            (id, gpu)
+        })
+        .collect();
+
     Ok(())
 }
