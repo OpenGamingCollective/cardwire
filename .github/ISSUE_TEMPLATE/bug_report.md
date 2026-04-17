@@ -16,15 +16,25 @@ Steps to reproduce the behavior:
 **Expected behavior**
 A clear and concise description of what you expected to happen.
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
-If possible, a `cardwire list` screenshot would be helpful
+**Environment details**
+Please provide your distro, kernel, and hardware details. The output of `fastfetch` (or `neofetch`) is preferred:
+```text
+```
+Cardwire version (`cardwire --version`):
 
-**Kernel version (uname -r)**
+**`cardwire list` output**
+Please paste the text output (do not use a screenshot):
+```text
+```
 
-**ls -la /dev/dri/by-path/**
+**`ls -la /dev/dri/by-path/`**
+```text
+```
 
 **cardwired logs**
+Please provide the daemon logs (e.g., run `journalctl -eu cardwired.service --no-pager`):
+```text
+```
 
 **Additional context**
 Add any other context about the problem here.
