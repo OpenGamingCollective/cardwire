@@ -109,6 +109,14 @@ pub fn check_default_drm_class(gpu_list: &mut HashMap<usize, Gpu>) -> io::Result
         let prefix = format!("card{}-", gpu.card);
         for name in &drm_entries {
             if let Some(drm) = name.strip_prefix(&prefix) {
+                let status_path = class_path.join(name).join("status");
+                if let Ok(status) = fs::read_to_string(&status_path) {
+                    if status.trim() != "connected" {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
                 stat.total_displays += 1;
 
                 if drm.starts_with("eDP") {
