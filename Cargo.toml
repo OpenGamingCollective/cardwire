@@ -8,9 +8,9 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.0"
-authors = ["Luytan <luytan@khora.me>"]
-repository = "https://github.com/Luytan/cardwire"
+version = "0.4.1"
+authors = ["luytan <luytan@khora.me>"]
+repository = "https://github.com/luytan/cardwire"
 edition = "2024"
 rust-version = "1.92.0"
 license = "GPL-3.0"
