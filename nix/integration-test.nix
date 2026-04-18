@@ -18,14 +18,18 @@
         ./vm-configuration.nix
       ];
 
-      virtualisation.qemu.options = [
-        "-machine q35,kernel-irqchip=split"
-        "-device intel-iommu,intremap=on,device-iotlb=on"
-        "-vga none"
-        "-device virtio-vga,id=gpu0"
-        "-device virtio-vga,id=gpu1"
-      ];
-      virtualisation.memorySize = 1024;
+      virtualisation = {
+        memorySize = 1024;
+        graphics = false;
+        diskImage = null;
+        qemu.options = [
+          "-machine q35,accel=kvm,kernel-irqchip=split"
+          "-device intel-iommu,intremap=on,device-iotlb=on"
+          "-vga none"
+          "-device virtio-gpu-pci,id=igpu,max_outputs=2"
+          "-device virtio-gpu-pci,id=dgpu,max_outputs=1"
+        ];
+      };
       networking.useDHCP = false;
       networking.interfaces = lib.mkForce { };
     };

@@ -52,7 +52,9 @@ impl Daemon {
         let pci_devices = pci::read_pci_devices()?;
         // TODO: what if couldn't find gpu
         let mut gpu_list = gpu::read_gpu(&pci_devices)?;
-        let _ = check_default_drm_class(&mut gpu_list);
+        if let Err(err) = check_default_drm_class(&mut gpu_list) {
+            warn!("Failed to determine default GPU: {}", err);
+        }
         // TODO: what if ebpf crash
         let mut ebpf_blocker = GpuBlocker::new()?;
 

@@ -1,8 +1,6 @@
 use crate::{gpu::models::Gpu, pci::PciDevice};
 use log::{info, warn};
-use std::{
-    collections::HashMap, fs, io::{self}, path::Path
-};
+use std::{collections::HashMap, fs, io, path::Path};
 
 pub fn read_gpu(pci_devices: &HashMap<String, PciDevice>) -> io::Result<HashMap<usize, Gpu>> {
     let gpus: Vec<Gpu> = pci_devices
@@ -54,9 +52,9 @@ fn build_gpu(device: &PciDevice) -> io::Result<Gpu> {
         nvidia_minor,
     })
 }
-/// Try to read from sysfs first, then fallback to udev /dev/dri,
-/// with a sleep at each attempt so the system has time to spawn the drm nodes.
-/// May block for up to ~5s per path (10 retries × 500ms).
+/// Try to read from sysfs first, then fallback to udev /dev/dri
+/// with a sleep at each attempt so the system has time to spawn the drm nodes
+/// May block for up to ~5s per path (10 retries × 500ms)
 fn drm_node_path(pci_address: &str, node_kind: &str) -> io::Result<u32> {
     const MAX_RETRIES: u32 = 10;
     const RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
@@ -147,17 +145,27 @@ fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
         .parse::<u32>()
         .ok()
 }
-/*
-    Method from kwin
-*/
+/// Method from kwin
 pub fn check_default_drm_class(gpu_list: &mut HashMap<usize, Gpu>) -> io::Result<()> {
     let class_path = Path::new("/sys/class/drm");
     let mut drm_entries = Vec::new();
     if class_path.exists() {
-        for entry in fs::read_dir(class_path)? {
-            let entry = entry?;
-            drm_entries.push(entry.file_name().to_string_lossy().into_owned());
+        match fs::read_dir(class_path) {
+            Ok(entries) => {
+                for entry in entries {
+                    let entry = entry?;
+                    drm_entries.push(entry.file_name().to_string_lossy().into_owned());
+                }
+            }
+            Err(err) => {
+                warn!(
+                    "Could not read /sys/class/drm: {}, skipping default detection",
+                    err
+                );
+            }
         }
+    } else {
+        warn!("/sys/class/drm does not exist, skipping default detection");
     }
     #[derive(Default)]
     struct GpuStats {
@@ -175,18 +183,14 @@ pub fn check_default_drm_class(gpu_list: &mut HashMap<usize, Gpu>) -> io::Result
             if let Some(drm) = name.strip_prefix(&prefix) {
                 let status_path = class_path.join(name).join("status");
                 if let Ok(status) = fs::read_to_string(&status_path) {
-                    if status.trim() != "connected" {
-                        continue;
+                    stat.total_displays += 1;
+                    if drm.starts_with("eDP") {
+                        stat.internal_displays += 1;
+                    } else {
+                        if status.trim() != "connected" {
+                            stat.desktop_displays += 1;
+                        }
                     }
-                } else {
-                    continue;
-                }
-                stat.total_displays += 1;
-
-                if drm.starts_with("eDP") {
-                    stat.internal_displays += 1;
-                } else {
-                    stat.desktop_displays += 1;
                 }
             }
         }
