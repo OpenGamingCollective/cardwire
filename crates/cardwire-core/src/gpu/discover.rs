@@ -172,6 +172,7 @@ pub fn check_default_drm_class(gpu_list: &mut HashMap<usize, Gpu>) -> io::Result
         internal_displays: usize,
         desktop_displays: usize,
         total_displays: usize,
+        connected_displays: usize,
     }
 
     let mut stats: HashMap<usize, GpuStats> = HashMap::new();
@@ -182,22 +183,29 @@ pub fn check_default_drm_class(gpu_list: &mut HashMap<usize, Gpu>) -> io::Result
         for name in &drm_entries {
             if let Some(drm) = name.strip_prefix(&prefix) {
                 let status_path = class_path.join(name).join("status");
+                //
                 if let Ok(status) = fs::read_to_string(&status_path) {
                     stat.total_displays += 1;
+                    if status.trim() == "connected" {
+                        stat.connected_displays += 1;
+                    }
                     if drm.starts_with("eDP") {
                         stat.internal_displays += 1;
                     } else {
-                        if status.trim() != "connected" {
-                            stat.desktop_displays += 1;
-                        }
+                        stat.desktop_displays += 1;
                     }
                 }
             }
         }
 
         info!(
-            "gpu {} id: {} internal: {}, desktop: {}, total: {}",
-            gpu.name, id, stat.internal_displays, stat.desktop_displays, stat.total_displays
+            "gpu {} id: {} internal: {}, desktop: {}, connected: {}, total: {}",
+            gpu.name,
+            id,
+            stat.internal_displays,
+            stat.desktop_displays,
+            stat.connected_displays,
+            stat.total_displays
         );
 
         stats.insert(*id, stat);
@@ -210,6 +218,7 @@ pub fn check_default_drm_class(gpu_list: &mut HashMap<usize, Gpu>) -> io::Result
                 stats.internal_displays,
                 stats.desktop_displays,
                 stats.total_displays,
+                stats.connected_displays,
             )
         })
         .unzip();
