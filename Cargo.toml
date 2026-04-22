@@ -16,7 +16,7 @@ rust-version = "1.92.0"
 license = "GPL-3.0"
 
 [workspace.dependencies]
-tokio = { version = "1.49.0", features = ["full"] }
+tokio = { version = "1.52.1", features = ["full"] }
 zbus = { version = "5.14.0", features = ["tokio"] }
 clap = { version = "4.5.60", features = ["derive"] }
 config = { version = "0.15.19", features = ["toml"] }
