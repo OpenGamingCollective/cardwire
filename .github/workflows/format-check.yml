@@ -1,6 +1,10 @@
 name: format-check
 on:
   pull_request:
+    paths:
+      - 'crates/**'
+      - '.github/workflows/**'
+      - 'nix/**'
 jobs:
   format-check:
     runs-on: ubuntu-latest
