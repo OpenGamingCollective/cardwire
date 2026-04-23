@@ -3,8 +3,16 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'crates/**'
+      - '.github/workflows/**'
+      - 'nix/**'
   pull_request:
     types: [opened, synchronize, reopened]
+    paths:
+      - 'crates/**'
+      - '.github/workflows/**'
+      - 'nix/**'
 jobs:
   sonarqube:
     name: SonarQube
