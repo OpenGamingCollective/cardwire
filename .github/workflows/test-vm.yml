@@ -1,10 +1,16 @@
 name: test-vm
 on:
   pull_request:
+    types: [opened, labeled]
     branches:
       - main
+    paths:
+      - 'crates/**'
+      - 'workflows/**'
+      - 'nix/**'
 jobs:
-  test-vm:
+  run-test:
+    if: ${{ github.event.label.name == 'run-vm-test' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
