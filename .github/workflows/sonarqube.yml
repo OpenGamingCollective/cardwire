@@ -14,7 +14,13 @@ jobs:
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
       - name: Install build dependencies
-        run: sudo apt install -y clang build-essential libbpf-dev
+        run: |
+          sudo apt update
+          sudo apt install -y clang \
+          linux-headers-$(uname -r) \
+          build-essential \
+          libbpf-dev
+          
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6.0.0
         env:
