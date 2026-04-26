@@ -19,7 +19,7 @@ thiserror.workspace = true
 anyhow.workspace = true
 env_logger.workspace = true
 toml.workspace = true
-
+serde_json.workspace = true
 [[bin]]
 name = "cardwired"
 path = "src/daemon.rs"

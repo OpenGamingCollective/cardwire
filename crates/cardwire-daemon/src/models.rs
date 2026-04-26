@@ -1,7 +1,7 @@
-use crate::config::Config;
-use anyhow::Result;
+use crate::config::{CardwireConfig, CardwireGpuState, CardwireModeState};
+use anyhow::{Context, Result};
 use cardwire_core::{
-    gpu::{self, GpuBlocker, block_gpu, check_default_drm_class}, pci
+    gpu::{self, GpuBlocker, check_default_drm_class}, pci
 };
 use log::warn;
 use serde::{Deserialize, Serialize};
@@ -40,59 +40,10 @@ impl Modes {
     }
 }
 
-pub struct Daemon {
-    pub state: DaemonState,
-}
-
-impl Daemon {
-    pub fn new(config: Config) -> Result<Self> {
-        // TODO: what if no iommu folder
-        let iommu: bool = pci::is_iommu_enabled();
-        // TODO: what if no pci device
-        let pci_devices = pci::read_pci_devices()?;
-        // TODO: what if couldn't find gpu
-        let mut gpu_list = gpu::read_gpu(&pci_devices)?;
-        if let Err(err) = check_default_drm_class(&mut gpu_list) {
-            warn!("Failed to determine default GPU: {}", err);
-        }
-        // TODO: what if ebpf crash
-        let mut ebpf_blocker = GpuBlocker::new()?;
-
-        // Apply config block_vulkan at startup
-        ebpf_blocker.set_vulkan_block(config.block_vulkan)?;
-
-        // Apply config mode at startup
-        // TODO: use already existing function set_mode()
-        match config.mode {
-            Modes::Integrated | Modes::Hybrid => {
-                let block = config.mode == Modes::Integrated;
-                for gpu in gpu_list.values() {
-                    if !gpu.is_default()
-                        && let Err(err) = block_gpu(&mut ebpf_blocker, gpu, block)
-                    {
-                        warn!(
-                            "Failed to apply config mode {} at startup: {}",
-                            config.mode, err
-                        );
-                    }
-                }
-            }
-            Modes::Manual => {}
-        }
-
-        Ok(Self {
-            state: DaemonState {
-                config: tokio::sync::RwLock::new(config),
-                _pci_devices: pci_devices,
-                _iommu: iommu,
-                gpu_list,
-                ebpf_blocker: tokio::sync::RwLock::new(ebpf_blocker),
-            },
-        })
-    }
-}
 pub struct DaemonState {
-    pub config: RwLock<Config>,
+    pub config: RwLock<CardwireConfig>,
+    pub gpu_state: RwLock<CardwireGpuState>,
+    pub mode_state: RwLock<CardwireModeState>,
     pub gpu_list: HashMap<usize, gpu::Gpu>,
     pub ebpf_blocker: RwLock<GpuBlocker>,
     // for future uses, related to vfio
@@ -100,11 +51,68 @@ pub struct DaemonState {
     pub _iommu: bool,
 }
 impl DaemonState {
-    pub async fn mode(&self) -> Modes {
-        let config = self.config.read().await;
-        config.mode
-    }
-    pub async fn _is_iommu(&self) -> bool {
+    pub async fn _iommu(&self) -> bool {
         self._iommu
+    }
+}
+
+pub struct Daemon {
+    pub state: DaemonState,
+}
+
+impl Daemon {
+    pub async fn new() -> Result<Self> {
+        let iommu: bool = pci::is_iommu_enabled();
+        let config = CardwireConfig::build().context("Error building config")?;
+        let mut gpu_state = CardwireGpuState::build().context("Error building gpu_state")?;
+        let mode_state = CardwireModeState::build().context("Error building mode")?;
+        // TODO: Exit if no pci devices or manual refresh command
+        let pci_devices = pci::read_pci_devices()?;
+        // TODO: Should the daemon exits if no gpu??
+        let mut gpu_list = gpu::read_gpu(&pci_devices)?;
+        // Executed after the read_gpu to use the current gpu_list
+        if let Err(err) = check_default_drm_class(&mut gpu_list) {
+            warn!("Failed to determine default GPU: {}", err);
+        }
+        // TODO: Exit if ebpf returns an error, or try to recover from it?
+        let ebpf_blocker = GpuBlocker::new()?;
+        // Do not stop the program if there is no gpu, cardwire will also be usable as a pci manager
+        // in a near future
+        if !gpu_list.is_empty() && gpu_state.is_default_state() {
+            gpu_state
+                .save_state(&gpu_list, &ebpf_blocker)
+                .await
+                .context("Could not save gpu state")?;
+        } else {
+            warn!("could not detect gpus, daemon is still running for pci management usage")
+        }
+
+        Ok(Self {
+            state: DaemonState {
+                config: RwLock::new(config),
+                gpu_state: RwLock::new(gpu_state),
+                mode_state: RwLock::new(mode_state),
+                _pci_devices: pci_devices,
+                _iommu: iommu,
+                gpu_list,
+                ebpf_blocker: RwLock::new(ebpf_blocker),
+            },
+        })
+    }
+    pub async fn apply_config(&mut self) -> anyhow::Result<()> {
+        let config = self.state.config.read().await;
+        let mode = self.state.mode_state.read().await;
+        let mut blocker = self.state.ebpf_blocker.write().await;
+        // Apply vulkan block
+        blocker.set_vulkan_block(config.block_nvidia_vulkan())?;
+        // Dropping the locks prevent set_mode being stuck
+        drop(blocker);
+        drop(config);
+        // Apply mode
+        let mode_to_apply = mode.mode().to_string();
+        drop(mode);
+        self.set_mode(mode_to_apply).await?;
+
+        Ok(())
     }
 }
