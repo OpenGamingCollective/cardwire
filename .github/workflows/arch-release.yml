@@ -49,6 +49,7 @@ jobs:
       - name: Commit and push to AUR
         working-directory: aur-repo
         run: |
+          chown -R root:root .
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           VERSION=$(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)
