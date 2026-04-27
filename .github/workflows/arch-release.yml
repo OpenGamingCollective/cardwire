@@ -7,6 +7,8 @@ jobs:
   # Build job
   build:
     runs-on: ubuntu-24.04
+    container:
+      image: archlinux:base-devel
     env:
       AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
     steps:
@@ -15,8 +17,7 @@ jobs:
       # ssh
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y openssh-client git
+          sudo pacman -S openssh git
       - name: Setup ssh
         run: |
           mkdir -p ~/.ssh
@@ -34,40 +35,8 @@ jobs:
       - name: Copy new PKGBUILD to aur repo
         run: |
           cp packages/arch-linux/cardwire-PKGBUILD aur-repo/
-      - name: Setup pacman tools
-        uses: termux-pacman/pacman-actions@v2.5
       - name: Setup pacman
         run: |
-          sudo tee /etc/pacman.conf << 'EOF'
-          [options]
-          HoldPkg     = pacman glibc
-          Architecture = auto
-          CheckSpace
-          SigLevel    = Required DatabaseOptional
-          LocalFileSigLevel = Optional
-
-          [core]
-          Include = /etc/pacman.d/mirrorlist
-
-          [extra]
-          Include = /etc/pacman.d/mirrorlist
-
-          [multilib]
-          Include = /etc/pacman.d/mirrorlist
-          EOF
-
-          sudo mkdir -p /etc/pacman.d
-
-          curl -sL "https://archlinux.org/mirrorlist/?country=all&protocol=https&ip_version=4&use_mirror_status=on" \
-          | sudo tee /etc/pacman.d/mirrorlist > /dev/null
-          sudo sed -i 's/^#Server/Server/' /etc/pacman.d/mirrorlist
-          sudo sed -i 's/SigLevel.*/SigLevel = Never/' /etc/pacman.conf
-          sudo pacman -Sy archlinux-keyring --noconfirm
-          sudo sed -i 's/SigLevel.*/SigLevel = Required DatabaseOptional/' /etc/pacman.conf
-          sudo pacman-key --init
-          sudo pacman-key --populate archlinux
-          sudo pacman-key --refresh-keys
-
           sudo pacman -Sy pacman-contrib --noconfirm
       - name: Update PKGBUILD and SRCINFO
         working-directory: aur-repo
