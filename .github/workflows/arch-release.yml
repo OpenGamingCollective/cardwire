@@ -17,7 +17,7 @@ jobs:
       # ssh
       - name: Install dependencies
         run: |
-          sudo pacman -S openssh git
+          pacman -S openssh git
       - name: Setup ssh
         run: |
           mkdir -p ~/.ssh
@@ -37,7 +37,7 @@ jobs:
           cp packages/arch-linux/cardwire-PKGBUILD aur-repo/
       - name: Setup pacman
         run: |
-          sudo pacman -Sy pacman-contrib --noconfirm
+          pacman -Sy pacman-contrib --noconfirm
       - name: Update PKGBUILD and SRCINFO
         working-directory: aur-repo
         run: |
