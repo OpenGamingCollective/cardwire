@@ -62,7 +62,7 @@ sudo make install
 ```
 
 > [!CAUTION]
-> Makefile was AI-generated, use with caution.
+> Makefile wasn't tested, use with caution.
 
 > [!IMPORTANT]  
 > For mainstream distros, i will be making an official install methods, like a copr for Fedora and a .deb for Debian based.
