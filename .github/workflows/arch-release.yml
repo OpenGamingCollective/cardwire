@@ -17,7 +17,7 @@ jobs:
       # ssh
       - name: Install dependencies
         run: |
-          pacman -S openssh git
+          pacman -Sy openssh git
       - name: Setup ssh
         run: |
           mkdir -p ~/.ssh
