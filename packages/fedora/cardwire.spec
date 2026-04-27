@@ -12,7 +12,6 @@ BuildRequires:  clang
 BuildRequires:  libbpf-devel
 BuildRequires:  make
 BuildRequires:  systemd-rpm-macros
-BuildRequires:  git
 
 %description
 Cardwire is a GPU manager for Linux that uses eBPF LSM hooks to block or
@@ -22,8 +21,6 @@ unblock access to GPU device nodes.
 %autosetup -n %{name}-%{version}
 mkdir -p .cargo
 cat > .cargo/config.toml << 'EOF'
-[term]
-verbose = true
 [net]
 offline = false
 EOF
@@ -40,6 +37,9 @@ install -D -m 0755 %{_target_dir}/cardwired %{buildroot}%{_bindir}/cardwired
 
 # Install systemd unit
 install -D -m 0644 assets/cardwired.service %{buildroot}%{_unitdir}/cardwired.service
+
+# Install systemd preset
+install -D -m 0644 assets/99-cardwired.preset %{buildroot}%{_presetdir}/99-cardwired.preset
 
 # Install D-Bus system policy
 install -D -m 0644 assets/com.github.luytan.cardwire.conf %{buildroot}%{_datadir}/dbus-1/system.d/com.github.luytan.cardwire.conf
@@ -59,8 +59,11 @@ install -D -m 0644 assets/com.github.luytan.cardwire.conf %{buildroot}%{_datadir
 %{_bindir}/cardwire
 %{_bindir}/cardwired
 %{_unitdir}/cardwired.service
+%{_presetdir}/99-cardwired.preset
 %{_datadir}/dbus-1/system.d/com.github.luytan.cardwire.conf
 
 %changelog
+* Mon Apr 27 2026 luytan <luytan@khora.me> - 0.4.1-1
+- Added preset and removed useless lines
 * Mon Apr 27 2026 luytan <luytan@khora.me> - 0.4.1-1
 - Initial package
