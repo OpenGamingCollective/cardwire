@@ -1,9 +1,11 @@
 # cardwire
 
 [![AUR](https://img.shields.io/aur/version/cardwire)](https://aur.archlinux.org/packages/cardwire)
-[![GitHub License](https://img.shields.io/github/license/luytan/cardwire)](https://github.com/luytan/cardwire/blob/main/LICENSE)
+[![GitHub License](https://img.shields.io/github/license/OpenGamingCollective/cardwire)](https://github.com/OpenGamingCollective/cardwire/blob/main/LICENSE)
 
 A GPU manager for Linux using eBPF LSM hooks to block GPUs
+
+Creator and Main maintainer: @luytan
 
 # Disclaimer
 
@@ -13,7 +15,7 @@ A GPU manager for Linux using eBPF LSM hooks to block GPUs
 
 ## Getting Started
 
-Head to the [docs](https://luytan.github.io/cardwire) to see how to install Cardwire on your system
+Head to the [docs](https://opengamingcollective.github.io/cardwire) to see how to install Cardwire on your system
 
 ## Usage
 

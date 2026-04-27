@@ -32,7 +32,7 @@ in
     doInstallCheck = true;
     meta = {
       description = "a GPU manager for laptop and workstation";
-      homepage = "https://github.com/luytan/cardwire";
+      homepage = "https://github.com/OpenGamingCollective/cardwire";
       license = lib.licenses.gpl3;
     };
     # Point to the correct hwdata location
@@ -42,8 +42,8 @@ in
     '';
     # Copy dbus conf, systemd service and make shell completion
     postInstall = ''
-         install -Dm444 ./assets/com.github.luytan.cardwire.conf \
-         $out/share/dbus-1/system.d/com.github.luytan.cardwire.conf
+         install -Dm444 ./assets/com.github.opengamingcollective.cardwire.conf \
+         $out/share/dbus-1/system.d/com.github.opengamingcollective.cardwire.conf
       installShellCompletion --cmd cardwire \
          --fish <($out/bin/cardwire completion fish)
     '';

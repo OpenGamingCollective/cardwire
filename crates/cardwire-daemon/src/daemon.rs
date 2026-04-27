@@ -22,8 +22,8 @@ async fn main() -> Result<()> {
     }
     let conn_builder = connection::Builder::system()?;
     let _conn = conn_builder
-        .name("com.github.luytan.cardwire")?
-        .serve_at("/com/github/luytan/cardwire", daemon)?
+        .name("com.github.opengamingcollective.cardwire")?
+        .serve_at("/com/github/opengamingcollective/cardwire", daemon)?
         .build()
         .await?;
     info!("Daemon started");

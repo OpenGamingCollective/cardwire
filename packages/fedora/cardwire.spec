@@ -3,7 +3,7 @@ Version:        0.4.1
 Release:        1%{?dist}
 Summary:        A GPU manager for Linux using eBPF LSM hooks
 License:        GPL-3.0
-URL:            https://github.com/Luytan/cardwire
+URL:            https://github.com/OpenGamingCollective/cardwire
 Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 
 BuildRequires:  rust
@@ -42,7 +42,7 @@ install -D -m 0644 assets/cardwired.service %{buildroot}%{_unitdir}/cardwired.se
 install -D -m 0644 assets/99-cardwired.preset %{buildroot}%{_presetdir}/99-cardwired.preset
 
 # Install D-Bus system policy
-install -D -m 0644 assets/com.github.luytan.cardwire.conf %{buildroot}%{_datadir}/dbus-1/system.d/com.github.luytan.cardwire.conf
+install -D -m 0644 assets/com.github.opengamingcollective.cardwire.conf %{buildroot}%{_datadir}/dbus-1/system.d/com.github.opengamingcollective.cardwire.conf
 
 %post
 %systemd_post cardwired.service
@@ -60,7 +60,7 @@ install -D -m 0644 assets/com.github.luytan.cardwire.conf %{buildroot}%{_datadir
 %{_bindir}/cardwired
 %{_unitdir}/cardwired.service
 %{_presetdir}/99-cardwired.preset
-%{_datadir}/dbus-1/system.d/com.github.luytan.cardwire.conf
+%{_datadir}/dbus-1/system.d/com.github.opengamingcollective.cardwire.conf
 
 %changelog
 * Mon Apr 27 2026 luytan <luytan@khora.me> - 0.4.1-1

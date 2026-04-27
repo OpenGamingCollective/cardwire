@@ -7,7 +7,7 @@ After=systemd-udev-settle.service
 
 [Service]
 Type=dbus
-BusName=com.github.luytan.cardwire
+BusName=com.github.opengamingcollective.cardwire
 ExecStart=/usr/bin/cardwired
 Restart=on-failure
 RestartSec=5s

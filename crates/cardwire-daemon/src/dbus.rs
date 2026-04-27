@@ -3,7 +3,7 @@ use cardwire_core::gpu::{GpuRow, block_gpu, is_gpu_blocked};
 use log::{error, info, warn};
 use zbus::{fdo, interface};
 
-#[interface(name = "com.github.luytan.cardwire")]
+#[interface(name = "com.github.opengamingcollective.cardwire")]
 impl Daemon {
     /*
         Set the mode

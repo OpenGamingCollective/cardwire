@@ -32,7 +32,7 @@ flake.nix:
 
 ```nix
 cardwire = {
-    url = "github:luytan/cardwire";
+    url = "github:opengamingcollective/cardwire";
     inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
@@ -66,7 +66,7 @@ Build dependencies:
 - libbpf
 
 ```bash
-git clone https://github.com/luytan/cardwire.git
+git clone https://github.com/OpenGamingCollective/cardwire.git
 
 make build
 sudo make install
