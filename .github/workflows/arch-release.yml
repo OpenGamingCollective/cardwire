@@ -20,15 +20,15 @@ jobs:
           pacman -Sy openssh git --noconfirm
       - name: Setup ssh
         run: |
-          mkdir -p ~/.ssh
-          echo "$AUR_SSH_KEY" > ~/.ssh/aur_key
-          chmod 600 ~/.ssh/aur_key
-          cat << EOF > ~/.ssh/config
+          mkdir -p /root/.ssh
+          echo "$AUR_SSH_KEY" > /root/.ssh/aur_key
+          chmod 600 /root/.ssh/aur_key
+          ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
+          cat << EOF > /root/.ssh/config
           Host aur.archlinux.org
-            IdentityFile ~/.ssh/aur_key
+            IdentityFile /root/.ssh/aur_key
             User aur
             StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
           EOF
       - name: Clone AUR repository
         run: |
@@ -42,8 +42,10 @@ jobs:
       - name: Update PKGBUILD and SRCINFO
         working-directory: aur-repo
         run: |
-          updpkgsums
-          makepkg --printsrcinfo > .SRCINFO
+          useradd -m builder
+          chown -R builder:builder .
+          su builer -c "updpkgsums"
+          su builer -c "makepkg --printsrcinfo > .SRCINFO"
       - name: Commit and push to AUR
         working-directory: aur-repo
         run: |
