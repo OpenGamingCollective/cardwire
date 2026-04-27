@@ -39,7 +39,7 @@ jobs:
       - name: Update PKGBUILD and SRCINFO
         working-directory: aur-repo
         run: |
-          pacman -S pacman-contrib --noconfirm
+          sudo pacman -S pacman-contrib --noconfirm
           updpkgsums
           makepkg --printsrcinfo > .SRCINFO
       - name: Commit and push to AUR
