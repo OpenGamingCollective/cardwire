@@ -42,7 +42,3 @@ and
 ```bash
 cat /sys/class/drm/*/status
 ```
-
-### "game name" won't launch
-
-force
