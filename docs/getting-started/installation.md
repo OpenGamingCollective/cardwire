@@ -45,11 +45,22 @@ imports = [ inputs.cardwire.nixosModules.default ];
 services.cardwire.enable = true;
 ```
 
+## Fedora
+
+Using the offical copr:
+
+```bash
+sudo dnf copr enable luytan/cardwire
+
+sudo dnf install cardwire
+```
+
 ## Other distros
 
 For now, other distros must clone the repo and use `make` to build and install Cardwire.
 
 Build dependencies:
+
 - cargo
 - clang
 - libbpf
