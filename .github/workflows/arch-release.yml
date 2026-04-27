@@ -61,6 +61,9 @@ jobs:
           curl -sL "https://archlinux.org/mirrorlist/?country=all&protocol=https&ip_version=4&use_mirror_status=on" \
           | sudo tee /etc/pacman.d/mirrorlist > /dev/null
           sudo sed -i 's/^#Server/Server/' /etc/pacman.d/mirrorlist
+          sudo sed -i 's/SigLevel.*/SigLevel = Never/' /etc/pacman.conf
+          sudo pacman -Sy archlinux-keyring --noconfirm
+          sudo sed -i 's/SigLevel.*/SigLevel = Required DatabaseOptional/' /etc/pacman.conf
           sudo pacman-key --init
           sudo pacman-key --populate archlinux
           sudo pacman-key --refresh-keys
