@@ -28,6 +28,7 @@ jobs:
             IdentityFile ~/.ssh/aur_key
             User aur
             StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
           EOF
       - name: Clone AUR repository
         run: |
@@ -44,6 +45,7 @@ jobs:
           updpkgsums
           makepkg --printsrcinfo > .SRCINFO
       - name: Commit and push to AUR
+        working-directory: aur-repo
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
