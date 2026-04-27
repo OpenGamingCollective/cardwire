@@ -35,7 +35,7 @@ jobs:
           git clone ssh://aur@aur.archlinux.org/cardwire.git aur-repo
       - name: Copy new PKGBUILD to aur repo
         run: |
-          cp packages/arch-linux/cardwire-PKGBUILD aur-repo/
+          cp packages/arch-linux/cardwire-PKGBUILD aur-repo/PKGBUILD
       - name: Setup pacman
         run: |
           pacman -S pacman-contrib --noconfirm
@@ -53,6 +53,7 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           VERSION=$(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)
-          git add .
+          git add PKGBUILD
+          git add .SRCINFO
           git commit -m "chore: update cardwire to v${VERSION}"
           git push
