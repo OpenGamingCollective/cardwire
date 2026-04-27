@@ -36,10 +36,32 @@ jobs:
           cp packages/arch-linux/cardwire-PKGBUILD aur-repo/
       - name: Setup pacman tools
         uses: termux-pacman/pacman-actions@v2.5
+      - name: Setup pacman
+        run: |
+          cat > /etc/pacman.conf << 'EOF'
+          [options]
+          HoldPkg     = pacman glibc
+          Architecture = auto
+          CheckSpace
+          SigLevel    = Required DatabaseOptional
+          LocalFileSigLevel = Optional
+
+          [core]
+          Include = /etc/pacman.d/mirrorlist
+
+          [extra]
+          Include = /etc/pacman.d/mirrorlist
+
+          [multilib]
+          Include = /etc/pacman.d/mirrorlist
+          EOF
+          curl -o /etc/pacman.d/mirrorlist "https://archlinux.org/mirrorlist/?country=all&protocol=https&ip_version=4&use_mirror_status=on"
+          sed -i 's/^#Server/Server/' /etc/pacman.d/mirrorlist
+
+          sudo pacman -Sy pacman-contrib --noconfirm
       - name: Update PKGBUILD and SRCINFO
         working-directory: aur-repo
         run: |
-          sudo pacman -S pacman-contrib --noconfirm
           updpkgsums
           makepkg --printsrcinfo > .SRCINFO
       - name: Commit and push to AUR
