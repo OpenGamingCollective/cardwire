@@ -11,9 +11,10 @@ impl Daemon {
     pub(crate) async fn set_mode(&self, mode: String) -> fdo::Result<()> {
         // Valide inputs and turn into a Modes
         let mode = Modes::parse(&mode)?;
-        let mut blocker = self.state.ebpf_blocker.write().await;
         // Get current_config lock
         let mut current_mode = self.state.mode_state.write().await;
+
+        let mut blocker = self.state.ebpf_blocker.write().await;
 
         match mode {
             // Integrated/Hybrid only works on laptop with two gpus, will refuse if the computer has
@@ -44,8 +45,18 @@ impl Daemon {
                 let gpu_state = self.state.gpu_state.read().await;
                 for gpu in self.state.gpu_list.values() {
                     if gpu_state.gpu_block_state(&gpu.pci) && config.auto_apply_gpu_state() {
-                        block_gpu(&mut blocker, gpu, true)
-                            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+                        if gpu.is_default() {
+                            error!(
+                                "cannot set block state for GPU {}: device is marked as default",
+                                gpu.id
+                            );
+                            // For safety, unblock if default
+                            block_gpu(&mut blocker, gpu, false)
+                                .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+                        } else {
+                            block_gpu(&mut blocker, gpu, true)
+                                .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+                        }
                     } else {
                         block_gpu(&mut blocker, gpu, false)
                             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
@@ -66,6 +77,8 @@ impl Daemon {
     }
 
     pub(crate) async fn set_gpu_block(&self, gpu_id: u32, block: bool) -> fdo::Result<()> {
+        let mut blocker = self.state.ebpf_blocker.write().await;
+        let mut gpu_state = self.state.gpu_state.write().await;
         let gpu = self
             .state
             .gpu_list
@@ -78,17 +91,20 @@ impl Daemon {
                 "cannot set block state for GPU {}: device is marked as default",
                 gpu_id
             );
+            // for safety, unblock if default & save
+            block_gpu(&mut blocker, gpu, false).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+            if let Err(e) = gpu_state.save_state(&self.state.gpu_list, &blocker).await {
+                warn!("could not save gpu_state to file: {e}");
+            }
             return Err(fdo::Error::AccessDenied(format!(
                 "GPU {} is the default device and cannot be blocked",
                 gpu_id
             )));
         }
 
-        let mut blocker = self.state.ebpf_blocker.write().await;
         block_gpu(&mut blocker, gpu, block).map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
         info!("Set GPU {} ({}) block={}", gpu_id, gpu.pci_address(), block);
-        let mut gpu_state = self.state.gpu_state.write().await;
         if let Err(e) = gpu_state.save_state(&self.state.gpu_list, &blocker).await {
             warn!("could not save gpu_state to file: {e}");
         }

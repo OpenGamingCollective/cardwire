@@ -83,7 +83,7 @@ impl Daemon {
                 .save_state(&gpu_list, &ebpf_blocker)
                 .await
                 .context("Could not save gpu state")?;
-        } else {
+        } else if gpu_list.is_empty() {
             warn!("could not detect gpus, daemon is still running for pci management usage")
         }
 
