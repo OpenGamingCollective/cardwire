@@ -1,0 +1,52 @@
+name: Push update to cardwire AUR
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+jobs:
+  # Build job
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      # ssh
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-client git
+      - name: Setup ssh
+        run: |
+          mkdir -p ~/.ssh
+          echo "$AUR_SSH_KEY" > ~/.ssh/aur_key
+          chmod 600 ~/.ssh/aur_key
+          cat << EOF > ~/.ssh/config
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur_key
+            User aur
+            StrictHostKeyChecking no
+          EOF
+      - name: Clone AUR repository
+        run: |
+          git clone ssh://aur@aur.archlinux.org/cardwire.git aur-repo
+      - name: Copy new PKGBUILD to aur repo
+        run: |
+          cp packages/arch-linux/cardwire-PKGBUILD aur-repo/
+      - name: Setup pacman tools
+        uses: termux-pacman/pacman-actions@v2.5
+      - name: Update PKGBUILD and SRCINFO
+        working-directory: aur-repo
+        run: |
+          pacman -S pacman-contrib --noconfirm
+          updpkgsums
+          makepkg --printsrcinfo > .SRCINFO
+      - name: Commit and push to AUR
+        run: |-
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          VERSION=$(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)
+          git add .
+          git commit -m "chore: update cardwire to v${VERSION}"
+          git push
