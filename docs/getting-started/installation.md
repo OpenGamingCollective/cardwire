@@ -32,7 +32,7 @@ flake.nix:
 
 ```nix
 cardwire = {
-    url = "github:luytan/cardwire";
+    url = "github:opengamingcollective/cardwire";
     inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
@@ -45,24 +45,35 @@ imports = [ inputs.cardwire.nixosModules.default ];
 services.cardwire.enable = true;
 ```
 
+## Fedora
+
+Using the offical copr:
+
+```bash
+sudo dnf copr enable luytan/cardwire
+
+sudo dnf install cardwire
+```
+
 ## Other distros
 
 For now, other distros must clone the repo and use `make` to build and install Cardwire.
 
 Build dependencies:
+
 - cargo
 - clang
 - libbpf
 
 ```bash
-git clone https://github.com/luytan/cardwire.git
+git clone https://github.com/OpenGamingCollective/cardwire.git
 
 make build
 sudo make install
 ```
 
 > [!CAUTION]
-> Makefile was AI-generated, use with caution.
+> Makefile wasn't tested, use with caution.
 
 > [!IMPORTANT]  
 > For mainstream distros, i will be making an official install methods, like a copr for Fedora and a .deb for Debian based.

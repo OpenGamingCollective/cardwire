@@ -8,9 +8,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn connect(connection: &'a Connection) -> zbus::Result<Self> {
         let proxy = zbus::Proxy::new(
             connection,
-            "com.github.luytan.cardwire",
-            "/com/github/luytan/cardwire",
-            "com.github.luytan.cardwire",
+            "com.github.opengamingcollective.cardwire",
+            "/com/github/opengamingcollective/cardwire",
+            "com.github.opengamingcollective.cardwire",
         )
         .await?;
 

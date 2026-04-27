@@ -1,19 +1,21 @@
 # cardwire
 
 [![AUR](https://img.shields.io/aur/version/cardwire)](https://aur.archlinux.org/packages/cardwire)
-[![GitHub License](https://img.shields.io/github/license/luytan/cardwire)](https://github.com/luytan/cardwire/blob/main/LICENSE)
+[![GitHub License](https://img.shields.io/github/license/OpenGamingCollective/cardwire)](https://github.com/OpenGamingCollective/cardwire/blob/main/LICENSE)
 
 A GPU manager for Linux using eBPF LSM hooks to block GPUs
+
+Creator and Main maintainer: @luytan
 
 # Disclaimer
 
 - This project is in early development. Expect bugs and incomplete functionality
 > [!NOTE]
-> Regarding the use of AI in this project: AI was used early on to prototype and fix some errors. The code has since been mostly rewritten by hand. The only AI-generated code left is in `pci_devices.rs`, specifically the `load_pci_name_db` function, which will be rewritten soon, and the Makefile
+> Regarding the use of AI in this project: AI was used early on to prototype and fix some errors. The code has since been mostly rewritten by hand. The only AI-generated code left is in `pci_devices.rs`, specifically the `load_pci_name_db` function, which will be rewritten soon
 
 ## Getting Started
 
-Head to the [docs](https://luytan.github.io/cardwire) to see how to install Cardwire on your system
+Head to the [docs](https://opengamingcollective.github.io/cardwire) to see how to install Cardwire on your system
 
 ## Usage
 
@@ -46,15 +48,15 @@ cardwire gpu 1 --unblock
 
 ## Configuration
 
-The daemon reads its configuration from `/var/lib/cardwire/cardwire.toml`. If the file is missing, it defaults to `Manual` mode.
+The daemon reads its configuration from `/etc/cardwire/cardwire.toml`.
 
 ```toml
-# /var/lib/cardwire/cardwire.toml
-mode = "Manual"
-block_vulkan = false
+# /etc/cardwire/cardwire.toml
+auto_apply_gpu_state = true
+block_nvidia_vulkan = false
 ```
 
-`block_vulkan` is an experimental feature that blocks the nvidia's vulkan icd, must be used with caution
+`block_nvidia_vulkan` is an experimental feature that blocks the nvidia's vulkan icd, must be used with caution
 
 ## Building and Development
 
@@ -79,7 +81,7 @@ nix run .#nixosConfigurations.x86_64-linux.config.system.build.vm
 
 ### Manual Compilation
 
-If you don't use Nix, ensure you have `clang`, `libbpf` and `cargo` installed (needed for eBPF compilation during the Rust build)
+If you don't use Nix, ensure you have `clang`, `libbpf (devel)`, hwdata and `cargo` installed (needed for eBPF compilation during the Rust build)
 
 ```bash
 # Build the project

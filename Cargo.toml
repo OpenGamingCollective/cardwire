@@ -8,26 +8,28 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.1"
+version = "0.5.0"
 authors = ["luytan <luytan@khora.me>"]
-repository = "https://github.com/luytan/cardwire"
+repository = "https://github.com/OpenGamingCollective/cardwire"
 edition = "2024"
 rust-version = "1.92.0"
 license = "GPL-3.0"
 
 [workspace.dependencies]
 tokio = { version = "1.52.1", features = ["full"] }
-zbus = { version = "5.14.0", features = ["tokio"] }
+zbus = { version = "5.15.0", features = ["tokio"] }
 clap = { version = "4.6.1", features = ["derive"] }
 config = { version = "0.15.19", features = ["toml"] }
 serde = { version = "1.0.228", features = ["derive"] }
 log = "0.4.29"
 thiserror = "2.0.18"
-clap_complete = "4.6.2" 
+clap_complete = "4.6.3" 
 anyhow = "1.0.102"
 env_logger = "0.11"
 toml = "1.0.3"
 aya = "0.13.1"
+serde_json = "1.0.149"
+
 [profile.dev]
 panic = "abort"
 overflow-checks = true

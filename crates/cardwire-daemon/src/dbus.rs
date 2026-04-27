@@ -3,7 +3,7 @@ use cardwire_core::gpu::{GpuRow, block_gpu, is_gpu_blocked};
 use log::{error, info, warn};
 use zbus::{fdo, interface};
 
-#[interface(name = "com.github.luytan.cardwire")]
+#[interface(name = "com.github.opengamingcollective.cardwire")]
 impl Daemon {
     /*
         Set the mode
@@ -12,7 +12,9 @@ impl Daemon {
         // Valide inputs and turn into a Modes
         let mode = Modes::parse(&mode)?;
         // Get current_config lock
-        let mut current_config = self.state.config.write().await;
+        let mut current_mode = self.state.mode_state.write().await;
+
+        let mut blocker = self.state.ebpf_blocker.write().await;
 
         match mode {
             // Integrated/Hybrid only works on laptop with two gpus, will refuse if the computer has
@@ -29,7 +31,6 @@ impl Daemon {
                     )));
                 }
                 // Loop to find the non default gpu and block it,
-                let mut blocker = self.state.ebpf_blocker.write().await;
                 for gpu in self.state.gpu_list.values() {
                     if !gpu.is_default() {
                         block_gpu(&mut blocker, gpu, mode == Modes::Integrated)
@@ -37,25 +38,47 @@ impl Daemon {
                     };
                 }
             }
-            // Mode manual should return all gpus to a non blocked state and allow gpu <id> block
-            // on/off
-            Modes::Manual => {}
+            // If the auto apply is false, return all gpus to unblocked
+            // Else apply the gpu_state but still unblock other gpus
+            Modes::Manual => {
+                let config = self.state.config.read().await;
+                let gpu_state = self.state.gpu_state.read().await;
+                for gpu in self.state.gpu_list.values() {
+                    if gpu_state.gpu_block_state(&gpu.pci) && config.auto_apply_gpu_state() {
+                        if gpu.is_default() {
+                            error!(
+                                "cannot set block state for GPU {}: device is marked as default",
+                                gpu.id
+                            );
+                            // For safety, unblock if default
+                            block_gpu(&mut blocker, gpu, false)
+                                .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+                        } else {
+                            block_gpu(&mut blocker, gpu, true)
+                                .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+                        }
+                    } else {
+                        block_gpu(&mut blocker, gpu, false)
+                            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+                    }
+                }
+            }
         }
-
-        current_config.mode = mode;
-
-        if let Err(err) = current_config.save_config() {
-            warn!("Failed to save config: {}", err);
+        if let Err(e) = current_mode.save_state(mode).await {
+            warn!("mode couldn't be saved to config: {e}");
         }
         info!("Switched to {}", mode);
         Ok(())
     }
 
     pub(crate) async fn get_mode(&self) -> String {
-        format!("Current Mode: {}", self.state.mode().await)
+        let current_mode = self.state.mode_state.read().await;
+        format!("Current Mode: {}", current_mode.mode())
     }
 
     pub(crate) async fn set_gpu_block(&self, gpu_id: u32, block: bool) -> fdo::Result<()> {
+        let mut blocker = self.state.ebpf_blocker.write().await;
+        let mut gpu_state = self.state.gpu_state.write().await;
         let gpu = self
             .state
             .gpu_list
@@ -65,20 +88,26 @@ impl Daemon {
         // prevent default gpu from being blocked
         if gpu.is_default() {
             error!(
-                "Cannot set block state for GPU {}: device is marked as default",
+                "cannot set block state for GPU {}: device is marked as default",
                 gpu_id
             );
+            // for safety, unblock if default & save
+            block_gpu(&mut blocker, gpu, false).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+            if let Err(e) = gpu_state.save_state(&self.state.gpu_list, &blocker).await {
+                warn!("could not save gpu_state to file: {e}");
+            }
             return Err(fdo::Error::AccessDenied(format!(
                 "GPU {} is the default device and cannot be blocked",
                 gpu_id
             )));
         }
 
-        let mut blocker = self.state.ebpf_blocker.write().await;
         block_gpu(&mut blocker, gpu, block).map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
         info!("Set GPU {} ({}) block={}", gpu_id, gpu.pci_address(), block);
-
+        if let Err(e) = gpu_state.save_state(&self.state.gpu_list, &blocker).await {
+            warn!("could not save gpu_state to file: {e}");
+        }
         Ok(())
     }
 
