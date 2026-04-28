@@ -1,4 +1,4 @@
-name: test-vm
+name: Integration Tests in a Nix VM
 on:
   pull_request:
     types: [opened, labeled]
