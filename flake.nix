@@ -70,7 +70,15 @@
         }
       );
       checks = forAllSystems (system: {
-        vm-test = import ./nix/integration-test.nix {
+        vm-ci-2gpu = import ./nix/ci-2gpu.nix {
+          inherit pkgs system self;
+          lib = nixpkgs.lib;
+        };
+        vm-ci-3gpu = import ./nix/ci-3gpu.nix {
+          inherit pkgs system self;
+          lib = nixpkgs.lib;
+        };
+        vm-ci-15gpu = import ./nix/ci-15gpu.nix {
           inherit pkgs system self;
           lib = nixpkgs.lib;
         };
