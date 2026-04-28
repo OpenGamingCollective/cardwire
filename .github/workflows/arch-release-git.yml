@@ -53,5 +53,5 @@ jobs:
           VERSION=$(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)
           git add PKGBUILD
           git add .SRCINFO
-          git commit -m "chore: update cardwire-git to v${VERSION}"
+          git commit -m "chore: update cardwire-git to ${VERSION}"
           git push
