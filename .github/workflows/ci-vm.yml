@@ -4,6 +4,7 @@ on:
     types: [opened, labeled]
     branches:
       - main
+      - dev
     paths:
       - 'crates/**'
       - 'workflows/**'
@@ -15,5 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
-      - name: Run Integration Tests
-        run: nix build -L .#checks.x86_64-linux.vm-test
+      - name: Run Integration Tests with 2 GPUs
+        run: nix build -L .#checks.x86_64-linux.vm-ci-2gpu
+      - name: Run Integration Tests with 3 GPUs
+        run: nix build -L .#checks.x86_64-linux.vm-ci-3gpu
+      - name: Run Integration Tests with 15 GPUs
+        run: nix build -L .#checks.x86_64-linux.vm-ci-15gpu
