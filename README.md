@@ -1,6 +1,6 @@
 # cardwire
 
-[![AUR](https://img.shields.io/aur/version/cardwire)](https://aur.archlinux.org/packages/cardwire)
+[![Packaging status](https://repology.org/badge/vertical-allrepos/cardwire.svg)](https://repology.org/project/cardwire/versions)
 [![GitHub License](https://img.shields.io/github/license/OpenGamingCollective/cardwire)](https://github.com/OpenGamingCollective/cardwire/blob/main/LICENSE)
 
 A GPU manager for Linux using eBPF LSM hooks to block GPUs
