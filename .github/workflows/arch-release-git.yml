@@ -1,0 +1,57 @@
+name: Push update to cardwire-git AUR
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+jobs:
+  # Build job
+  build:
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux:latest
+      env:
+        AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      # ssh
+      - name: Install dependencies
+        run: |
+          pacman -Sy openssh git pacman-contrib --noconfirm
+      - name: Setup ssh
+        run: |
+          mkdir -p /root/.ssh
+          echo "$AUR_SSH_KEY" > /root/.ssh/aur_key
+          chmod 600 /root/.ssh/aur_key
+          ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
+          cat << EOF > /root/.ssh/config
+          Host aur.archlinux.org
+            IdentityFile /root/.ssh/aur_key
+            User aur
+            StrictHostKeyChecking no
+          EOF
+      - name: Clone AUR repository
+        run: |
+          git clone ssh://aur@aur.archlinux.org/cardwire-git.git aur-repo
+      - name: Copy new PKGBUILD to aur repo
+        run: |
+          cp packages/arch-linux/cardwire-git-PKGBUILD aur-repo/PKGBUILD
+      - name: Update PKGBUILD and SRCINFO
+        working-directory: aur-repo
+        run: |
+          useradd -m builder
+          chown -R builder:builder .
+          su builder -c "updpkgsums"
+          su builder -c "makepkg -o"
+          su builder -c "makepkg --printsrcinfo > .SRCINFO"
+      - name: Commit and push to AUR
+        working-directory: aur-repo
+        run: |
+          chown -R root:root .
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          VERSION=$(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)
+          git add PKGBUILD
+          git add .SRCINFO
+          git commit -m "chore: update cardwire-git to v${VERSION}"
+          git push
