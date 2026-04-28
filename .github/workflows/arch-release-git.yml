@@ -17,7 +17,7 @@ jobs:
       # ssh
       - name: Install dependencies
         run: |
-          pacman -Sy openssh git pacman-contrib --noconfirm
+          pacman -Sy openssh git pacman-contrib cargo clang libbpf --noconfirm
       - name: Setup ssh
         run: |
           mkdir -p /root/.ssh
