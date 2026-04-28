@@ -16,10 +16,7 @@ reboot
 ```
 
 > [!NOTE]
-> i also maintain the cardwire-git package in case someone tries to take it.
-
-> [!NOTE]
-> both gets updated, in a near future, cardwire will provide a built package from github while cardwire-git will build from source.
+> cardwire-git is also available, this one is built from the dev branch, rather than a fixed release tag
 
 > [!IMPORTANT]  
 > i'm also looking for an official maintainer for both AUR, since i do not use Arch.
