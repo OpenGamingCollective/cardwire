@@ -47,7 +47,7 @@ pub struct DaemonState {
     pub gpu_list: HashMap<usize, gpu::Gpu>,
     pub ebpf_blocker: RwLock<GpuBlocker>,
     // for future uses, related to vfio
-    pub _pci_devices: HashMap<String, pci::PciDevice>,
+    pub pci_devices: HashMap<String, pci::PciDevice>,
     pub _iommu: bool,
 }
 impl DaemonState {
@@ -92,7 +92,7 @@ impl Daemon {
                 config: RwLock::new(config),
                 gpu_state: RwLock::new(gpu_state),
                 mode_state: RwLock::new(mode_state),
-                _pci_devices: pci_devices,
+                pci_devices: pci_devices,
                 _iommu: iommu,
                 gpu_list,
                 ebpf_blocker: RwLock::new(ebpf_blocker),

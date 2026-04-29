@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct PciDevice {
     pub pci_address: String,
     pub iommu_group: Option<usize>,

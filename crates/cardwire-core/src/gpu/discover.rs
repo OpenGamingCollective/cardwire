@@ -48,6 +48,7 @@ fn build_gpu(device: &PciDevice) -> io::Result<Gpu> {
         render: drm_node_path(&device.pci_address, "render")?,
         card: drm_node_path(&device.pci_address, "card")?,
         default: None,
+        blocked: None,
         nvidia,
         nvidia_minor,
     })
@@ -238,6 +239,8 @@ pub fn check_default_drm_class(gpu_list: &mut HashMap<usize, Gpu>) -> io::Result
     for gpu in gpu_list.values_mut() {
         if gpu.id == *default.0.unwrap() as u32 {
             gpu.default = Some(true);
+        } else {
+            gpu.default = Some(false);
         }
     }
 

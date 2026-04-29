@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Gpu {
     pub id: u32,
     pub name: String,
@@ -6,6 +6,10 @@ pub struct Gpu {
     pub render: u32,
     pub card: u32,
     pub default: Option<bool>,
+    // blocked is purely for display
+    // the daemon not check itself for this, it will ask the
+    // ebpf_blocker
+    pub blocked: Option<bool>,
     pub nvidia: bool,
     pub nvidia_minor: Option<u32>,
 }

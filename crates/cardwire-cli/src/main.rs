@@ -1,39 +1,24 @@
 mod args;
 mod dbus;
-mod output;
+mod display;
 use args::{Args, CliMode, Commands};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
 
-const BIN_NAME: &str = "cardwire";
+use crate::display::{parse_json, print_devices};
 
-fn handle_error(err: zbus::Error) {
-    match err {
-        zbus::Error::MethodError(name, description, _) => {
-            eprintln!("{}", description.unwrap_or_else(|| name.to_string()))
-        }
-        zbus::Error::FDO(fdo_err) => match *fdo_err {
-            zbus::fdo::Error::ServiceUnknown(content) => {
-                eprint!("error: {} \n is the service up?", content)
-            }
-            other => eprintln!("FDO error: {}", other),
-        },
-        e => eprintln!("error: {e:?}"),
-    }
-}
+const BIN_NAME: &str = "cardwire";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    /*
-       Handle completion before connecting to dbus
-    */
-
+    // Handle completion before connecting to dbus
     if let Commands::Completion { shell } = args.command {
         let mut cmd = Args::command();
         clap_complete::generate(shell, &mut cmd, BIN_NAME, &mut std::io::stdout());
         return Ok(());
     }
+    // Now connect
     let connection: zbus::Connection = zbus::connection::Builder::system()?.build().await?;
     let client: DaemonClient<'_> = DaemonClient::connect(&connection).await?;
 
@@ -52,14 +37,13 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Get => {
             match client.get_mode().await {
-                Ok(response) => println!("{}", response),
+                Ok(response) => println!("Current Mode: {}", parse_json(&response)),
                 Err(e) => handle_error(e),
             };
         }
-        Commands::List { full: _, json: _ } => match client.list_gpus().await {
-            Ok(mut response) => {
-                response.sort_by_key(|row| row.0);
-                output::print_gpu_table(&response);
+        Commands::List { full, json } => match client.list_devices(full).await {
+            Ok(response) => {
+                print_devices(&response, json, full)?;
             }
             Err(e) => handle_error(e),
         },
@@ -73,4 +57,18 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+fn handle_error(err: zbus::Error) {
+    match err {
+        zbus::Error::MethodError(name, description, _) => {
+            eprintln!("{}", description.unwrap_or_else(|| name.to_string()))
+        }
+        zbus::Error::FDO(fdo_err) => match *fdo_err {
+            zbus::fdo::Error::ServiceUnknown(content) => {
+                eprint!("error: {} \n is the service up?", content)
+            }
+            other => eprintln!("FDO error: {}", other),
+        },
+        e => eprintln!("error: {e:?}"),
+    }
 }

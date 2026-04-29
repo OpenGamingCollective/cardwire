@@ -1,4 +1,3 @@
-use cardwire_core::gpu::GpuRow;
 use zbus::{Proxy, connection::Connection};
 pub struct DaemonClient<'a> {
     proxy: Proxy<'a>,
@@ -25,8 +24,8 @@ impl<'a> DaemonClient<'a> {
         self.proxy.call("GetMode", &()).await
     }
 
-    pub async fn list_gpus(&self) -> zbus::Result<Vec<GpuRow>> {
-        self.proxy.call("ListGpus", &()).await
+    pub async fn list_devices(&self, full: bool) -> zbus::Result<String> {
+        self.proxy.call("ListDevices", &(full)).await
     }
 
     pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::Result<()> {

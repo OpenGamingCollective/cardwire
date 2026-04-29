@@ -71,9 +71,13 @@ impl Daemon {
         Ok(())
     }
 
-    pub(crate) async fn get_mode(&self) -> String {
+    pub(crate) async fn get_mode(&self) -> fdo::Result<String> {
         let current_mode = self.state.mode_state.read().await;
-        format!("Current Mode: {}", current_mode.mode())
+        let mut response = current_mode.mode().to_string();
+        response =
+            serde_json::to_string(&response).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+
+        Ok(response)
     }
 
     pub(crate) async fn set_gpu_block(&self, gpu_id: u32, block: bool) -> fdo::Result<()> {
@@ -111,32 +115,21 @@ impl Daemon {
         Ok(())
     }
 
-    pub(crate) async fn list_gpus(&self) -> Vec<GpuRow> {
-        //self.list_gpu_rows().await
-        let mut rows = Vec::with_capacity(self.state.gpu_list.len());
-        let blocker = self.state.ebpf_blocker.read().await;
-        for gpu in self.state.gpu_list.values() {
-            let blocked: bool = match is_gpu_blocked(&blocker, gpu) {
-                Ok(b) => b,
-                Err(e) => {
-                    error!(
-                        "Couldn't check gpu's lock state for {}: {}",
-                        gpu.pci_address(),
-                        e
-                    );
-                    false
-                }
-            };
-            rows.push((
-                gpu.id(),
-                gpu.name().to_string(),
-                gpu.pci_address().to_string(),
-                gpu.render_node().to_string(),
-                gpu.is_default(),
-                blocked,
-            ));
+    pub(crate) async fn list_devices(&self, pci: bool) -> fdo::Result<String> {
+        if pci {
+            let list = &self.state.pci_devices;
+            let reponse =
+                serde_json::to_string(&list).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+            Ok(reponse)
+        } else {
+            let blocker = self.state.ebpf_blocker.read().await;
+            let mut list = self.state.gpu_list.clone();
+            for (_, gpu) in &mut list {
+                gpu.blocked = Some(is_gpu_blocked(&blocker, gpu).unwrap_or(false))
+            }
+            let reponse =
+                serde_json::to_string(&list).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+            Ok(reponse)
         }
-        rows.sort_by_key(|row| row.0);
-        rows
     }
 }
