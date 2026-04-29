@@ -115,21 +115,21 @@ impl Daemon {
         Ok(())
     }
 
-    pub(crate) async fn list_devices(&self, pci: bool) -> fdo::Result<String> {
-        if pci {
-            let list = &self.state.pci_devices;
-            let reponse =
-                serde_json::to_string(&list).map_err(|e| fdo::Error::Failed(e.to_string()))?;
-            Ok(reponse)
-        } else {
-            let blocker = self.state.ebpf_blocker.read().await;
-            let mut list = self.state.gpu_list.clone();
-            for (_, gpu) in &mut list {
-                gpu.blocked = Some(is_gpu_blocked(&blocker, gpu).unwrap_or(false))
-            }
-            let reponse =
-                serde_json::to_string(&list).map_err(|e| fdo::Error::Failed(e.to_string()))?;
-            Ok(reponse)
+    pub(crate) async fn list_devices(&self) -> fdo::Result<String> {
+        let blocker = self.state.ebpf_blocker.read().await;
+        let mut list = self.state.gpu_list.clone();
+        for (_, gpu) in &mut list {
+            gpu.blocked = Some(is_gpu_blocked(&blocker, gpu).unwrap_or(false))
         }
+        let reponse =
+            serde_json::to_string(&list).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        Ok(reponse)
+    }
+
+    pub(crate) async fn list_devices_pci(&self) -> fdo::Result<String> {
+        let list = &self.state.pci_devices;
+        let reponse =
+            serde_json::to_string(&list).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        Ok(reponse)
     }
 }

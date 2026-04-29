@@ -25,7 +25,11 @@ impl<'a> DaemonClient<'a> {
     }
 
     pub async fn list_devices(&self, full: bool) -> zbus::Result<String> {
-        self.proxy.call("ListDevices", &(full)).await
+        if full {
+            self.proxy.call("ListDevicesPci", &()).await
+        } else {
+            self.proxy.call("ListDevices", &()).await
+        }
     }
 
     pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::Result<()> {
