@@ -32,10 +32,10 @@ pub fn read_gpu(pci_devices: &HashMap<String, PciDevice>) -> io::Result<HashMap<
 
 fn build_gpu(device: &PciDevice) -> io::Result<Gpu> {
     let nvidia: bool = device.vendor_id.as_deref() == Some("0x10de");
-    let nvidia_minor: u32 = if nvidia {
-        nvidia_get_minor(&device.pci_address).unwrap_or(99)
+    let nvidia_minor: Option<u32> = if nvidia {
+        nvidia_get_minor(&device.pci_address)
     } else {
-        99
+        None
     };
 
     Ok(Gpu {

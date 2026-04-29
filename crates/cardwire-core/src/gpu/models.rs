@@ -7,9 +7,8 @@ pub struct Gpu {
     pub card: u32,
     pub default: Option<bool>,
     pub nvidia: bool,
-    pub nvidia_minor: u32,
+    pub nvidia_minor: Option<u32>,
 }
-
 impl Gpu {
     pub fn pci_address(&self) -> &str {
         &self.pci
@@ -37,7 +36,7 @@ impl Gpu {
     pub fn is_nvidia(&self) -> &bool {
         &self.nvidia
     }
-    pub fn nvidia_minor(&self) -> &u32 {
+    pub fn nvidia_minor(&self) -> &Option<u32> {
         &self.nvidia_minor
     }
 }
