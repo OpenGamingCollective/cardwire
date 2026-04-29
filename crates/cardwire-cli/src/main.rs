@@ -5,7 +5,7 @@ use args::{Args, CliMode, Commands};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
 
-use crate::display::{parse_json, print_devices, print_devices_pci};
+use crate::display::{print_devices, print_devices_pci};
 
 const BIN_NAME: &str = "cardwire";
 
@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Get => {
             match client.get_mode().await {
-                Ok(response) => println!("Current Mode: {}", parse_json(&response)),
+                Ok(response) => println!("Current Mode: {}", response),
                 Err(e) => handle_error(e),
             };
         }

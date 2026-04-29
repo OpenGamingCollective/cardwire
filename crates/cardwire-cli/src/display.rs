@@ -31,12 +31,8 @@ pub struct PciDevice {
     driver: Option<String>,
     class: Option<String>,
 }
-/// turn a json into a string
-pub fn parse_json(json: &str) -> String {
-    serde_json::from_str(json).unwrap_or("Error parsing json".to_string())
-}
 
-/// Take a jsonified String and print it  
+/// Take a Map and print it  
 pub fn print_devices(gpu_list: BTreeMap<usize, GpuDevice>, is_json: bool) -> Result<()> {
     if is_json {
         println!("{}", serde_json::to_string_pretty(&gpu_list)?);
@@ -46,12 +42,12 @@ pub fn print_devices(gpu_list: BTreeMap<usize, GpuDevice>, is_json: bool) -> Res
 
     Ok(())
 }
-
+/// Take a Map and print it  
 pub fn print_devices_pci(pci_list: BTreeMap<String, PciDevice>) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&pci_list)?);
     Ok(())
 }
-
+/// Take a Map and print it into a good looking table
 fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
     let mut id_w = 2usize;
     let mut name_w = 4usize;
