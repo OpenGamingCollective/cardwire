@@ -3,7 +3,7 @@ use anyhow::{Context, Ok};
 use cardwire_core::gpu::{Gpu, GpuBlocker, is_gpu_blocked};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, io};
+use std::{collections::BTreeMap, fs, io};
 const CONFIG_PATH: &str = "/etc/cardwire";
 const STATE_PATH: &str = "/var/lib/cardwire";
 
@@ -54,7 +54,7 @@ impl CardwireConfig {
 // This is the easiest way i found to have a good looking json, might change later
 #[derive(Serialize, Deserialize)]
 pub struct CardwireGpuState {
-    gpu: HashMap<String, CardwireGpuUnit>,
+    gpu: BTreeMap<String, CardwireGpuUnit>,
 }
 // A gpu contain a pci and a blocked state,
 // TODO: A more precise way to identify a GPU, but not dangerous since cardwire does not block
@@ -79,14 +79,14 @@ impl CardwireGpuState {
         Ok(gpu_state)
     }
     // Parse directly into CardwireGpuState
-    fn parse_gpu_state(state_file: &str) -> anyhow::Result<HashMap<String, CardwireGpuUnit>> {
+    fn parse_gpu_state(state_file: &str) -> anyhow::Result<BTreeMap<String, CardwireGpuUnit>> {
         if !(fs::exists(state_file)?) {
             Self::create_default_state().context("Could not create default gpu_state.json")?;
         }
         let gpu_state = fs::read_to_string(state_file)
             .with_context(|| format!("Could not read file {}", state_file))?;
 
-        let content: HashMap<String, CardwireGpuUnit> =
+        let content: BTreeMap<String, CardwireGpuUnit> =
             serde_json::from_str(&gpu_state).context("Could not parse string into json")?;
         Ok(content)
     }
@@ -98,7 +98,7 @@ impl CardwireGpuState {
     /// Save the new state into the daemon and to the gpu_state.json file
     pub async fn save_state(
         &mut self,
-        gpu_list: &HashMap<usize, Gpu>,
+        gpu_list: &BTreeMap<usize, Gpu>,
         blocker: &GpuBlocker,
     ) -> anyhow::Result<()> {
         // Prevent overwriting default config if it's not replaceable
@@ -196,7 +196,7 @@ fn create_default_file(kind: FileKind) -> anyhow::Result<()> {
                 .context("could not create default folder for gpu_state.json")?;
             // Default gpu_state for cardwire
             // TODO: Move to default trait?
-            let mut defaut_hash: HashMap<String, CardwireGpuUnit> = HashMap::new();
+            let mut defaut_hash: BTreeMap<String, CardwireGpuUnit> = BTreeMap::new();
             let _ = defaut_hash.insert("Null".to_string(), CardwireGpuUnit { block: false });
             let default_gpu_state = serde_json::to_string_pretty(&defaut_hash)?;
             // write

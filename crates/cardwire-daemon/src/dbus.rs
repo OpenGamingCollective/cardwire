@@ -1,5 +1,9 @@
+use std::collections::BTreeMap;
+
 use crate::models::{Daemon, Modes};
-use cardwire_core::gpu::{GpuRow, block_gpu, is_gpu_blocked};
+use cardwire_core::{
+    gpu::{Gpu, block_gpu, is_gpu_blocked}, pci::PciDevice
+};
 use log::{error, info, warn};
 use zbus::{fdo, interface};
 
@@ -73,11 +77,7 @@ impl Daemon {
 
     pub(crate) async fn get_mode(&self) -> fdo::Result<String> {
         let current_mode = self.state.mode_state.read().await;
-        let mut response = current_mode.mode().to_string();
-        response =
-            serde_json::to_string(&response).map_err(|e| fdo::Error::Failed(e.to_string()))?;
-
-        Ok(response)
+        Ok(current_mode.mode().to_string())
     }
 
     pub(crate) async fn set_gpu_block(&self, gpu_id: u32, block: bool) -> fdo::Result<()> {
@@ -115,21 +115,16 @@ impl Daemon {
         Ok(())
     }
 
-    pub(crate) async fn list_devices(&self) -> fdo::Result<String> {
+    pub(crate) async fn list_devices(&self) -> fdo::Result<BTreeMap<usize, Gpu>> {
         let blocker = self.state.ebpf_blocker.read().await;
         let mut list = self.state.gpu_list.clone();
-        for (_, gpu) in &mut list {
+        for gpu in list.values_mut() {
             gpu.blocked = Some(is_gpu_blocked(&blocker, gpu).unwrap_or(false))
         }
-        let reponse =
-            serde_json::to_string(&list).map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        Ok(reponse)
+        Ok(list.clone())
     }
 
-    pub(crate) async fn list_devices_pci(&self) -> fdo::Result<String> {
-        let list = &self.state.pci_devices;
-        let reponse =
-            serde_json::to_string(&list).map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        Ok(reponse)
+    pub(crate) async fn list_devices_pci(&self) -> fdo::Result<BTreeMap<String, PciDevice>> {
+        Ok(self.state.pci_devices.clone())
     }
 }

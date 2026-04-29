@@ -1,4 +1,4 @@
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type)]
 pub struct Gpu {
     pub id: u32,
     pub name: String,

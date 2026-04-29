@@ -5,7 +5,7 @@ use args::{Args, CliMode, Commands};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
 
-use crate::display::{parse_json, print_devices};
+use crate::display::{parse_json, print_devices, print_devices_pci};
 
 const BIN_NAME: &str = "cardwire";
 
@@ -41,12 +41,23 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => handle_error(e),
             };
         }
-        Commands::List { full, json } => match client.list_devices(full).await {
-            Ok(response) => {
-                print_devices(&response, json, full)?;
+        Commands::List { full, json } => {
+            if full {
+                match client.list_devices_pci().await {
+                    Ok(response) => {
+                        print_devices_pci(response)?;
+                    }
+                    Err(e) => handle_error(e),
+                }
+            } else {
+                match client.list_devices().await {
+                    Ok(response) => {
+                        print_devices(response, json)?;
+                    }
+                    Err(e) => handle_error(e),
+                }
             }
-            Err(e) => handle_error(e),
-        },
+        }
         Commands::Gpu { id, action } => {
             match client.set_gpu_block(id, action.block).await {
                 Ok(_) => println!("Mode has been set to {} on GPU {}", action.block, id),

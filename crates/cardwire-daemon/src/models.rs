@@ -5,7 +5,7 @@ use cardwire_core::{
 };
 use log::warn;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt};
+use std::{collections::BTreeMap, fmt};
 use tokio::sync::RwLock;
 use zbus::fdo::Error;
 
@@ -44,10 +44,10 @@ pub struct DaemonState {
     pub config: RwLock<CardwireConfig>,
     pub gpu_state: RwLock<CardwireGpuState>,
     pub mode_state: RwLock<CardwireModeState>,
-    pub gpu_list: HashMap<usize, gpu::Gpu>,
+    pub gpu_list: BTreeMap<usize, gpu::Gpu>,
     pub ebpf_blocker: RwLock<GpuBlocker>,
     // for future uses, related to vfio
-    pub pci_devices: HashMap<String, pci::PciDevice>,
+    pub pci_devices: BTreeMap<String, pci::PciDevice>,
     pub _iommu: bool,
 }
 impl DaemonState {
@@ -92,7 +92,7 @@ impl Daemon {
                 config: RwLock::new(config),
                 gpu_state: RwLock::new(gpu_state),
                 mode_state: RwLock::new(mode_state),
-                pci_devices: pci_devices,
+                pci_devices,
                 _iommu: iommu,
                 gpu_list,
                 ebpf_blocker: RwLock::new(ebpf_blocker),

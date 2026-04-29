@@ -1,3 +1,6 @@
+use crate::display::{GpuDevice, PciDevice};
+use std::collections::BTreeMap;
+
 use zbus::{Proxy, connection::Connection};
 pub struct DaemonClient<'a> {
     proxy: Proxy<'a>,
@@ -24,12 +27,11 @@ impl<'a> DaemonClient<'a> {
         self.proxy.call("GetMode", &()).await
     }
 
-    pub async fn list_devices(&self, full: bool) -> zbus::Result<String> {
-        if full {
-            self.proxy.call("ListDevicesPci", &()).await
-        } else {
-            self.proxy.call("ListDevices", &()).await
-        }
+    pub async fn list_devices(&self) -> zbus::Result<BTreeMap<usize, GpuDevice>> {
+        self.proxy.call("ListDevices", &()).await
+    }
+    pub async fn list_devices_pci(&self) -> zbus::Result<BTreeMap<String, PciDevice>> {
+        self.proxy.call("ListDevicesPci", &()).await
     }
 
     pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::Result<()> {
