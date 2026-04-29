@@ -50,7 +50,6 @@ fn build_gpu(device: &PciDevice) -> io::Result<Gpu> {
         render: drm_node_path(&device.pci_address, "render")?,
         card: drm_node_path(&device.pci_address, "card")?,
         default: None,
-        blocked: None,
         nvidia,
         nvidia_minor,
     })

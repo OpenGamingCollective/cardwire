@@ -6,10 +6,6 @@ pub struct Gpu {
     pub render: u32,
     pub card: u32,
     pub default: Option<bool>,
-    // blocked is purely for display
-    // the daemon not check itself for this, it will ask the
-    // ebpf_blocker
-    pub blocked: Option<bool>,
     pub nvidia: bool,
     pub nvidia_minor: Option<u32>,
 }
@@ -37,13 +33,23 @@ impl Gpu {
     pub fn card_node(&self) -> &u32 {
         &self.card
     }
-    pub fn is_nvidia(&self) -> &bool {
-        &self.nvidia
+    pub fn is_nvidia(&self) -> bool {
+        self.nvidia
     }
     pub fn nvidia_minor(&self) -> &Option<u32> {
         &self.nvidia_minor
     }
 }
 
-// GpuRow for display
-pub type GpuRow = (u32, String, String, String, bool, bool);
+#[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type)]
+pub struct DbusGpuDevice {
+    pub id: u32,
+    pub name: String,
+    pub pci: String,
+    pub render: u32,
+    pub card: u32,
+    pub default: bool,
+    pub blocked: bool,
+    pub nvidia: bool,
+    pub nvidia_minor: String,
+}

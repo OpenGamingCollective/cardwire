@@ -8,28 +8,28 @@ use anyhow::{Ok, Result};
 // I want cardwire-cli to be independent of the rest of cardwire
 // This allow other dev to make their own client for cardwire
 // Here the struct are used to parse the json
-#[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type)]
+#[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug)]
 pub struct GpuDevice {
     id: u32,
     name: String,
     pci: String,
     render: u32,
     card: u32,
-    default: Option<bool>,
-    blocked: Option<bool>,
+    default: bool,
+    blocked: bool,
     nvidia: bool,
-    nvidia_minor: Option<u32>,
+    nvidia_minor: String,
 }
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type)]
 pub struct PciDevice {
     pci_address: String,
-    iommu_group: Option<usize>,
-    vendor_id: Option<String>,
-    device_id: Option<String>,
-    vendor_name: Option<String>,
-    device_name: Option<String>,
-    driver: Option<String>,
-    class: Option<String>,
+    iommu_group: String,
+    vendor_id: String,
+    device_id: String,
+    vendor_name: String,
+    device_name: String,
+    driver: String,
+    class: String,
 }
 
 /// Take a Map and print it  
@@ -107,8 +107,8 @@ fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
             gpu.pci,
             render_full,
             card_full,
-            gpu.default.unwrap(),
-            if gpu.blocked.unwrap() { "on" } else { "off" },
+            gpu.default,
+            gpu.blocked,
             id_w = id_w,
             name_w = name_w,
             pci_w = pci_w,

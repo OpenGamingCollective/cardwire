@@ -52,6 +52,7 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 match client.list_devices().await {
                     Ok(response) => {
+                        println!("{:?}", response);
                         print_devices(response, json)?;
                     }
                     Err(e) => handle_error(e),

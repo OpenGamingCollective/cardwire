@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::models::{Daemon, Modes};
 use cardwire_core::{
-    gpu::{Gpu, block_gpu, is_gpu_blocked}, pci::PciDevice
+    gpu::{DbusGpuDevice, block_gpu, is_gpu_blocked}, pci::DbusPciDevice
 };
 use log::{error, info, warn};
 use zbus::{fdo, interface};
@@ -115,16 +115,52 @@ impl Daemon {
         Ok(())
     }
 
-    pub(crate) async fn list_devices(&self) -> fdo::Result<BTreeMap<usize, Gpu>> {
+    pub(crate) async fn list_devices(&self) -> fdo::Result<BTreeMap<usize, DbusGpuDevice>> {
         let blocker = self.state.ebpf_blocker.read().await;
-        let mut list = self.state.gpu_list.clone();
-        for gpu in list.values_mut() {
-            gpu.blocked = Some(is_gpu_blocked(&blocker, gpu).unwrap_or(false))
+        let list = self.state.gpu_list.clone();
+        let mut dbus_list: BTreeMap<usize, DbusGpuDevice> = BTreeMap::new();
+        for (id, gpu) in list {
+            let temp_gpu = DbusGpuDevice {
+                id: gpu.id,
+                pci: gpu.pci.clone(),
+                render: gpu.render,
+                name: gpu.name.clone(),
+                card: gpu.card,
+                default: gpu.default.unwrap_or(false),
+                blocked: is_gpu_blocked(&blocker, &gpu).unwrap_or(false),
+                nvidia: gpu.is_nvidia(),
+                nvidia_minor: if gpu.nvidia_minor().is_some() {
+                    gpu.nvidia_minor().unwrap().to_string()
+                } else {
+                    "Null".to_string()
+                },
+            };
+            dbus_list.insert(id, temp_gpu);
         }
-        Ok(list.clone())
+        Ok(dbus_list)
     }
 
-    pub(crate) async fn list_devices_pci(&self) -> fdo::Result<BTreeMap<String, PciDevice>> {
-        Ok(self.state.pci_devices.clone())
+    pub(crate) async fn list_devices_pci(&self) -> fdo::Result<BTreeMap<String, DbusPciDevice>> {
+        let pci_list = &self.state.pci_devices;
+        let mut dbus_list: BTreeMap<String, DbusPciDevice> = BTreeMap::new();
+        for (id, pci) in pci_list {
+            let temp_pci = DbusPciDevice {
+                pci_address: pci.pci_address.clone(),
+                iommu_group: if let Some(iommu) = pci.iommu_group {
+                    iommu.to_string()
+                } else {
+                    "Null".to_string()
+                },
+                vendor_id: pci.vendor_id.clone().unwrap_or("Null".to_string()),
+                device_id: pci.device_id.clone().unwrap_or("Null".to_string()),
+                vendor_name: pci.vendor_name.clone().unwrap_or("Null".to_string()),
+                device_name: pci.device_name.clone().unwrap_or("Null".to_string()),
+                driver: pci.driver.clone().unwrap_or("Null".to_string()),
+                class: pci.class.clone().unwrap_or("Null".to_string()),
+            };
+            dbus_list.insert(id.clone(), temp_pci);
+        }
+
+        Ok(dbus_list)
     }
 }
