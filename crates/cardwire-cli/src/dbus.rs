@@ -19,11 +19,11 @@ impl<'a> DaemonClient<'a> {
         Ok(Self { proxy })
     }
 
-    pub async fn set_mode(&self, mode: &String) -> zbus::fdo::Result<()> {
+    pub async fn set_mode(&self, mode: &u32) -> zbus::fdo::Result<()> {
         self.proxy.set_property("Mode", mode).await
     }
 
-    pub async fn get_mode(&self) -> zbus::Result<String> {
+    pub async fn get_mode(&self) -> zbus::Result<u32> {
         self.proxy.get_property("Mode").await
     }
 

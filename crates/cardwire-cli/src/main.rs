@@ -24,20 +24,29 @@ async fn main() -> anyhow::Result<()> {
 
     match args.command {
         Commands::Set { mode } => {
-            let mode_string = match mode {
-                CliMode::Integrated => "integrated".to_string(),
-                CliMode::Hybrid => "hybrid".to_string(),
-                CliMode::Manual => "manual".to_string(),
+            let mode_u32 = match mode {
+                CliMode::Integrated => 0,
+                CliMode::Hybrid => 1,
+                CliMode::Manual => 2,
             };
 
-            match client.set_mode(&mode_string).await {
-                Ok(_) => println!("Mode has been set to {}", mode_string),
+            match client.set_mode(&mode_u32).await {
+                Ok(_) => println!("Mode has been set to {}", mode),
                 Err(e) => handle_error(e.into()),
             };
         }
         Commands::Get => {
             match client.get_mode().await {
-                Ok(response) => println!("Current Mode: {}", response),
+                Ok(response) => {
+                    let response: CliMode = match response {
+                        0 => CliMode::Integrated,
+                        1 => CliMode::Hybrid,
+                        2 => CliMode::Manual,
+                        // shouldn't happen
+                        _ => CliMode::Manual,
+                    };
+                    println!("Current Mode: {}", response)
+                }
                 Err(e) => handle_error(e),
             };
         }
