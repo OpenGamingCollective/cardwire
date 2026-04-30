@@ -70,7 +70,7 @@
       t.assertIn("2", machine.succeed("cat /var/lib/cardwire/gpu_state.json|grep true|wc -l"), "Only one or less GPU got blocked")
 
     with subtest("Check cardwire to see if two gpus got blocked"):
-      t.assertIn("2", machine.succeed("cardwire list|grep 'on'|wc -l"), "Only one or less GPU got blocked")
+      t.assertIn("2", machine.succeed("cardwire list|grep 'true'|wc -l"), "Only one or less GPU got blocked")
       machine.fail(": < /dev/dri/renderD129")
       machine.fail(": < /dev/dri/renderD130")
       machine.fail(": < /dev/dri/card1")
@@ -86,7 +86,7 @@
 
       machine.wait_until_succeeds("systemctl start cardwired.service")
 
-      t.assertIn("2", machine.succeed("cardwire list|grep 'on'|wc -l"), "Only one or less GPU got blocked")
+      t.assertIn("2", machine.succeed("cardwire list|grep 'true'|wc -l"), "Only one or less GPU got blocked")
       
       machine.fail(": < /dev/dri/renderD129")
       machine.fail(": < /dev/dri/renderD130")

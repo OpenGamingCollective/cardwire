@@ -82,7 +82,7 @@
         machine.succeed(f'cardwire gpu {x} --block')
 
     with subtest("Check cardwire to see if 14 gpus got blocked"):
-      t.assertIn("14", machine.succeed("cardwire list|grep 'on'|wc -l"), "Only 13 or less got blocked")
+      t.assertIn("14", machine.succeed("cardwire list|grep 'true'|wc -l"), "Only 13 or less got blocked")
 
       for x in range(1, 15):
         cardid = 0 + x
@@ -108,7 +108,7 @@
 
       machine.wait_until_succeeds("systemctl start cardwired.service")
       
-      t.assertIn("14", machine.succeed("cardwire list|grep 'on'|wc -l"), "Only 13 or less got blocked")
+      t.assertIn("14", machine.succeed("cardwire list|grep 'true'|wc -l"), "Only 13 or less got blocked")
 
       for x in range(1, 15):
         cardid = 0 + x
