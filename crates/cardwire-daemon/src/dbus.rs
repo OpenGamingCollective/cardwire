@@ -13,7 +13,7 @@ impl Daemon {
         Set the mode
     */
     #[zbus(property)]
-    pub(crate) async fn set_mode(&self, mode: String) -> fdo::Result<()> {
+    pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
         // Valide inputs and turn into a Modes
         let mode = Modes::parse(&mode)?;
         // Get current_config lock
@@ -76,9 +76,13 @@ impl Daemon {
         Ok(())
     }
     #[zbus(property)]
-    pub(crate) async fn mode(&self) -> fdo::Result<String> {
+    pub(crate) async fn mode(&self) -> fdo::Result<u32> {
         let current_mode = self.state.mode_state.read().await;
-        Ok(current_mode.mode().to_string())
+        match current_mode.mode() {
+            Modes::Integrated => Ok(0),
+            Modes::Hybrid => Ok(1),
+            Modes::Manual => Ok(2),
+        }
     }
 
     pub(crate) async fn set_gpu_block(&self, gpu_id: u32, block: bool) -> fdo::Result<()> {

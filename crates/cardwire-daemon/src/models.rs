@@ -28,11 +28,11 @@ impl fmt::Display for Modes {
 }
 
 impl Modes {
-    pub fn parse(input: &str) -> zbus::fdo::Result<Modes> {
-        match input.to_ascii_lowercase().as_str() {
-            "integrated" => Ok(Self::Integrated),
-            "hybrid" => Ok(Self::Hybrid),
-            "manual" => Ok(Self::Manual),
+    pub fn parse(input: &u32) -> zbus::fdo::Result<Modes> {
+        match input {
+            0 => Ok(Self::Integrated),
+            1 => Ok(Self::Hybrid),
+            2 => Ok(Self::Manual),
             unknown => Err(Error::InvalidArgs(format!(
                 "unknown mode: {unknown} \n expected integrated|hybrid|manual"
             ))),
@@ -109,9 +109,15 @@ impl Daemon {
         drop(blocker);
         drop(config);
         // Apply mode
-        let mode_to_apply = mode.mode().to_string();
+        let mode_to_apply = mode.mode();
         drop(mode);
-        self.set_mode(mode_to_apply).await?;
+        let mode_to_apply: usize = match mode_to_apply {
+            Modes::Integrated => 0,
+            Modes::Hybrid => 1,
+            Modes::Manual => 2,
+        };
+
+        self.set_mode(mode_to_apply as u32).await?;
 
         Ok(())
     }
