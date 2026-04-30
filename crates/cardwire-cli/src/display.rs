@@ -107,7 +107,7 @@ fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
             gpu.pci,
             render_full,
             card_full,
-            gpu.default,
+            if gpu.default { "(*)" } else { "( )" },
             gpu.blocked,
             id_w = id_w,
             name_w = name_w,
