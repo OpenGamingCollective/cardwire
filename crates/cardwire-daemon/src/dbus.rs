@@ -12,6 +12,7 @@ impl Daemon {
     /*
         Set the mode
     */
+    #[zbus(property)]
     pub(crate) async fn set_mode(&self, mode: String) -> fdo::Result<()> {
         // Valide inputs and turn into a Modes
         let mode = Modes::parse(&mode)?;
@@ -74,8 +75,8 @@ impl Daemon {
         info!("Switched to {}", mode);
         Ok(())
     }
-
-    pub(crate) async fn get_mode(&self) -> fdo::Result<String> {
+    #[zbus(property)]
+    pub(crate) async fn mode(&self) -> fdo::Result<String> {
         let current_mode = self.state.mode_state.read().await;
         Ok(current_mode.mode().to_string())
     }
