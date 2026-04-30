@@ -1,5 +1,9 @@
+use std::collections::BTreeMap;
+
 use crate::models::{Daemon, Modes};
-use cardwire_core::gpu::{GpuRow, block_gpu, is_gpu_blocked};
+use cardwire_core::{
+    gpu::{DbusGpuDevice, block_gpu, is_gpu_blocked}, pci::DbusPciDevice
+};
 use log::{error, info, warn};
 use zbus::{fdo, interface};
 
@@ -8,7 +12,8 @@ impl Daemon {
     /*
         Set the mode
     */
-    pub(crate) async fn set_mode(&self, mode: String) -> fdo::Result<()> {
+    #[zbus(property)]
+    pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
         // Valide inputs and turn into a Modes
         let mode = Modes::parse(&mode)?;
         // Get current_config lock
@@ -70,10 +75,14 @@ impl Daemon {
         info!("Switched to {}", mode);
         Ok(())
     }
-
-    pub(crate) async fn get_mode(&self) -> String {
+    #[zbus(property)]
+    pub(crate) async fn mode(&self) -> fdo::Result<u32> {
         let current_mode = self.state.mode_state.read().await;
-        format!("Current Mode: {}", current_mode.mode())
+        match current_mode.mode() {
+            Modes::Integrated => Ok(0),
+            Modes::Hybrid => Ok(1),
+            Modes::Manual => Ok(2),
+        }
     }
 
     pub(crate) async fn set_gpu_block(&self, gpu_id: u32, block: bool) -> fdo::Result<()> {
@@ -111,32 +120,52 @@ impl Daemon {
         Ok(())
     }
 
-    pub(crate) async fn list_gpus(&self) -> Vec<GpuRow> {
-        //self.list_gpu_rows().await
-        let mut rows = Vec::with_capacity(self.state.gpu_list.len());
+    pub(crate) async fn list_devices(&self) -> fdo::Result<BTreeMap<usize, DbusGpuDevice>> {
         let blocker = self.state.ebpf_blocker.read().await;
-        for gpu in self.state.gpu_list.values() {
-            let blocked: bool = match is_gpu_blocked(&blocker, gpu) {
-                Ok(b) => b,
-                Err(e) => {
-                    error!(
-                        "Couldn't check gpu's lock state for {}: {}",
-                        gpu.pci_address(),
-                        e
-                    );
-                    false
-                }
+        let list = self.state.gpu_list.clone();
+        let mut dbus_list: BTreeMap<usize, DbusGpuDevice> = BTreeMap::new();
+        for (id, gpu) in list {
+            let temp_gpu = DbusGpuDevice {
+                id: gpu.id,
+                pci: gpu.pci.clone(),
+                render: gpu.render,
+                name: gpu.name.clone(),
+                card: gpu.card,
+                default: gpu.default.unwrap_or(false),
+                blocked: is_gpu_blocked(&blocker, &gpu).unwrap_or(false),
+                nvidia: gpu.is_nvidia(),
+                nvidia_minor: if gpu.nvidia_minor().is_some() {
+                    gpu.nvidia_minor().unwrap().to_string()
+                } else {
+                    "".to_string()
+                },
             };
-            rows.push((
-                gpu.id(),
-                gpu.name().to_string(),
-                gpu.pci_address().to_string(),
-                gpu.render_node().to_string(),
-                gpu.is_default(),
-                blocked,
-            ));
+            dbus_list.insert(id, temp_gpu);
         }
-        rows.sort_by_key(|row| row.0);
-        rows
+        Ok(dbus_list)
+    }
+
+    pub(crate) async fn list_devices_pci(&self) -> fdo::Result<BTreeMap<String, DbusPciDevice>> {
+        let pci_list = &self.state.pci_devices;
+        let mut dbus_list: BTreeMap<String, DbusPciDevice> = BTreeMap::new();
+        for (id, pci) in pci_list {
+            let temp_pci = DbusPciDevice {
+                pci_address: pci.pci_address.clone(),
+                iommu_group: if let Some(iommu) = pci.iommu_group {
+                    iommu.to_string()
+                } else {
+                    "".to_string()
+                },
+                vendor_id: pci.vendor_id.clone().unwrap_or("".to_string()),
+                device_id: pci.device_id.clone().unwrap_or("".to_string()),
+                vendor_name: pci.vendor_name.clone().unwrap_or("".to_string()),
+                device_name: pci.device_name.clone().unwrap_or("".to_string()),
+                driver: pci.driver.clone().unwrap_or("".to_string()),
+                class: pci.class.clone().unwrap_or("".to_string()),
+            };
+            dbus_list.insert(id.clone(), temp_pci);
+        }
+
+        Ok(dbus_list)
     }
 }

@@ -33,9 +33,11 @@ pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &Gpu) -> GpuResult<bool> {
             .is_render_blocked(render_id)
             .map_err(map_gpu_error)?
         && if gpu.nvidia {
+            // unwrap because it should be Some if it's an nvidia gpu, if not it's a bug and should
+            // be reported
             blocker
                 .inner
-                .is_nvidia_blocked(*gpu.nvidia_minor())
+                .is_nvidia_blocked(gpu.nvidia_minor().unwrap())
                 .map_err(map_gpu_error)?
         } else {
             true
@@ -50,7 +52,7 @@ pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &Gpu, block: bool) -> GpuResult<
         blocker.inner.block_render(render_id)?;
         blocker.inner.block_pci(gpu.pci_address())?;
         if gpu.nvidia {
-            blocker.inner.block_nvidia(*gpu.nvidia_minor())?
+            blocker.inner.block_nvidia(gpu.nvidia_minor().unwrap())?
         }
         Ok(())
     } else {
@@ -58,7 +60,7 @@ pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &Gpu, block: bool) -> GpuResult<
         blocker.inner.unblock_render(render_id)?;
         blocker.inner.unblock_pci(gpu.pci_address())?;
         if gpu.nvidia {
-            blocker.inner.unblock_nvidia(*gpu.nvidia_minor())?
+            blocker.inner.unblock_nvidia(gpu.nvidia_minor().unwrap())?
         }
         Ok(())
     }

@@ -9,12 +9,14 @@ license.workspace = true
 description = "CLI for cardwire GPU management"
 
 [dependencies]
-cardwire-core = { path = "../cardwire-core" }
 tokio.workspace = true
 zbus.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
 anyhow.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+
 [[bin]]
 name = "cardwire"
 path = "src/main.rs"

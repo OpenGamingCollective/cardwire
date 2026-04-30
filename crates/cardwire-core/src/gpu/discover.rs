@@ -1,8 +1,10 @@
 use crate::{gpu::models::Gpu, pci::PciDevice};
 use log::{info, warn};
-use std::{collections::HashMap, fs, io, path::Path};
+use std::{
+    collections::{BTreeMap, HashMap}, fs, io, path::Path
+};
 
-pub fn read_gpu(pci_devices: &HashMap<String, PciDevice>) -> io::Result<HashMap<usize, Gpu>> {
+pub fn read_gpu(pci_devices: &BTreeMap<String, PciDevice>) -> io::Result<BTreeMap<usize, Gpu>> {
     let gpus: Vec<Gpu> = pci_devices
         .values()
         .filter(|device| {
@@ -32,10 +34,10 @@ pub fn read_gpu(pci_devices: &HashMap<String, PciDevice>) -> io::Result<HashMap<
 
 fn build_gpu(device: &PciDevice) -> io::Result<Gpu> {
     let nvidia: bool = device.vendor_id.as_deref() == Some("0x10de");
-    let nvidia_minor: u32 = if nvidia {
-        nvidia_get_minor(&device.pci_address).unwrap_or(99)
+    let nvidia_minor: Option<u32> = if nvidia {
+        nvidia_get_minor(&device.pci_address)
     } else {
-        99
+        None
     };
 
     Ok(Gpu {
@@ -146,7 +148,7 @@ fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
         .ok()
 }
 /// Method from kwin
-pub fn check_default_drm_class(gpu_list: &mut HashMap<usize, Gpu>) -> io::Result<()> {
+pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, Gpu>) -> io::Result<()> {
     let class_path = Path::new("/sys/class/drm");
     let mut drm_entries = Vec::new();
     if class_path.exists() {
@@ -238,11 +240,13 @@ pub fn check_default_drm_class(gpu_list: &mut HashMap<usize, Gpu>) -> io::Result
     for gpu in gpu_list.values_mut() {
         if gpu.id == *default.0.unwrap() as u32 {
             gpu.default = Some(true);
+        } else {
+            gpu.default = Some(false);
         }
     }
 
     // Default GPU gets ID 0, rest ordered by PCI address
-    let mut gpus: Vec<Gpu> = gpu_list.drain().map(|(_, gpu)| gpu).collect();
+    let mut gpus: Vec<Gpu> = std::mem::take(gpu_list).into_values().collect();
     gpus.sort_by(|a, b| b.default.cmp(&a.default).then(a.pci.cmp(&b.pci)));
     *gpu_list = gpus
         .into_iter()

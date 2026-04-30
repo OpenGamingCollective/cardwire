@@ -12,3 +12,5 @@ description = "Core library for cardwire GPU management"
 cardwire-ebpf = { path = "../cardwire-ebpf" }
 thiserror.workspace= true
 log.workspace = true
+serde.workspace = true
+zbus.workspace = true

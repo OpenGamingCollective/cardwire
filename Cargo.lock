@@ -307,9 +307,10 @@ name = "cardwire-cli"
 version = "0.5.0"
 dependencies = [
  "anyhow",
- "cardwire-core",
  "clap",
  "clap_complete",
+ "serde",
+ "serde_json",
  "tokio",
  "zbus",
 ]
@@ -320,7 +321,9 @@ version = "0.5.0"
 dependencies = [
  "cardwire-ebpf",
  "log",
+ "serde",
  "thiserror 2.0.18",
+ "zbus",
 ]
 
 [[package]]
