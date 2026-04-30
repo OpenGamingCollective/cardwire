@@ -19,12 +19,12 @@ impl<'a> DaemonClient<'a> {
         Ok(Self { proxy })
     }
 
-    pub async fn set_mode(&self, mode: &String) -> zbus::Result<()> {
-        self.proxy.call("SetMode", &(mode,)).await
+    pub async fn set_mode(&self, mode: &String) -> zbus::fdo::Result<()> {
+        self.proxy.set_property("Mode", mode).await
     }
 
     pub async fn get_mode(&self) -> zbus::Result<String> {
-        self.proxy.call("GetMode", &()).await
+        self.proxy.get_property("Mode").await
     }
 
     pub async fn list_devices(&self) -> zbus::Result<BTreeMap<usize, GpuDevice>> {

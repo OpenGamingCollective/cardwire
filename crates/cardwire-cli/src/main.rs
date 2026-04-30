@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
 
             match client.set_mode(&mode_string).await {
                 Ok(_) => println!("Mode has been set to {}", mode_string),
-                Err(e) => handle_error(e),
+                Err(e) => handle_error(e.into()),
             };
         }
         Commands::Get => {
