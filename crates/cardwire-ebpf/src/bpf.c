@@ -84,10 +84,24 @@ struct {
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 1024);
+	__type(key, char[30]);
+	__type(value, __u8);
+} BLOCKED_PCI_FILES SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 64);
 	__type(key, __u32);
 	__type(value, __u8);
 } SETTINGS SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 1024);
+	__type(key, char[30]);
+	__type(value, __u8);
+} BLOCKED_NVIDIA_FILES SEC(".maps");
 
 /* Safely read and compare kernel qstr */
 static __always_inline int qstr_eq(struct qstr q, const char *name, __u32 len)
@@ -188,8 +202,16 @@ static __always_inline int is_blocked_device(struct dentry *d)
 			}
 		}
 	}
-
-	if (qstr_eq(q, "config", 6)) {
+	// PCI Part
+	// ignore long files
+	if (!q.name || q.len > 30) {
+		return 0;
+	}
+	char buf[32] = {};
+	if (bpf_core_read_str(buf, sizeof(buf), q.name) < 0) {
+		return 0;
+	}
+	if (bpf_map_lookup_elem(&BLOCKED_PCI_FILES, buf)) {
 		char pci_addr[16] = {};
 		if (get_pci_addr(d, pci_addr, sizeof(pci_addr)) != 0) {
 			return 0;
