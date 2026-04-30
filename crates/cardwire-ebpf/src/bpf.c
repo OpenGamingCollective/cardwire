@@ -190,19 +190,6 @@ static __always_inline int is_blocked_device(struct dentry *d)
 		}
 	}
 	struct qstr q = BPF_CORE_READ(d, d_name);
-	// Blocks vulkan nvidia_icd, it's dangerous and will only work if one nvidia gpu is blocked
-	__u32 block_vulkan_key = 0;
-	if (bpf_map_lookup_elem(&SETTINGS, &block_vulkan_key)) {
-		if (qstr_eq(q, "nvidia_icd.json", 15) ||
-		    qstr_eq(q, "nvidia_icd.x86_64.json", 22)) {
-			__u32 id0 = 0, id1 = 1;
-			if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id0) &&
-			    !bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id1)) {
-				return -ENOENT;
-			}
-		}
-	}
-	// PCI Part
 	// ignore long files
 	if (!q.name || q.len > 30) {
 		return 0;
@@ -211,6 +198,18 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	if (bpf_core_read_str(buf, sizeof(buf), q.name) < 0) {
 		return 0;
 	}
+	// Blocks vulkan nvidia_icd, it's dangerous and will only work if one nvidia gpu is blocked
+	__u32 block_vulkan_key = 0;
+	if (bpf_map_lookup_elem(&SETTINGS, &block_vulkan_key)) {
+		if (bpf_map_lookup_elem(&BLOCKED_PCI_FILES, buf)) {
+			__u32 id0 = 0, id1 = 1;
+			if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id0) &&
+			    !bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id1)) {
+				return -ENOENT;
+			}
+		}
+	}
+	// PCI Part
 	if (bpf_map_lookup_elem(&BLOCKED_PCI_FILES, buf)) {
 		char pci_addr[16] = {};
 		if (get_pci_addr(d, pci_addr, sizeof(pci_addr)) != 0) {

@@ -9,8 +9,19 @@ use std::{collections::BTreeMap, fmt};
 use tokio::sync::RwLock;
 use zbus::fdo::Error;
 
-const BLOCKED_PCI_FILES: &[&str] = &["config"];
-const BLOCKED_NVIDIA_FILES: &[&str] = &["libGLX_nvidia.so.0"];
+const BLOCKED_PCI_FILES: &[&str] = &[
+    "config",
+    "current_link_speed",
+    "max_link_speed",
+    "max_link_width",
+    "current_link_width",
+];
+// Files that get blocked when the vulkan block is on
+const BLOCKED_NVIDIA_FILES: &[&str] = &[
+    "libGLX_nvidia.so.0",
+    "nvidia_icd.json",
+    "nvidia_icd.x86_64.json",
+];
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default)]
 pub enum Modes {
