@@ -133,7 +133,7 @@ impl Daemon {
                 nvidia_minor: if gpu.nvidia_minor().is_some() {
                     gpu.nvidia_minor().unwrap().to_string()
                 } else {
-                    "Null".to_string()
+                    "".to_string()
                 },
             };
             dbus_list.insert(id, temp_gpu);
@@ -150,14 +150,14 @@ impl Daemon {
                 iommu_group: if let Some(iommu) = pci.iommu_group {
                     iommu.to_string()
                 } else {
-                    "Null".to_string()
+                    "".to_string()
                 },
-                vendor_id: pci.vendor_id.clone().unwrap_or("Null".to_string()),
-                device_id: pci.device_id.clone().unwrap_or("Null".to_string()),
-                vendor_name: pci.vendor_name.clone().unwrap_or("Null".to_string()),
-                device_name: pci.device_name.clone().unwrap_or("Null".to_string()),
-                driver: pci.driver.clone().unwrap_or("Null".to_string()),
-                class: pci.class.clone().unwrap_or("Null".to_string()),
+                vendor_id: pci.vendor_id.clone().unwrap_or("".to_string()),
+                device_id: pci.device_id.clone().unwrap_or("".to_string()),
+                vendor_name: pci.vendor_name.clone().unwrap_or("".to_string()),
+                device_name: pci.device_name.clone().unwrap_or("".to_string()),
+                driver: pci.driver.clone().unwrap_or("".to_string()),
+                class: pci.class.clone().unwrap_or("".to_string()),
             };
             dbus_list.insert(id.clone(), temp_pci);
         }
