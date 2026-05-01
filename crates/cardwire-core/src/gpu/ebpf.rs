@@ -16,6 +16,16 @@ impl GpuBlocker {
         self.inner.set_vulkan_block(block).map_err(map_gpu_error)?;
         Ok(())
     }
+    pub fn set_file_block(&mut self, file: &str) -> GpuResult<()> {
+        self.inner.set_file_block(file).map_err(map_gpu_error)?;
+        Ok(())
+    }
+    pub fn set_nvidia_file_block(&mut self, file: &str) -> GpuResult<()> {
+        self.inner
+            .set_nvidia_file_block(file)
+            .map_err(map_gpu_error)?;
+        Ok(())
+    }
 }
 
 pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &Gpu) -> GpuResult<bool> {
