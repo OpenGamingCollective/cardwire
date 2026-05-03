@@ -55,6 +55,7 @@ The daemon reads its configuration from `/etc/cardwire/cardwire.toml`.
 # /etc/cardwire/cardwire.toml
 auto_apply_gpu_state = true
 block_nvidia_vulkan = false
+battery_auto_switch = false
 ```
 
 `block_nvidia_vulkan` is an experimental feature that blocks the nvidia's vulkan icd, must be used with caution
