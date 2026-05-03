@@ -11,7 +11,7 @@ use zbus::{Connection, Result, proxy};
 )]
 trait UPower {
     #[zbus(property)]
-    fn on_battery(&self) -> Result<String>;
+    fn on_battery(&self) -> Result<bool>;
 }
 #[proxy(
     interface = "com.github.opengamingcollective.cardwire",
