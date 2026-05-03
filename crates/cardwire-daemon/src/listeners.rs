@@ -30,7 +30,7 @@ pub async fn watch_battery_status() -> zbus::Result<()> {
     let mut on_battery_stream = upower_proxy.receive_on_battery().await?;
 
     while let Some(msg) = on_battery_stream.next().await {
-        println!("{:?}", msg);
+        info!("battery event: {:?}", msg)
     }
 
     Ok(())
