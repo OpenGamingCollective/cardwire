@@ -28,7 +28,6 @@ async fn main() -> Result<()> {
         .serve_at("/com/github/opengamingcollective/cardwire", daemon)?
         .build()
         .await?;
-    tokio::task::spawn(listeners::watch_battery_status());
     info!("Daemon started");
     pending::<()>().await;
     Ok(())

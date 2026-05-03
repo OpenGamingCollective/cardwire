@@ -146,7 +146,7 @@ impl Daemon {
         };
 
         self.set_mode(mode_to_apply as u32).await?;
-
+        tokio::task::spawn(crate::listeners::watch_battery_status());
         Ok(())
     }
 }
