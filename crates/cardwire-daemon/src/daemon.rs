@@ -1,6 +1,7 @@
 //! entry point of cardwired
 mod config;
 mod dbus;
+mod listeners;
 mod models;
 
 use crate::models::Daemon;

@@ -13,6 +13,9 @@ BuildRequires:  libbpf-devel
 BuildRequires:  make
 BuildRequires:  systemd-rpm-macros
 
+Requires: hwdata
+Requires: upower
+
 %description
 Cardwire is a GPU manager for Linux that uses eBPF LSM hooks to block or
 unblock access to GPU device nodes.

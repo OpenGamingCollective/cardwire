@@ -27,6 +27,7 @@ in
     ];
     runtimeDeps = [
       pkgs.hwdata
+      pkgs.upower
     ];
     doCheck = false;
     doInstallCheck = true;

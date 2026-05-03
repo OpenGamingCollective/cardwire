@@ -144,9 +144,12 @@ impl Daemon {
             Modes::Hybrid => 1,
             Modes::Manual => 2,
         };
-
         self.set_mode(mode_to_apply as u32).await?;
-
+        // get config lock again
+        let config = self.state.config.read().await;
+        if config.battery_auto_switch() {
+            tokio::task::spawn(crate::listeners::watch_battery_status());
+        }
         Ok(())
     }
 }
