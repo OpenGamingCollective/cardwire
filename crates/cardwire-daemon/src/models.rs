@@ -1,3 +1,4 @@
+//! where the struct and impl are declared
 use crate::config::{CardwireConfig, CardwireGpuState, CardwireModeState};
 use anyhow::{Context, Result};
 use cardwire_core::{

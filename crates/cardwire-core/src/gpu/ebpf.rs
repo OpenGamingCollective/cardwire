@@ -1,3 +1,4 @@
+//! this is a middleman between the daemon and the ebpf library
 use crate::gpu::{GpuResult, errors::GpuError, models::Gpu};
 use cardwire_ebpf::EbpfBlocker;
 

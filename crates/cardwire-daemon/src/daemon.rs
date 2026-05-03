@@ -1,3 +1,4 @@
+//! entry point of cardwired
 mod config;
 mod dbus;
 mod models;

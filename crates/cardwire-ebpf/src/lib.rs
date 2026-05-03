@@ -1,3 +1,4 @@
+//! main lib code of cardwire-ebpf
 mod errors;
 
 pub use crate::errors::{CardwireEbpfError, CardwireEbpfResult};

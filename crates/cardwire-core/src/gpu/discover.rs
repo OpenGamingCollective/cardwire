@@ -1,3 +1,4 @@
+//! Read a pci list and return a list of gpu
 use crate::{gpu::models::Gpu, pci::PciDevice};
 use log::{info, warn};
 use std::{

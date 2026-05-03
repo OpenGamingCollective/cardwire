@@ -1,3 +1,4 @@
+//! handle the dbus part of cardwired
 use std::collections::BTreeMap;
 
 use crate::models::{Daemon, Modes};

@@ -1,3 +1,5 @@
+//! helper to manage cardwired configs, include the user config .toml, and the .json states like
+//! gpu, mode or pci
 use crate::models::Modes;
 use anyhow::{Context, Ok};
 use cardwire_core::gpu::{Gpu, GpuBlocker, is_gpu_blocked};
