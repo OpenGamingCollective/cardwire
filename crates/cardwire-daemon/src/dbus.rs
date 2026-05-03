@@ -17,9 +17,10 @@ impl Daemon {
     pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
         // Valide inputs and turn into a Modes
         let mode = Modes::parse(&mode)?;
-        // Get current_config lock
         let mut current_mode = self.state.mode_state.write().await;
-
+        if let Err(e) = current_mode.save_state(mode).await {
+            warn!("mode couldn't be saved to config: {e}");
+        }
         let mut blocker = self.state.ebpf_blocker.write().await;
 
         match mode {
@@ -70,9 +71,6 @@ impl Daemon {
                 }
             }
         }
-        if let Err(e) = current_mode.save_state(mode).await {
-            warn!("mode couldn't be saved to config: {e}");
-        }
         info!("Switched to {}", mode);
         Ok(())
     }
@@ -87,6 +85,12 @@ impl Daemon {
     }
 
     pub(crate) async fn set_gpu_block(&self, gpu_id: u32, block: bool) -> fdo::Result<()> {
+        let mode = self.state.mode_state.read().await;
+        if mode.mode() != Modes::Manual {
+            return Err(fdo::Error::AccessDenied(
+                "Per GPU block is only available on manual mode".to_string(),
+            ));
+        }
         let mut blocker = self.state.ebpf_blocker.write().await;
         let mut gpu_state = self.state.gpu_state.write().await;
         let gpu = self
