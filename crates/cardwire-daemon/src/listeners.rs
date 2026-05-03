@@ -19,6 +19,7 @@ trait UPower {
     default_path = "/com/github/opengamingcollective/cardwire"
 )]
 trait Cardwire {
+    #[zbus(property)]
     fn set_mode(&self, mode: u32) -> Result<()>;
 }
 
