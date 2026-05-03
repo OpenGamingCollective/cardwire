@@ -71,6 +71,6 @@
       t.assertIn("Hybrid", machine.succeed("cat /var/lib/cardwire/mode.json"), "mode.json didnt get saved")
 
     with subtest("Try to block default gpu"):
-      t.assertIn("cannot be blocked", machine.succeed("cardwire gpu 0 --block 2>&1"), "Default gpu got blocked")
+      t.assertIn("Per GPU block is only available on manual mode", machine.succeed("cardwire gpu 0 --block 2>&1"), "Default gpu got blocked")
   '';
 }
