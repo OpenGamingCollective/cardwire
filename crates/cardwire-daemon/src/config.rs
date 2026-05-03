@@ -16,13 +16,22 @@ enum FileKind {
     ModeState,
     PciState,
 }
-// TODO: Handle fs error for tomorrow
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(default)]
 pub struct CardwireConfig {
     auto_apply_gpu_state: bool,
     block_nvidia_vulkan: bool,
+    battery_auto_switch: bool,
 }
-
+impl Default for CardwireConfig {
+    fn default() -> Self {
+        CardwireConfig {
+            auto_apply_gpu_state: true,
+            block_nvidia_vulkan: false,
+            battery_auto_switch: false,
+        }
+    }
+}
 impl CardwireConfig {
     /// Read TOML config file and return it's settings as a struct
     // TODO: Error handling on std::fs
@@ -50,6 +59,9 @@ impl CardwireConfig {
     }
     pub fn auto_apply_gpu_state(&self) -> bool {
         self.auto_apply_gpu_state
+    }
+    pub fn battery_auto_switch(&self) -> bool {
+        self.battery_auto_switch
     }
 }
 
@@ -186,10 +198,7 @@ fn create_default_file(kind: FileKind) -> anyhow::Result<()> {
                 .context("could not create default folder for cardwire.toml")?;
             // Default config for cardwire
             // TODO: Move to default trait?
-            let default_config = toml::to_string_pretty(&CardwireConfig {
-                auto_apply_gpu_state: true,
-                block_nvidia_vulkan: false,
-            })?;
+            let default_config = toml::to_string_pretty(&CardwireConfig::default())?;
             // write
             fs::write(format!("{}/cardwire.toml", CONFIG_PATH), default_config)
         }
