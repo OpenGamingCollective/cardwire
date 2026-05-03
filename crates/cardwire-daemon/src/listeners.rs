@@ -2,7 +2,7 @@
 
 use log::info;
 use tokio_stream::StreamExt;
-use zbus::{Connection, proxy};
+use zbus::{Connection, Result, proxy};
 
 #[proxy(
     interface = "org.freedesktop.UPower",
@@ -10,10 +10,9 @@ use zbus::{Connection, proxy};
     default_path = "/org/freedesktop/UPower"
 )]
 trait UPower {
-    #[zbus(signal)]
-    fn on_battery(&self, state: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn on_battery(&self) -> Result<String>;
 }
-
 #[proxy(
     interface = "com.github.opengamingcollective.cardwire",
     default_service = "com.github.opengamingcollective.cardwire",
@@ -26,11 +25,11 @@ pub async fn watch_battery_status() -> zbus::Result<()> {
     let upower_proxy = UPowerProxy::new(&connection).await?;
 
     let cardwire = CardwireProxy::new(&connection).await?;
-    info!("Started listening to on_battery signal");
-    let mut on_battery_stream = upower_proxy.receive_on_battery().await?;
+    info!("Started listening to on_battery property");
+    let mut battery_stream = upower_proxy.receive_on_battery_changed().await;
 
-    while let Some(msg) = on_battery_stream.next().await {
-        info!("battery event: {:?}", msg)
+    while let Some(msg) = battery_stream.next().await {
+        info!("battery event detected: {:?}", msg.get().await)
     }
 
     Ok(())
