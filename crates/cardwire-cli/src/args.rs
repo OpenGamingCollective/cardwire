@@ -1,12 +1,21 @@
 use clap::{ArgAction, Args as ClapArgs, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
+use std::fmt;
 #[derive(Clone, Debug, ValueEnum)]
 pub enum CliMode {
     Integrated,
     Hybrid,
     Manual,
 }
-
+impl fmt::Display for CliMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CliMode::Integrated => write!(f, "Integrated"),
+            CliMode::Hybrid => write!(f, "Hybrid"),
+            CliMode::Manual => write!(f, "Manual"),
+        }
+    }
+}
 #[derive(Parser)]
 #[command(version, about)]
 pub struct Args {

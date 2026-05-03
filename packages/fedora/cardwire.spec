@@ -1,5 +1,5 @@
 Name:           cardwire
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        A GPU manager for Linux using eBPF LSM hooks
 License:        GPL-3.0
@@ -12,6 +12,9 @@ BuildRequires:  clang
 BuildRequires:  libbpf-devel
 BuildRequires:  make
 BuildRequires:  systemd-rpm-macros
+
+Requires: hwdata
+Requires: upower
 
 %description
 Cardwire is a GPU manager for Linux that uses eBPF LSM hooks to block or

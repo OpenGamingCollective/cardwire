@@ -1,0 +1,24 @@
+name: Integration Tests in a Nix VM
+on:
+  pull_request:
+    types: [opened, labeled]
+    branches:
+      - main
+      - dev
+    paths:
+      - 'crates/**'
+      - 'workflows/**'
+      - 'nix/**'
+jobs:
+  run-test:
+    if: ${{ github.event.label.name == 'run-vm-test' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - name: Run Integration Tests with 2 GPUs
+        run: nix build -L .#checks.x86_64-linux.vm-ci-2gpu
+      - name: Run Integration Tests with 3 GPUs
+        run: nix build -L .#checks.x86_64-linux.vm-ci-3gpu
+      - name: Run Integration Tests with 15 GPUs
+        run: nix build -L .#checks.x86_64-linux.vm-ci-15gpu

@@ -1,4 +1,6 @@
-use cardwire_core::gpu::GpuRow;
+use crate::display::{GpuDevice, PciDevice};
+use std::collections::BTreeMap;
+
 use zbus::{Proxy, connection::Connection};
 pub struct DaemonClient<'a> {
     proxy: Proxy<'a>,
@@ -17,16 +19,19 @@ impl<'a> DaemonClient<'a> {
         Ok(Self { proxy })
     }
 
-    pub async fn set_mode(&self, mode: &String) -> zbus::Result<()> {
-        self.proxy.call("SetMode", &(mode,)).await
+    pub async fn set_mode(&self, mode: &u32) -> zbus::fdo::Result<()> {
+        self.proxy.set_property("Mode", mode).await
     }
 
-    pub async fn get_mode(&self) -> zbus::Result<String> {
-        self.proxy.call("GetMode", &()).await
+    pub async fn get_mode(&self) -> zbus::Result<u32> {
+        self.proxy.get_property("Mode").await
     }
 
-    pub async fn list_gpus(&self) -> zbus::Result<Vec<GpuRow>> {
-        self.proxy.call("ListGpus", &()).await
+    pub async fn list_devices(&self) -> zbus::Result<BTreeMap<usize, GpuDevice>> {
+        self.proxy.call("ListDevices", &()).await
+    }
+    pub async fn list_devices_pci(&self) -> zbus::Result<BTreeMap<String, PciDevice>> {
+        self.proxy.call("ListDevicesPci", &()).await
     }
 
     pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::Result<()> {

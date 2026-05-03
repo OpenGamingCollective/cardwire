@@ -304,28 +304,31 @@ checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
 name = "cardwire-cli"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
- "cardwire-core",
  "clap",
  "clap_complete",
+ "serde",
+ "serde_json",
  "tokio",
  "zbus",
 ]
 
 [[package]]
 name = "cardwire-core"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "cardwire-ebpf",
  "log",
+ "serde",
  "thiserror 2.0.18",
+ "zbus",
 ]
 
 [[package]]
 name = "cardwire-daemon"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "cardwire-core",
@@ -336,13 +339,14 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-stream",
  "toml",
  "zbus",
 ]
 
 [[package]]
 name = "cardwire-ebpf"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "aya",
  "thiserror 2.0.18",
@@ -1425,6 +1429,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
 ]
 
 [[package]]

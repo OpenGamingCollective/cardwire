@@ -1,3 +1,4 @@
+//! custom errors for cardwire-ebpf
 use std::{fmt, io};
 use thiserror::Error;
 

@@ -49,17 +49,28 @@
       t.assertIn("renderD129", machine.succeed("ls -a /dev/dri"), "Missing DRM")
       t.assertIn("card1", machine.succeed("ls -a /dev/dri"), "Missing DRM")
 
-    with subtest("Ensure cardwire is started"):
+    with subtest("Ensure cardwire is started and dbus works"):
       machine.wait_until_succeeds("su - john -c 'cardwire help'")
+
+    with subtest("Ensure files are present"):
+      machine.succeed("cat /etc/cardwire/cardwire.toml")
+      machine.succeed("cat /var/lib/cardwire/gpu_state.json")
+      machine.succeed("cat /var/lib/cardwire/mode.json")
 
     with subtest("Switch to Integrated mode"):
       # Check if cardwire detect both video card
-      t.assertIn("renderD128", machine.succeed("su - john -c 'cardwire list'"), "Missing RenderD128 in cardwire")
+      t.assertIn("renderD128", machine.succeed("cardwire list"), "Missing RenderD128 in cardwire")
       machine.succeed("test -e /dev/dri/renderD129")
-      t.assertIn("Mode has been set to integrated", machine.succeed("su - john -c 'cardwire set integrated'"), "Couldn't set to integrated mode")
+      t.assertIn("Mode has been set to Integrated", machine.succeed("cardwire set integrated"), "Couldn't set to integrated mode")
       machine.fail(": < /dev/dri/renderD129")
+      t.assertIn("Integrated", machine.succeed("cat /var/lib/cardwire/mode.json"), "mode.json didnt get saved")
+
     with subtest("Switchback to hybrid mode"):
-      t.assertIn("Mode has been set to hybrid", machine.succeed("su - john -c 'cardwire set hybrid'"), "Couldn't set to hybrid mode")
+      t.assertIn("Mode has been set to Hybrid", machine.succeed("cardwire set hybrid"), "Couldn't set to hybrid mode")
       machine.succeed(": < /dev/dri/renderD129")
+      t.assertIn("Hybrid", machine.succeed("cat /var/lib/cardwire/mode.json"), "mode.json didnt get saved")
+
+    with subtest("Try to block default gpu"):
+      t.assertIn("Per GPU block is only available on manual mode", machine.succeed("cardwire gpu 0 --block 2>&1"), "Default gpu got blocked")
   '';
 }

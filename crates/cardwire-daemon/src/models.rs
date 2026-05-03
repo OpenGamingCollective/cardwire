@@ -1,3 +1,4 @@
+//! where the struct and impl are declared
 use crate::config::{CardwireConfig, CardwireGpuState, CardwireModeState};
 use anyhow::{Context, Result};
 use cardwire_core::{
@@ -5,9 +6,23 @@ use cardwire_core::{
 };
 use log::warn;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt};
+use std::{collections::BTreeMap, fmt};
 use tokio::sync::RwLock;
 use zbus::fdo::Error;
+
+const BLOCKED_PCI_FILES: &[&str] = &[
+    "config",
+    "current_link_speed",
+    "max_link_speed",
+    "max_link_width",
+    "current_link_width",
+];
+// Files that get blocked when the vulkan block is on
+const BLOCKED_NVIDIA_FILES: &[&str] = &[
+    "libGLX_nvidia.so.0",
+    "nvidia_icd.json",
+    "nvidia_icd.x86_64.json",
+];
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default)]
 pub enum Modes {
@@ -28,11 +43,11 @@ impl fmt::Display for Modes {
 }
 
 impl Modes {
-    pub fn parse(input: &str) -> zbus::fdo::Result<Modes> {
-        match input.to_ascii_lowercase().as_str() {
-            "integrated" => Ok(Self::Integrated),
-            "hybrid" => Ok(Self::Hybrid),
-            "manual" => Ok(Self::Manual),
+    pub fn parse(input: &u32) -> zbus::fdo::Result<Modes> {
+        match input {
+            0 => Ok(Self::Integrated),
+            1 => Ok(Self::Hybrid),
+            2 => Ok(Self::Manual),
             unknown => Err(Error::InvalidArgs(format!(
                 "unknown mode: {unknown} \n expected integrated|hybrid|manual"
             ))),
@@ -44,10 +59,10 @@ pub struct DaemonState {
     pub config: RwLock<CardwireConfig>,
     pub gpu_state: RwLock<CardwireGpuState>,
     pub mode_state: RwLock<CardwireModeState>,
-    pub gpu_list: HashMap<usize, gpu::Gpu>,
+    pub gpu_list: BTreeMap<usize, gpu::Gpu>,
     pub ebpf_blocker: RwLock<GpuBlocker>,
     // for future uses, related to vfio
-    pub _pci_devices: HashMap<String, pci::PciDevice>,
+    pub pci_devices: BTreeMap<String, pci::PciDevice>,
     pub _iommu: bool,
 }
 impl DaemonState {
@@ -92,7 +107,7 @@ impl Daemon {
                 config: RwLock::new(config),
                 gpu_state: RwLock::new(gpu_state),
                 mode_state: RwLock::new(mode_state),
-                _pci_devices: pci_devices,
+                pci_devices,
                 _iommu: iommu,
                 gpu_list,
                 ebpf_blocker: RwLock::new(ebpf_blocker),
@@ -105,14 +120,36 @@ impl Daemon {
         let mut blocker = self.state.ebpf_blocker.write().await;
         // Apply vulkan block
         blocker.set_vulkan_block(config.block_nvidia_vulkan())?;
+
+        // Apply file blocks
+        for file in BLOCKED_PCI_FILES {
+            blocker.set_file_block(file)?;
+        }
+        for gpu in self.state.gpu_list.values() {
+            if gpu.is_nvidia() {
+                for file in BLOCKED_NVIDIA_FILES {
+                    blocker.set_nvidia_file_block(file)?;
+                }
+                break;
+            }
+        }
         // Dropping the locks prevent set_mode being stuck
         drop(blocker);
         drop(config);
         // Apply mode
-        let mode_to_apply = mode.mode().to_string();
+        let mode_to_apply = mode.mode();
         drop(mode);
-        self.set_mode(mode_to_apply).await?;
-
+        let mode_to_apply: usize = match mode_to_apply {
+            Modes::Integrated => 0,
+            Modes::Hybrid => 1,
+            Modes::Manual => 2,
+        };
+        self.set_mode(mode_to_apply as u32).await?;
+        // get config lock again
+        let config = self.state.config.read().await;
+        if config.battery_auto_switch() {
+            tokio::task::spawn(crate::listeners::watch_battery_status());
+        }
         Ok(())
     }
 }

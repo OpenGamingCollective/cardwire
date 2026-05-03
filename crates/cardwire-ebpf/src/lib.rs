@@ -1,3 +1,4 @@
+//! main lib code of cardwire-ebpf
 mod errors;
 
 pub use crate::errors::{CardwireEbpfError, CardwireEbpfResult};
@@ -62,10 +63,22 @@ impl EbpfBlocker {
         Ok(Self { ebpf })
     }
 
+    /// turn a pci string into a u8 array with a fixed 16 size
     fn pci_key(pci: &str) -> [u8; 16] {
         let mut key = [0u8; 16];
         let bytes = pci.as_bytes();
+        // leave one byte for terminator
         let len = bytes.len().min(15);
+        key[..len].copy_from_slice(&bytes[..len]);
+        key[len] = 0;
+        key
+    }
+    /// turn a file string into a u8 array with a fixed 30 size
+    fn file_key(file: &str) -> [u8; 30] {
+        let mut key = [0u8; 30];
+        let bytes = file.as_bytes();
+        // leave one byte for terminator
+        let len = bytes.len().min(29);
         key[..len].copy_from_slice(&bytes[..len]);
         key[len] = 0;
         key
@@ -256,6 +269,30 @@ impl EbpfBlocker {
         } else {
             let _ = map.remove(&0);
         }
+        Ok(())
+    }
+
+    pub fn set_nvidia_file_block(&mut self, file: &str) -> CardwireEbpfResult<()> {
+        let mut map: HashMap<_, [u8; 30], u8> = HashMap::try_from(
+            self.ebpf
+                .map_mut("BLOCKED_NVIDIA_FILES")
+                .ok_or_else(|| Self::missing_entity("map", "BLOCKED_PCI"))?,
+        )
+        .map_err(CardwireEbpfError::aya)?;
+        let key = Self::file_key(file);
+        map.insert(key, 1, 0).map_err(CardwireEbpfError::aya)?;
+        Ok(())
+    }
+
+    pub fn set_file_block(&mut self, file: &str) -> CardwireEbpfResult<()> {
+        let mut map: HashMap<_, [u8; 30], u8> = HashMap::try_from(
+            self.ebpf
+                .map_mut("BLOCKED_PCI_FILES")
+                .ok_or_else(|| Self::missing_entity("map", "BLOCKED_PCI"))?,
+        )
+        .map_err(CardwireEbpfError::aya)?;
+        let key = Self::file_key(file);
+        map.insert(key, 1, 0).map_err(CardwireEbpfError::aya)?;
         Ok(())
     }
 }

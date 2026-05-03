@@ -1,3 +1,4 @@
+//! this is a middleman between the daemon and the ebpf library
 use crate::gpu::{GpuResult, errors::GpuError, models::Gpu};
 use cardwire_ebpf::EbpfBlocker;
 
@@ -14,6 +15,16 @@ impl GpuBlocker {
 
     pub fn set_vulkan_block(&mut self, block: bool) -> GpuResult<()> {
         self.inner.set_vulkan_block(block).map_err(map_gpu_error)?;
+        Ok(())
+    }
+    pub fn set_file_block(&mut self, file: &str) -> GpuResult<()> {
+        self.inner.set_file_block(file).map_err(map_gpu_error)?;
+        Ok(())
+    }
+    pub fn set_nvidia_file_block(&mut self, file: &str) -> GpuResult<()> {
+        self.inner
+            .set_nvidia_file_block(file)
+            .map_err(map_gpu_error)?;
         Ok(())
     }
 }
@@ -33,9 +44,11 @@ pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &Gpu) -> GpuResult<bool> {
             .is_render_blocked(render_id)
             .map_err(map_gpu_error)?
         && if gpu.nvidia {
+            // unwrap because it should be Some if it's an nvidia gpu, if not it's a bug and should
+            // be reported
             blocker
                 .inner
-                .is_nvidia_blocked(*gpu.nvidia_minor())
+                .is_nvidia_blocked(gpu.nvidia_minor().unwrap())
                 .map_err(map_gpu_error)?
         } else {
             true
@@ -50,7 +63,7 @@ pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &Gpu, block: bool) -> GpuResult<
         blocker.inner.block_render(render_id)?;
         blocker.inner.block_pci(gpu.pci_address())?;
         if gpu.nvidia {
-            blocker.inner.block_nvidia(*gpu.nvidia_minor())?
+            blocker.inner.block_nvidia(gpu.nvidia_minor().unwrap())?
         }
         Ok(())
     } else {
@@ -58,7 +71,7 @@ pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &Gpu, block: bool) -> GpuResult<
         blocker.inner.unblock_render(render_id)?;
         blocker.inner.unblock_pci(gpu.pci_address())?;
         if gpu.nvidia {
-            blocker.inner.unblock_nvidia(*gpu.nvidia_minor())?
+            blocker.inner.unblock_nvidia(gpu.nvidia_minor().unwrap())?
         }
         Ok(())
     }
