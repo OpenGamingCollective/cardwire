@@ -18,7 +18,9 @@ trait UPower {
     default_service = "com.github.opengamingcollective.cardwire",
     default_path = "/com/github/opengamingcollective/cardwire"
 )]
-trait Cardwire {}
+trait Cardwire {
+    fn set_mode(&self, mode: u32) -> Result<()>;
+}
 
 pub async fn watch_battery_status() -> zbus::Result<()> {
     let connection = Connection::system().await?;
@@ -29,7 +31,13 @@ pub async fn watch_battery_status() -> zbus::Result<()> {
     let mut battery_stream = upower_proxy.receive_on_battery_changed().await;
 
     while let Some(msg) = battery_stream.next().await {
-        info!("battery event detected: {:?}", msg.get().await)
+        if let Ok(state) = msg.get().await {
+            info!("battery event detected: {:?}", state);
+            match state {
+                true => cardwire.set_mode(0).await?,
+                false => cardwire.set_mode(1).await?,
+            };
+        }
     }
 
     Ok(())
