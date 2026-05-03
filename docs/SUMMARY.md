@@ -9,3 +9,7 @@
 # Diagnostics
 
 - [Troubleshooting](troubleshooting.md)
+
+# Development
+
+- [DBus](dev/dbus.md)
