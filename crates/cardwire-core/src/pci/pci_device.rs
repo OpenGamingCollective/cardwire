@@ -1,10 +1,12 @@
-use crate::pci::{IommuError, PciDevice, is_iommu_enabled, read_iommu_groups};
+use crate::{
+    errors::CardwireCoreError, pci::{PciDevice, is_iommu_enabled, read_iommu_groups}
+};
 use log::{error, info, warn};
 use std::{
     collections::{BTreeMap, HashMap}, fs, fs::File, io, io::BufRead, path::Path
 };
 
-pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, IommuError> {
+pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, CardwireCoreError> {
     match is_iommu_enabled() {
         true => {
             info!("IOMMU detected, reading pci devices using iommu dir");
@@ -17,7 +19,7 @@ pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, IommuError> {
     }
 }
 
-fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, IommuError> {
+fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, CardwireCoreError> {
     let iommu_groups = read_iommu_groups()?;
     let pci_names = load_pci_name_db(Path::new("/usr/share/hwdata/pci.ids")).unwrap_or_else(|e| {
         warn!("Failed to load PCI name DB: {}", e);
@@ -59,7 +61,7 @@ fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, IommuEr
     }
     Ok(devices_map)
 }
-fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, IommuError> {
+fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, CardwireCoreError> {
     let sysfs = Path::new("/sys/bus/pci/devices");
     let pci_names = load_pci_name_db(Path::new("/usr/share/hwdata/pci.ids")).unwrap_or_else(|e| {
         warn!("Failed to load PCI name DB: {}", e);
@@ -68,7 +70,7 @@ fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, IommuEr
     let mut devices_map = BTreeMap::new();
     let sysfs_dir = fs::read_dir(sysfs).map_err(|e| {
         error!("Failed to read sysfs PCI devices at {:?}: {}", sysfs, e);
-        IommuError::Io(e)
+        CardwireCoreError::Io(e)
     })?;
     for folder in sysfs_dir.flatten() {
         let file_name = folder.file_name();

@@ -1,19 +1,19 @@
-use crate::pci::{IommuError, IommuGroup};
+use crate::{errors::CardwireCoreError, pci::IommuGroup};
 use log::error;
 use std::{collections::BTreeMap, fs, path::Path};
 
-pub fn read_iommu_groups() -> Result<BTreeMap<usize, IommuGroup>, IommuError> {
+pub fn read_iommu_groups() -> Result<BTreeMap<usize, IommuGroup>, CardwireCoreError> {
     let base_path = Path::new("/sys/kernel/iommu_groups");
     let mut dir_iter = base_path.read_dir().map_err(|e| {
         error!(
             "Failed to read IOMMU groups directory {:?}: {}",
             base_path, e
         );
-        IommuError::Io(e)
+        CardwireCoreError::Io(e)
     })?;
 
     if dir_iter.next().is_none() {
-        return Err(IommuError::IOMMUNotEnabled);
+        return Err(CardwireCoreError::IommuNotEnabled);
     }
 
     let mut groups: BTreeMap<usize, IommuGroup> = BTreeMap::new();
@@ -23,11 +23,11 @@ pub fn read_iommu_groups() -> Result<BTreeMap<usize, IommuGroup>, IommuError> {
             "Failed to re-read IOMMU groups directory {:?}: {}",
             base_path, e
         );
-        IommuError::Io(e)
+        CardwireCoreError::Io(e)
     })? {
         let entry = entry.map_err(|e| {
             error!("Failed to read IOMMU group entry: {}", e);
-            IommuError::Io(e)
+            CardwireCoreError::Io(e)
         })?;
         let group_dir = entry.path();
         let Some(group_id_str) = group_dir.file_name().and_then(|name| name.to_str()) else {
@@ -50,10 +50,12 @@ pub fn read_iommu_groups() -> Result<BTreeMap<usize, IommuGroup>, IommuError> {
     Ok(groups)
 }
 
-fn read_group_devices(group_dir: &Path) -> Result<Vec<String>, IommuError> {
+fn read_group_devices(group_dir: &Path) -> Result<Vec<String>, CardwireCoreError> {
     let devices_dir = group_dir.join("devices");
     if !devices_dir.exists() {
-        return Err(IommuError::MissingDevicesDir(group_dir.to_path_buf()));
+        return Err(CardwireCoreError::MissingDevicesDir(
+            group_dir.to_path_buf(),
+        ));
     }
 
     let mut devices = Vec::new();
@@ -62,7 +64,7 @@ fn read_group_devices(group_dir: &Path) -> Result<Vec<String>, IommuError> {
             "Failed to read IOMMU group devices {:?}: {}",
             devices_dir, e
         );
-        IommuError::Io(e)
+        CardwireCoreError::Io(e)
     })?;
 
     for device_entry in devices_iter {
@@ -71,7 +73,7 @@ fn read_group_devices(group_dir: &Path) -> Result<Vec<String>, IommuError> {
                 "Failed to read device entry in IOMMU group {:?}: {}",
                 devices_dir, e
             );
-            IommuError::Io(e)
+            CardwireCoreError::Io(e)
         })?;
         let Ok(name_str) = device_entry.file_name().into_string() else {
             continue;
