@@ -35,3 +35,4 @@ impl From<&str> for CardwireCoreError {
         CardwireCoreError::Other(s.to_string())
     }
 }
+pub type CardwireCoreResult<T> = Result<T, CardwireCoreError>;

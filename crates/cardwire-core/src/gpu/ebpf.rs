@@ -1,5 +1,7 @@
 //! this is a middleman between the daemon and the ebpf library
-use crate::gpu::{GpuResult, errors::GpuError, models::GpuDevice};
+use crate::{
+    errors::{CardwireCoreError, CardwireCoreResult}, gpu::models::GpuDevice
+};
 use cardwire_ebpf::EbpfBlocker;
 
 pub struct GpuBlocker {
@@ -7,21 +9,21 @@ pub struct GpuBlocker {
 }
 
 impl GpuBlocker {
-    pub fn new() -> GpuResult<Self> {
+    pub fn new() -> CardwireCoreResult<Self> {
         Ok(Self {
             inner: EbpfBlocker::new()?,
         })
     }
 
-    pub fn set_vulkan_block(&mut self, block: bool) -> GpuResult<()> {
+    pub fn set_vulkan_block(&mut self, block: bool) -> CardwireCoreResult<()> {
         self.inner.set_vulkan_block(block).map_err(map_gpu_error)?;
         Ok(())
     }
-    pub fn set_file_block(&mut self, file: &str) -> GpuResult<()> {
+    pub fn set_file_block(&mut self, file: &str) -> CardwireCoreResult<()> {
         self.inner.set_file_block(file).map_err(map_gpu_error)?;
         Ok(())
     }
-    pub fn set_nvidia_file_block(&mut self, file: &str) -> GpuResult<()> {
+    pub fn set_nvidia_file_block(&mut self, file: &str) -> CardwireCoreResult<()> {
         self.inner
             .set_nvidia_file_block(file)
             .map_err(map_gpu_error)?;
@@ -29,7 +31,7 @@ impl GpuBlocker {
     }
 }
 
-pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &GpuDevice) -> GpuResult<bool> {
+pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &GpuDevice) -> CardwireCoreResult<bool> {
     let (card_id, render_id) = gpu_node_ids(gpu).map_err(map_gpu_error)?;
     Ok(blocker
         .inner
@@ -55,7 +57,7 @@ pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &GpuDevice) -> GpuResult<bool> 
         })
 }
 
-pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &GpuDevice, block: bool) -> GpuResult<()> {
+pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &GpuDevice, block: bool) -> CardwireCoreResult<()> {
     let (card_id, render_id) = gpu_node_ids(gpu)?;
 
     if block {
@@ -77,12 +79,12 @@ pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &GpuDevice, block: bool) -> GpuR
     }
 }
 
-fn gpu_node_ids(gpu: &GpuDevice) -> GpuResult<(u32, u32)> {
+fn gpu_node_ids(gpu: &GpuDevice) -> CardwireCoreResult<(u32, u32)> {
     let card_id = *gpu.card();
     let render_id = *gpu.render();
     Ok((card_id, render_id))
 }
 
-fn map_gpu_error(err: impl std::fmt::Display) -> GpuError {
-    GpuError::UnknownBlockState(err.to_string())
+fn map_gpu_error(err: impl std::fmt::Display) -> CardwireCoreError {
+    CardwireCoreError::UnknownBlockState(err.to_string())
 }
