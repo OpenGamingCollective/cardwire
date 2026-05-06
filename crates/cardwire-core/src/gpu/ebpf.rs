@@ -33,7 +33,7 @@ pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &GpuDevice) -> GpuResult<bool> 
     let (card_id, render_id) = gpu_node_ids(gpu).map_err(map_gpu_error)?;
     Ok(blocker
         .inner
-        .is_pci_blocked(gpu.pci_address())
+        .is_pci_blocked(gpu.pci.pci_address())
         .map_err(map_gpu_error)?
         && blocker
             .inner
@@ -43,7 +43,7 @@ pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &GpuDevice) -> GpuResult<bool> 
             .inner
             .is_render_blocked(render_id)
             .map_err(map_gpu_error)?
-        && if gpu.nvidia {
+        && if gpu.nvidia() {
             // unwrap because it should be Some if it's an nvidia gpu, if not it's a bug and should
             // be reported
             blocker
@@ -61,16 +61,16 @@ pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &GpuDevice, block: bool) -> GpuR
     if block {
         blocker.inner.block_card(card_id)?;
         blocker.inner.block_render(render_id)?;
-        blocker.inner.block_pci(gpu.pci_address())?;
-        if gpu.nvidia {
+        blocker.inner.block_pci(gpu.pci.pci_address())?;
+        if gpu.nvidia() {
             blocker.inner.block_nvidia(gpu.nvidia_minor().unwrap())?
         }
         Ok(())
     } else {
         blocker.inner.unblock_card(card_id)?;
         blocker.inner.unblock_render(render_id)?;
-        blocker.inner.unblock_pci(gpu.pci_address())?;
-        if gpu.nvidia {
+        blocker.inner.unblock_pci(gpu.pci.pci_address())?;
+        if gpu.nvidia() {
             blocker.inner.unblock_nvidia(gpu.nvidia_minor().unwrap())?
         }
         Ok(())
@@ -78,8 +78,8 @@ pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &GpuDevice, block: bool) -> GpuR
 }
 
 fn gpu_node_ids(gpu: &GpuDevice) -> GpuResult<(u32, u32)> {
-    let card_id = *gpu.card_node();
-    let render_id = *gpu.render_node();
+    let card_id = *gpu.card();
+    let render_id = *gpu.render();
     Ok((card_id, render_id))
 }
 

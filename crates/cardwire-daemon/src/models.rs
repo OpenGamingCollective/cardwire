@@ -126,7 +126,7 @@ impl Daemon {
             blocker.set_file_block(file)?;
         }
         for gpu in self.state.gpu_list.values() {
-            if gpu.is_nvidia() {
+            if gpu.nvidia() {
                 for file in BLOCKED_NVIDIA_FILES {
                     blocker.set_nvidia_file_block(file)?;
                 }

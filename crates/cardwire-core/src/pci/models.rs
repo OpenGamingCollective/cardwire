@@ -1,13 +1,74 @@
 #[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type)]
 pub struct PciDevice {
-    pub pci_address: String,
-    pub iommu_group: Option<usize>,
-    pub vendor_id: Option<String>,
-    pub device_id: Option<String>,
-    pub vendor_name: Option<String>,
-    pub device_name: Option<String>,
-    pub driver: Option<String>,
-    pub class: Option<String>,
+    pci_address: String,
+    iommu_group: Option<usize>,
+    vendor_id: Option<String>,
+    device_id: Option<String>,
+    vendor_name: Option<String>,
+    device_name: Option<String>,
+    driver: Option<String>,
+    class: Option<String>,
+    parent_pci: Option<String>,
+    child_pci: Option<String>,
+}
+impl PciDevice {
+    pub fn pci_address(&self) -> &str {
+        &self.pci_address
+    }
+
+    pub fn iommu_group(&self) -> &Option<usize> {
+        &self.iommu_group
+    }
+    pub fn vendor_id(&self) -> &Option<String> {
+        &self.vendor_id
+    }
+    pub fn device_id(&self) -> &Option<String> {
+        &self.device_id
+    }
+    pub fn vendor_name(&self) -> &Option<String> {
+        &self.vendor_name
+    }
+    pub fn device_name(&self) -> &Option<String> {
+        &self.device_name
+    }
+    pub fn driver(&self) -> &Option<String> {
+        &self.driver
+    }
+    pub fn class(&self) -> &Option<String> {
+        &self.class
+    }
+    pub fn parent_pci(&self) -> &Option<String> {
+        &self.parent_pci
+    }
+    pub fn child_pci(&self) -> &Option<String> {
+        &self.child_pci
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        pci_address: String,
+        iommu_group: Option<usize>,
+        vendor_id: Option<String>,
+        device_id: Option<String>,
+        vendor_name: Option<String>,
+        device_name: Option<String>,
+        driver: Option<String>,
+        class: Option<String>,
+        parent_pci: Option<String>,
+        child_pci: Option<String>,
+    ) -> PciDevice {
+        PciDevice {
+            pci_address,
+            iommu_group,
+            vendor_id,
+            device_id,
+            vendor_name,
+            device_name,
+            driver,
+            class,
+            parent_pci,
+            child_pci,
+        }
+    }
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type)]

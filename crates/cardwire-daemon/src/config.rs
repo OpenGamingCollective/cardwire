@@ -123,7 +123,7 @@ impl CardwireGpuState {
         // Save to daemon state
         for gpu in gpu_list.values() {
             self.gpu.insert(
-                gpu.pci.clone(),
+                gpu.pci.pci_address().to_string(),
                 CardwireGpuUnit {
                     block: is_gpu_blocked(blocker, gpu)?,
                 },

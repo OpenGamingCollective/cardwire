@@ -25,7 +25,7 @@ fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, Cardwir
         warn!("Failed to load PCI name DB: {}", e);
         PciNameDb::default()
     });
-    let mut devices_map = BTreeMap::new();
+    let mut devices_map: BTreeMap<String, PciDevice> = BTreeMap::new();
     for (group_id, group) in iommu_groups {
         // read "device" folder, look at each PCI ADDRESS
         for pci_address in group.devices {
@@ -46,16 +46,18 @@ fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, Cardwir
                 .and_then(|(v, d)| pci_names.devices.get(&(v.clone(), d.clone())))
                 .cloned();
 
-            let device = PciDevice {
-                pci_address: pci_address.clone(),
-                iommu_group: Some(group_id),
+            let device = PciDevice::new(
+                pci_address.clone(),
+                Some(group_id),
                 vendor_id,
                 device_id,
                 vendor_name,
                 device_name,
-                driver: get_driver(&pci_address),
-                class: get_class(&pci_address),
-            };
+                get_driver(&pci_address),
+                get_class(&pci_address),
+                Some("truc".to_string()),
+                Some("truc".to_string()),
+            );
             devices_map.insert(pci_address, device);
         }
     }
@@ -94,16 +96,18 @@ fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, Cardwir
             .and_then(|(v, d)| pci_names.devices.get(&(v.clone(), d.clone())))
             .cloned();
 
-        let device = PciDevice {
-            pci_address: name.to_string(),
-            iommu_group: None,
+        let device = PciDevice::new(
+            name.to_string(),
+            None,
             vendor_id,
             device_id,
             vendor_name,
             device_name,
-            driver: get_driver(name),
-            class: get_class(name),
-        };
+            get_driver(name),
+            get_class(name),
+            Some("truc".to_string()),
+            Some("truc".to_string()),
+        );
         devices_map.insert(name.to_string(), device);
     }
     Ok(devices_map)
