@@ -2,7 +2,7 @@ use std::{io, path};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum CardwireCoreError {
+pub enum Error {
     #[error("IO Error: {0}")]
     Io(#[from] io::Error),
 
@@ -30,9 +30,8 @@ pub enum CardwireCoreError {
     Other(String),
 }
 
-impl From<&str> for CardwireCoreError {
+impl From<&str> for Error {
     fn from(s: &str) -> Self {
-        CardwireCoreError::Other(s.to_string())
+        Error::Other(s.to_string())
     }
 }
-pub type CardwireCoreResult<T> = Result<T, CardwireCoreError>;

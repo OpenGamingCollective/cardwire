@@ -1,12 +1,12 @@
 use crate::{
-    errors::CardwireCoreError, pci::{PciDevice, is_iommu_enabled, read_iommu_groups}
+    errors::Error as CardwireError, pci::{PciDevice, is_iommu_enabled, read_iommu_groups}
 };
 use log::{error, info, warn};
 use std::{
     collections::{BTreeMap, HashMap}, fs, fs::File, io, io::BufRead, path::Path
 };
 
-pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, CardwireCoreError> {
+pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, CardwireError> {
     match is_iommu_enabled() {
         true => {
             info!("IOMMU detected, reading pci devices using iommu dir");
@@ -19,7 +19,7 @@ pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, CardwireCoreErr
     }
 }
 
-fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, CardwireCoreError> {
+fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, CardwireError> {
     let iommu_groups = read_iommu_groups()?;
     let pci_names = load_pci_name_db(Path::new("/usr/share/hwdata/pci.ids")).unwrap_or_else(|e| {
         warn!("Failed to load PCI name DB: {}", e);
@@ -63,7 +63,7 @@ fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, Cardwir
     }
     Ok(devices_map)
 }
-fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, CardwireCoreError> {
+fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, CardwireError> {
     let sysfs = Path::new("/sys/bus/pci/devices");
     let pci_names = load_pci_name_db(Path::new("/usr/share/hwdata/pci.ids")).unwrap_or_else(|e| {
         warn!("Failed to load PCI name DB: {}", e);
@@ -72,7 +72,7 @@ fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, Cardwir
     let mut devices_map = BTreeMap::new();
     let sysfs_dir = fs::read_dir(sysfs).map_err(|e| {
         error!("Failed to read sysfs PCI devices at {:?}: {}", sysfs, e);
-        CardwireCoreError::Io(e)
+        CardwireError::Io(e)
     })?;
     for folder in sysfs_dir.flatten() {
         let file_name = folder.file_name();
