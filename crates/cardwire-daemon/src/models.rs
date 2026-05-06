@@ -59,7 +59,7 @@ pub struct DaemonState {
     pub config: RwLock<CardwireConfig>,
     pub gpu_state: RwLock<CardwireGpuState>,
     pub mode_state: RwLock<CardwireModeState>,
-    pub gpu_list: BTreeMap<usize, gpu::Gpu>,
+    pub gpu_list: BTreeMap<usize, gpu::GpuDevice>,
     pub ebpf_blocker: RwLock<GpuBlocker>,
     // for future uses, related to vfio
     pub pci_devices: BTreeMap<String, pci::PciDevice>,

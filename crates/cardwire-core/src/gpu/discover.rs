@@ -1,12 +1,14 @@
 //! Read a pci list and return a list of gpu
-use crate::{gpu::models::Gpu, pci::PciDevice};
+use crate::{gpu::models::GpuDevice, pci::PciDevice};
 use log::{info, warn};
 use std::{
     collections::{BTreeMap, HashMap}, fs, io, path::Path
 };
 
-pub fn read_gpu(pci_devices: &BTreeMap<String, PciDevice>) -> io::Result<BTreeMap<usize, Gpu>> {
-    let gpus: Vec<Gpu> = pci_devices
+pub fn read_gpu(
+    pci_devices: &BTreeMap<String, PciDevice>,
+) -> io::Result<BTreeMap<usize, GpuDevice>> {
+    let gpus: Vec<GpuDevice> = pci_devices
         .values()
         .filter(|device| {
             device.class.as_deref() == Some("0x030000") || // VGA compatible controller
@@ -33,7 +35,7 @@ pub fn read_gpu(pci_devices: &BTreeMap<String, PciDevice>) -> io::Result<BTreeMa
         .collect())
 }
 
-fn build_gpu(device: &PciDevice) -> io::Result<Gpu> {
+fn build_gpu(device: &PciDevice) -> io::Result<GpuDevice> {
     let nvidia: bool = device.vendor_id.as_deref() == Some("0x10de");
     let nvidia_minor: Option<u32> = if nvidia {
         nvidia_get_minor(&device.pci_address)
@@ -41,7 +43,7 @@ fn build_gpu(device: &PciDevice) -> io::Result<Gpu> {
         None
     };
 
-    Ok(Gpu {
+    Ok(GpuDevice {
         id: 0, // reassigned after sorting
         name: device
             .device_name
@@ -149,7 +151,7 @@ fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
         .ok()
 }
 /// Method from kwin
-pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, Gpu>) -> io::Result<()> {
+pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io::Result<()> {
     let class_path = Path::new("/sys/class/drm");
     let mut drm_entries = Vec::new();
     if class_path.exists() {
@@ -247,7 +249,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, Gpu>) -> io::Resul
     }
 
     // Default GPU gets ID 0, rest ordered by PCI address
-    let mut gpus: Vec<Gpu> = std::mem::take(gpu_list).into_values().collect();
+    let mut gpus: Vec<GpuDevice> = std::mem::take(gpu_list).into_values().collect();
     gpus.sort_by(|a, b| b.default.cmp(&a.default).then(a.pci.cmp(&b.pci)));
     *gpu_list = gpus
         .into_iter()

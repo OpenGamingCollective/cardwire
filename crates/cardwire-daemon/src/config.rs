@@ -2,7 +2,7 @@
 //! gpu, mode or pci
 use crate::models::Modes;
 use anyhow::{Context, Ok};
-use cardwire_core::gpu::{Gpu, GpuBlocker, is_gpu_blocked};
+use cardwire_core::gpu::{GpuBlocker, GpuDevice, is_gpu_blocked};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, io};
@@ -112,7 +112,7 @@ impl CardwireGpuState {
     /// Save the new state into the daemon and to the gpu_state.json file
     pub async fn save_state(
         &mut self,
-        gpu_list: &BTreeMap<usize, Gpu>,
+        gpu_list: &BTreeMap<usize, GpuDevice>,
         blocker: &GpuBlocker,
     ) -> anyhow::Result<()> {
         // Prevent overwriting default config if it's not replaceable

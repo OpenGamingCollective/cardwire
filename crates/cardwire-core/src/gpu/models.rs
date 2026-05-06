@@ -1,5 +1,5 @@
 #[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type)]
-pub struct Gpu {
+pub struct GpuDevice {
     pub id: u32,
     pub name: String,
     pub pci: String,
@@ -9,7 +9,7 @@ pub struct Gpu {
     pub nvidia: bool,
     pub nvidia_minor: Option<u32>,
 }
-impl Gpu {
+impl GpuDevice {
     pub fn pci_address(&self) -> &str {
         &self.pci
     }

@@ -1,5 +1,5 @@
 //! this is a middleman between the daemon and the ebpf library
-use crate::gpu::{GpuResult, errors::GpuError, models::Gpu};
+use crate::gpu::{GpuResult, errors::GpuError, models::GpuDevice};
 use cardwire_ebpf::EbpfBlocker;
 
 pub struct GpuBlocker {
@@ -29,7 +29,7 @@ impl GpuBlocker {
     }
 }
 
-pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &Gpu) -> GpuResult<bool> {
+pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &GpuDevice) -> GpuResult<bool> {
     let (card_id, render_id) = gpu_node_ids(gpu).map_err(map_gpu_error)?;
     Ok(blocker
         .inner
@@ -55,7 +55,7 @@ pub fn is_gpu_blocked(blocker: &GpuBlocker, gpu: &Gpu) -> GpuResult<bool> {
         })
 }
 
-pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &Gpu, block: bool) -> GpuResult<()> {
+pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &GpuDevice, block: bool) -> GpuResult<()> {
     let (card_id, render_id) = gpu_node_ids(gpu)?;
 
     if block {
@@ -77,7 +77,7 @@ pub fn block_gpu(blocker: &mut GpuBlocker, gpu: &Gpu, block: bool) -> GpuResult<
     }
 }
 
-fn gpu_node_ids(gpu: &Gpu) -> GpuResult<(u32, u32)> {
+fn gpu_node_ids(gpu: &GpuDevice) -> GpuResult<(u32, u32)> {
     let card_id = *gpu.card_node();
     let render_id = *gpu.render_node();
     Ok((card_id, render_id))
