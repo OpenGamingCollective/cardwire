@@ -8,7 +8,8 @@
 
 # Diagnostics
 
-- [Troubleshooting](troubleshooting.md)
+- [Troubleshooting](diagnostics/troubleshooting.md)
+- [NVIDIA Sleep issue](diagnostics/sleep.md)
 
 # Development
 
