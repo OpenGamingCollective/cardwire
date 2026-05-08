@@ -1,5 +1,5 @@
 use crate::{
-    errors::Error as CardwireError, pci::{PciDevice, is_iommu_enabled, read_iommu_groups}
+    errors::Error as CardwireError, pci::{PciDevice, is_iommu_enabled, pci_device, read_iommu_groups}
 };
 use log::{error, info, warn};
 use std::{
@@ -55,8 +55,8 @@ fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, Cardwir
                 device_name,
                 get_driver(&pci_address),
                 get_class(&pci_address),
-                Some("truc".to_string()),
-                Some("truc".to_string()),
+                get_parent_pci(&pci_address, &devices_map),
+                get_child_pci(pci_address.clone()),
             );
             devices_map.insert(pci_address, device);
         }
@@ -222,4 +222,38 @@ fn normalize_device_id(raw: &str) -> String {
         .trim_start_matches("0x")
         .trim_start_matches("0X")
         .to_ascii_lowercase()
+}
+
+fn get_child_pci(pci: String) -> Option<String> {
+    let pci_path = Path::new("/sys/bus/pci/devices/").join(pci);
+    if !pci_path.exists() {
+        return None;
+    }
+
+    let pci_folder = fs::read_dir(pci_path).ok()?;
+
+    for entry in pci_folder {
+        let entry = entry.ok();
+        entry.as_ref()?;
+        match entry {
+            Some(file) => {
+                let file_string = file.file_name().into_string().unwrap_or("".to_string());
+                if file_string.starts_with("0000:") && !file_string.contains("pcie") {
+                    return Some(file_string);
+                }
+            }
+            None => break,
+        }
+    }
+
+    None
+}
+
+fn get_parent_pci(pci: &str, devices_map: &BTreeMap<String, PciDevice>) -> Option<String> {
+    for pci_device in devices_map.values() {
+        if pci_device.child_pci().as_deref() == Some(pci) {
+            return Some(pci_device.pci_address().to_string());
+        }
+    }
+    None
 }

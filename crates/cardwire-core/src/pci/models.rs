@@ -82,6 +82,8 @@ pub struct DbusPciDevice {
     pub device_name: String,
     pub driver: String,
     pub class: String,
+    pub parent_pci: String,
+    pub child_pci: String,
 }
 
 pub struct IommuGroup {

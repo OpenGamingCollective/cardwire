@@ -174,6 +174,8 @@ impl Daemon {
                 device_name: pci.device_name().clone().unwrap_or("".to_string()),
                 driver: pci.driver().clone().unwrap_or("".to_string()),
                 class: pci.class().clone().unwrap_or("".to_string()),
+                parent_pci: pci.parent_pci().clone().unwrap_or("".to_string()),
+                child_pci: pci.child_pci().clone().unwrap_or("".to_string()),
             };
             dbus_list.insert(id.clone(), temp_pci);
         }

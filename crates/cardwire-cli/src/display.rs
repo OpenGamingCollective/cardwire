@@ -30,6 +30,8 @@ pub struct PciDevice {
     device_name: String,
     driver: String,
     class: String,
+    parent_pci: String,
+    child_pci: String,
 }
 
 /// Take a Map and print it  
