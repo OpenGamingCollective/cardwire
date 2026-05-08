@@ -15,9 +15,9 @@ impl GpuBlocker {
         })
     }
 
-    pub fn set_vulkan_block(&mut self, block: bool) -> Result<(), CardwireError> {
+    pub fn set_nvidia_setting(&mut self, block: bool) -> Result<(), CardwireError> {
         self.inner
-            .set_vulkan_block(block)
+            .set_nvidia_block(block)
             .map_err(|err| CardwireError::UnknownBlockState(err.to_string()))?;
         Ok(())
     }

@@ -53,7 +53,6 @@ impl CardwireConfig {
         create_default_file(FileKind::Config)?;
         Ok(())
     }
-    /// Return block_vulkan value
     pub fn experimental_nvidia_block(&self) -> bool {
         self.experimental_nvidia_block
     }

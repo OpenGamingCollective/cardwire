@@ -197,9 +197,9 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	if (bpf_core_read_str(buf, sizeof(buf), q.name) < 0) {
 		return 0;
 	}
-	// Blocks vulkan nvidia_icd, it's dangerous and will only work if one nvidia gpu is blocked
-	__u32 block_vulkan_key = 0;
-	if (bpf_map_lookup_elem(&SETTINGS, &block_vulkan_key)) {
+	// Blocks specific NVIDIA files, it's dangerous and will only work if one nvidia gpu is blocked
+	__u32 block_nvidia_key = 0;
+	if (bpf_map_lookup_elem(&SETTINGS, &block_nvidia_key)) {
 		if (bpf_map_lookup_elem(&BLOCKED_NVIDIA_FILES, buf)) {
 			__u32 id0 = 0, id1 = 1;
 			if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id0) &&

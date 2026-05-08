@@ -257,7 +257,7 @@ impl EbpfBlocker {
         }
     }
 
-    pub fn set_vulkan_block(&mut self, block: bool) -> CardwireEbpfResult<()> {
+    pub fn set_nvidia_block(&mut self, block: bool) -> CardwireEbpfResult<()> {
         let mut map: HashMap<_, u32, u8> = HashMap::try_from(
             self.ebpf
                 .map_mut("SETTINGS")

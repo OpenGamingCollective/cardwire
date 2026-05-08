@@ -17,7 +17,7 @@ const BLOCKED_PCI_FILES: &[&str] = &[
     "max_link_width",
     "current_link_width",
 ];
-// Files that get blocked when the vulkan block is on
+// Files that get blocked when the NVIDIA block is on
 const BLOCKED_NVIDIA_FILES: &[&str] = &[
     "libGLX_nvidia.so.0",
     "nvidia_icd.json",
@@ -119,8 +119,8 @@ impl Daemon {
         let config = self.state.config.read().await;
         let mode = self.state.mode_state.read().await;
         let mut blocker = self.state.ebpf_blocker.write().await;
-        // Apply vulkan block
-        blocker.set_vulkan_block(config.experimental_nvidia_block())?;
+        // Apply nvidia block
+        blocker.set_nvidia_setting(config.experimental_nvidia_block())?;
         // Apply file blocks
         for file in BLOCKED_PCI_FILES {
             blocker.set_file_block(file)?;
