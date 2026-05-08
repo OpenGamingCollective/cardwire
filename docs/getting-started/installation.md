@@ -8,11 +8,12 @@ using AUR:
 yay -S cardwire
 ```
 
-then enable the service and reboot
+then enable and start the service 
 
 ```bash
 sudo systemctl enable cardwired.service
-reboot
+
+sudo systemctl start cardwired.service
 ```
 
 > [!NOTE]
@@ -48,6 +49,10 @@ Using Terra
 
 ```bash
 sudo dnf install cardwire
+
+sudo systemctl enable cardwired.service
+
+sudo systemctl start cardwired.service
 ```
 
 ## Other distros
