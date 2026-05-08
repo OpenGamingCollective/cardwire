@@ -20,4 +20,7 @@ Enabled in the boot cmdline
 ```bash
 cat /proc/cmdline
 ```
-> Must contains `lsm=bpf`
+> Must contains `lsm=bpf` (If empty/doesnt contain bpf, please read Caution)
+
+> [!CAUTION]
+> Most distros already enable bpf, only change the cmdline if cardwired doesnt launch
