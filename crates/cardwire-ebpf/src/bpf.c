@@ -215,8 +215,6 @@ static __always_inline int is_blocked_device(struct dentry *d)
 		if (get_pci_addr(d, pci_addr, sizeof(pci_addr)) != 0) {
 			return 0;
 		}
-
-		pci_addr[11] = '0';
 		pci_addr[12] = '\0';
 
 		if (bpf_map_lookup_elem(&BLOCKED_PCI, pci_addr)) {

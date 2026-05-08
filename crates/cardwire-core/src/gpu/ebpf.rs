@@ -97,6 +97,11 @@ fn recursive_block_pci(
 ) -> Result<(), CardwireError> {
     // Block the gpu pci
     blocker.inner.block_pci(gpu.pci.pci_address())?;
+    // also block audio card
+    if gpu.pci.pci_address().ends_with(".0") {
+        let gpu_audio_adress = gpu.pci.pci_address().to_string().replace(".0", ".1");
+        blocker.inner.block_pci(&gpu_audio_adress)?;
+    }
     // Check if gpu has a parent pci
     if gpu.pci.parent_pci().is_some() {
         // first pci to block
@@ -124,6 +129,11 @@ fn recursive_unblock_pci(
 ) -> Result<(), CardwireError> {
     // Unblock the gpu pci
     blocker.inner.unblock_pci(gpu.pci.pci_address())?;
+    // also unblock audio card
+    if gpu.pci.pci_address().ends_with(".0") {
+        let gpu_audio_adress = gpu.pci.pci_address().to_string().replace(".0", ".1");
+        blocker.inner.block_pci(&gpu_audio_adress)?;
+    }
     // Check if gpu has a parent pci
     if gpu.pci.parent_pci().is_some() {
         // first pci to block
