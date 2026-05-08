@@ -186,7 +186,6 @@ static __always_inline int is_blocked_device(struct dentry *d)
 					return -ENOENT;
 				}
 			}
-			return 0;
 		}
 	}
 	struct qstr q = BPF_CORE_READ(d, d_name);

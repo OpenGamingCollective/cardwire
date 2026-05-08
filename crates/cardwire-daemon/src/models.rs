@@ -22,6 +22,7 @@ const BLOCKED_NVIDIA_FILES: &[&str] = &[
     "libGLX_nvidia.so.0",
     "nvidia_icd.json",
     "nvidia_icd.x86_64.json",
+    "nvidiactl",
 ];
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default)]
