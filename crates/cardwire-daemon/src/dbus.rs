@@ -22,6 +22,7 @@ impl Daemon {
             warn!("mode couldn't be saved to config: {e}");
         }
         let mut blocker = self.state.ebpf_blocker.write().await;
+        let pci_list = &self.state.pci_devices;
 
         match mode {
             // Integrated/Hybrid only works on laptop with two gpus, will refuse if the computer has
@@ -40,7 +41,7 @@ impl Daemon {
                 // Loop to find the non default gpu and block it,
                 for gpu in self.state.gpu_list.values() {
                     if !gpu.is_default() {
-                        block_gpu(&mut blocker, gpu, mode == Modes::Integrated)
+                        block_gpu(&mut blocker, gpu, mode == Modes::Integrated, pci_list)
                             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
                     };
                 }
@@ -60,14 +61,14 @@ impl Daemon {
                                 id
                             );
                             // For safety, unblock if default
-                            block_gpu(&mut blocker, gpu, false)
+                            block_gpu(&mut blocker, gpu, false, pci_list)
                                 .map_err(|e| fdo::Error::Failed(e.to_string()))?;
                         } else {
-                            block_gpu(&mut blocker, gpu, true)
+                            block_gpu(&mut blocker, gpu, true, pci_list)
                                 .map_err(|e| fdo::Error::Failed(e.to_string()))?;
                         }
                     } else {
-                        block_gpu(&mut blocker, gpu, false)
+                        block_gpu(&mut blocker, gpu, false, pci_list)
                             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
                     }
                 }
@@ -95,6 +96,7 @@ impl Daemon {
         }
         let mut blocker = self.state.ebpf_blocker.write().await;
         let mut gpu_state = self.state.gpu_state.write().await;
+        let pci_list = &self.state.pci_devices;
         let gpu = self
             .state
             .gpu_list
@@ -108,7 +110,8 @@ impl Daemon {
                 gpu_id
             );
             // for safety, unblock if default & save
-            block_gpu(&mut blocker, gpu, false).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+            block_gpu(&mut blocker, gpu, false, pci_list)
+                .map_err(|e| fdo::Error::Failed(e.to_string()))?;
             if let Err(e) = gpu_state.save_state(&self.state.gpu_list, &blocker).await {
                 warn!("could not save gpu_state to file: {e}");
             }
@@ -118,7 +121,8 @@ impl Daemon {
             )));
         }
 
-        block_gpu(&mut blocker, gpu, block).map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        block_gpu(&mut blocker, gpu, block, pci_list)
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
         info!(
             "Set GPU {} ({}) block={}",

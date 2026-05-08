@@ -1,5 +1,5 @@
 use crate::{
-    errors::Error as CardwireError, pci::{PciDevice, is_iommu_enabled, pci_device, read_iommu_groups}
+    errors::Error as CardwireError, pci::{PciDevice, is_iommu_enabled, read_iommu_groups}
 };
 use log::{error, info, warn};
 use std::{

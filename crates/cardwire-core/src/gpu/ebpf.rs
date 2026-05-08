@@ -1,5 +1,7 @@
 //! this is a middleman between the daemon and the ebpf library
-use crate::{errors::Error as CardwireError, gpu::models::GpuDevice};
+use std::collections::BTreeMap;
+
+use crate::{errors::Error as CardwireError, gpu::models::GpuDevice, pci::PciDevice};
 use cardwire_ebpf::EbpfBlocker;
 
 pub struct GpuBlocker {
@@ -64,6 +66,7 @@ pub fn block_gpu(
     blocker: &mut GpuBlocker,
     gpu: &GpuDevice,
     block: bool,
+    pci_list: &BTreeMap<String, PciDevice>,
 ) -> Result<(), CardwireError> {
     let card_id = *gpu.card();
     let render_id = *gpu.render();
@@ -71,7 +74,7 @@ pub fn block_gpu(
     if block {
         blocker.inner.block_card(card_id)?;
         blocker.inner.block_render(render_id)?;
-        blocker.inner.block_pci(gpu.pci.pci_address())?;
+        recursive_block_pci(blocker, gpu, pci_list)?;
         if gpu.nvidia() {
             blocker.inner.block_nvidia(gpu.nvidia_minor().unwrap())?
         }
@@ -79,10 +82,65 @@ pub fn block_gpu(
     } else {
         blocker.inner.unblock_card(card_id)?;
         blocker.inner.unblock_render(render_id)?;
-        blocker.inner.unblock_pci(gpu.pci.pci_address())?;
+        recursive_unblock_pci(blocker, gpu, pci_list)?;
         if gpu.nvidia() {
             blocker.inner.unblock_nvidia(gpu.nvidia_minor().unwrap())?
         }
         Ok(())
     }
+}
+
+fn recursive_block_pci(
+    blocker: &mut GpuBlocker,
+    gpu: &GpuDevice,
+    pci_list: &BTreeMap<String, PciDevice>,
+) -> Result<(), CardwireError> {
+    // Block the gpu pci
+    blocker.inner.block_pci(gpu.pci.pci_address())?;
+    // Check if gpu has a parent pci
+    if gpu.pci.parent_pci().is_some() {
+        // first pci to block
+        let mut parent_pci: String = gpu.pci.parent_pci().clone().unwrap();
+        loop {
+            // Also block the parent pci
+            if let Some(pci_device) = pci_list.get(&parent_pci) {
+                blocker.inner.block_pci(pci_device.pci_address())?;
+                if pci_device.parent_pci().is_some() {
+                    // if the device contain a parent, continue the loop
+                    parent_pci = pci_device.parent_pci().clone().unwrap()
+                } else {
+                    // if no parent. exit the loop
+                    break;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+fn recursive_unblock_pci(
+    blocker: &mut GpuBlocker,
+    gpu: &GpuDevice,
+    pci_list: &BTreeMap<String, PciDevice>,
+) -> Result<(), CardwireError> {
+    // Unblock the gpu pci
+    blocker.inner.unblock_pci(gpu.pci.pci_address())?;
+    // Check if gpu has a parent pci
+    if gpu.pci.parent_pci().is_some() {
+        // first pci to block
+        let mut parent_pci: String = gpu.pci.parent_pci().clone().unwrap();
+        loop {
+            // Also block the parent pci
+            if let Some(pci_device) = pci_list.get(&parent_pci) {
+                blocker.inner.unblock_pci(pci_device.pci_address())?;
+                if pci_device.parent_pci().is_some() {
+                    // if the device contain a parent, continue the loop
+                    parent_pci = pci_device.parent_pci().clone().unwrap()
+                } else {
+                    // if no parent. exit the loop
+                    break;
+                }
+            }
+        }
+    }
+    Ok(())
 }
