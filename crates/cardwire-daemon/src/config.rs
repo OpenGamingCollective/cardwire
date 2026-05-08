@@ -20,14 +20,14 @@ enum FileKind {
 #[serde(default)]
 pub struct CardwireConfig {
     auto_apply_gpu_state: bool,
-    block_nvidia_vulkan: bool,
+    experimental_nvidia_block: bool,
     battery_auto_switch: bool,
 }
 impl Default for CardwireConfig {
     fn default() -> Self {
         CardwireConfig {
             auto_apply_gpu_state: true,
-            block_nvidia_vulkan: false,
+            experimental_nvidia_block: false,
             battery_auto_switch: false,
         }
     }
@@ -54,8 +54,8 @@ impl CardwireConfig {
         Ok(())
     }
     /// Return block_vulkan value
-    pub fn block_nvidia_vulkan(&self) -> bool {
-        self.block_nvidia_vulkan
+    pub fn experimental_nvidia_block(&self) -> bool {
+        self.experimental_nvidia_block
     }
     pub fn auto_apply_gpu_state(&self) -> bool {
         self.auto_apply_gpu_state

@@ -120,8 +120,9 @@ impl Daemon {
         let mode = self.state.mode_state.read().await;
         let mut blocker = self.state.ebpf_blocker.write().await;
         // Apply vulkan block
-        blocker.set_vulkan_block(config.block_nvidia_vulkan())?;
+        blocker.set_vulkan_block(config.experimental_nvidia_block())?;
 
+        println!("{:?}", config);
         // Apply file blocks
         for file in BLOCKED_PCI_FILES {
             blocker.set_file_block(file)?;
