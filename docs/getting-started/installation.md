@@ -44,11 +44,9 @@ services.cardwire.enable = true;
 
 ## Fedora
 
-Using the offical copr:
+Using Terra
 
 ```bash
-sudo dnf copr enable luytan/cardwire
-
 sudo dnf install cardwire
 ```
 
