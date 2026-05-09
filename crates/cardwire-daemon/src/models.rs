@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use cardwire_core::{
     gpu::{self, GpuBlocker, check_default_drm_class}, pci
 };
-use log::warn;
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt};
 use tokio::sync::RwLock;
@@ -119,6 +119,8 @@ impl Daemon {
         let config = self.state.config.read().await;
         let mode = self.state.mode_state.read().await;
         let mut blocker = self.state.ebpf_blocker.write().await;
+
+        info!("applying this config: {:?}", config);
         // Apply nvidia block
         blocker.set_nvidia_setting(config.experimental_nvidia_block())?;
         // Apply file blocks
