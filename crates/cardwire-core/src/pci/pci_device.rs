@@ -1,10 +1,12 @@
-use crate::pci::{IommuError, PciDevice, is_iommu_enabled, read_iommu_groups};
+use crate::{
+    errors::Error as CardwireError, pci::{PciDevice, is_iommu_enabled, read_iommu_groups}
+};
 use log::{error, info, warn};
 use std::{
     collections::{BTreeMap, HashMap}, fs, fs::File, io, io::BufRead, path::Path
 };
 
-pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, IommuError> {
+pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, CardwireError> {
     match is_iommu_enabled() {
         true => {
             info!("IOMMU detected, reading pci devices using iommu dir");
@@ -17,13 +19,13 @@ pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, IommuError> {
     }
 }
 
-fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, IommuError> {
+fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, CardwireError> {
     let iommu_groups = read_iommu_groups()?;
     let pci_names = load_pci_name_db(Path::new("/usr/share/hwdata/pci.ids")).unwrap_or_else(|e| {
         warn!("Failed to load PCI name DB: {}", e);
         PciNameDb::default()
     });
-    let mut devices_map = BTreeMap::new();
+    let mut devices_map: BTreeMap<String, PciDevice> = BTreeMap::new();
     for (group_id, group) in iommu_groups {
         // read "device" folder, look at each PCI ADDRESS
         for pci_address in group.devices {
@@ -44,22 +46,24 @@ fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, IommuEr
                 .and_then(|(v, d)| pci_names.devices.get(&(v.clone(), d.clone())))
                 .cloned();
 
-            let device = PciDevice {
-                pci_address: pci_address.clone(),
-                iommu_group: Some(group_id),
+            let device = PciDevice::new(
+                pci_address.clone(),
+                Some(group_id),
                 vendor_id,
                 device_id,
                 vendor_name,
                 device_name,
-                driver: get_driver(&pci_address),
-                class: get_class(&pci_address),
-            };
+                get_driver(&pci_address),
+                get_class(&pci_address),
+                get_parent_pci(&pci_address, &devices_map),
+                get_child_pci(pci_address.clone()),
+            );
             devices_map.insert(pci_address, device);
         }
     }
     Ok(devices_map)
 }
-fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, IommuError> {
+fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, CardwireError> {
     let sysfs = Path::new("/sys/bus/pci/devices");
     let pci_names = load_pci_name_db(Path::new("/usr/share/hwdata/pci.ids")).unwrap_or_else(|e| {
         warn!("Failed to load PCI name DB: {}", e);
@@ -68,7 +72,7 @@ fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, IommuEr
     let mut devices_map = BTreeMap::new();
     let sysfs_dir = fs::read_dir(sysfs).map_err(|e| {
         error!("Failed to read sysfs PCI devices at {:?}: {}", sysfs, e);
-        IommuError::Io(e)
+        CardwireError::Io(e)
     })?;
     for folder in sysfs_dir.flatten() {
         let file_name = folder.file_name();
@@ -92,16 +96,18 @@ fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, IommuEr
             .and_then(|(v, d)| pci_names.devices.get(&(v.clone(), d.clone())))
             .cloned();
 
-        let device = PciDevice {
-            pci_address: name.to_string(),
-            iommu_group: None,
+        let device = PciDevice::new(
+            name.to_string(),
+            None,
             vendor_id,
             device_id,
             vendor_name,
             device_name,
-            driver: get_driver(name),
-            class: get_class(name),
-        };
+            get_driver(name),
+            get_class(name),
+            Some("truc".to_string()),
+            Some("truc".to_string()),
+        );
         devices_map.insert(name.to_string(), device);
     }
     Ok(devices_map)
@@ -216,4 +222,38 @@ fn normalize_device_id(raw: &str) -> String {
         .trim_start_matches("0x")
         .trim_start_matches("0X")
         .to_ascii_lowercase()
+}
+
+fn get_child_pci(pci: String) -> Option<String> {
+    let pci_path = Path::new("/sys/bus/pci/devices/").join(pci);
+    if !pci_path.exists() {
+        return None;
+    }
+
+    let pci_folder = fs::read_dir(pci_path).ok()?;
+
+    for entry in pci_folder {
+        let entry = entry.ok();
+        entry.as_ref()?;
+        match entry {
+            Some(file) => {
+                let file_string = file.file_name().into_string().unwrap_or("".to_string());
+                if file_string.starts_with("0000:") && !file_string.contains("pcie") {
+                    return Some(file_string);
+                }
+            }
+            None => break,
+        }
+    }
+
+    None
+}
+
+fn get_parent_pci(pci: &str, devices_map: &BTreeMap<String, PciDevice>) -> Option<String> {
+    for pci_device in devices_map.values() {
+        if pci_device.child_pci().as_deref() == Some(pci) {
+            return Some(pci_device.pci_address().to_string());
+        }
+    }
+    None
 }

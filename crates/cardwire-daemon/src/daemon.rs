@@ -1,6 +1,6 @@
 //! entry point of cardwired
-mod config;
 mod dbus;
+mod file;
 mod listeners;
 mod models;
 

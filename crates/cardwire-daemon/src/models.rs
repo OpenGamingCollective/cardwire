@@ -1,10 +1,10 @@
 //! where the struct and impl are declared
-use crate::config::{CardwireConfig, CardwireGpuState, CardwireModeState};
+use crate::file::{CardwireConfig, CardwireGpuState, CardwireModeState};
 use anyhow::{Context, Result};
 use cardwire_core::{
     gpu::{self, GpuBlocker, check_default_drm_class}, pci
 };
-use log::warn;
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt};
 use tokio::sync::RwLock;
@@ -17,11 +17,12 @@ const BLOCKED_PCI_FILES: &[&str] = &[
     "max_link_width",
     "current_link_width",
 ];
-// Files that get blocked when the vulkan block is on
+// Files that get blocked when the NVIDIA block is on
 const BLOCKED_NVIDIA_FILES: &[&str] = &[
     "libGLX_nvidia.so.0",
     "nvidia_icd.json",
     "nvidia_icd.x86_64.json",
+    "nvidiactl",
 ];
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default)]
@@ -59,7 +60,7 @@ pub struct DaemonState {
     pub config: RwLock<CardwireConfig>,
     pub gpu_state: RwLock<CardwireGpuState>,
     pub mode_state: RwLock<CardwireModeState>,
-    pub gpu_list: BTreeMap<usize, gpu::Gpu>,
+    pub gpu_list: BTreeMap<usize, gpu::GpuDevice>,
     pub ebpf_blocker: RwLock<GpuBlocker>,
     // for future uses, related to vfio
     pub pci_devices: BTreeMap<String, pci::PciDevice>,
@@ -118,15 +119,16 @@ impl Daemon {
         let config = self.state.config.read().await;
         let mode = self.state.mode_state.read().await;
         let mut blocker = self.state.ebpf_blocker.write().await;
-        // Apply vulkan block
-        blocker.set_vulkan_block(config.block_nvidia_vulkan())?;
 
+        info!("applying this config: {:?}", config);
+        // Apply nvidia block
+        blocker.set_nvidia_setting(config.experimental_nvidia_block())?;
         // Apply file blocks
         for file in BLOCKED_PCI_FILES {
             blocker.set_file_block(file)?;
         }
         for gpu in self.state.gpu_list.values() {
-            if gpu.is_nvidia() {
+            if gpu.nvidia() {
                 for file in BLOCKED_NVIDIA_FILES {
                     blocker.set_nvidia_file_block(file)?;
                 }

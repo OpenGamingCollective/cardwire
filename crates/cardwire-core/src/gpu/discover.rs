@@ -1,59 +1,51 @@
 //! Read a pci list and return a list of gpu
-use crate::{gpu::models::Gpu, pci::PciDevice};
+use crate::{gpu::models::GpuDevice, pci::PciDevice};
 use log::{info, warn};
 use std::{
     collections::{BTreeMap, HashMap}, fs, io, path::Path
 };
 
-pub fn read_gpu(pci_devices: &BTreeMap<String, PciDevice>) -> io::Result<BTreeMap<usize, Gpu>> {
-    let gpus: Vec<Gpu> = pci_devices
-        .values()
-        .filter(|device| {
-            device.class.as_deref() == Some("0x030000") || // VGA compatible controller
-            device.class.as_deref() == Some("0x030100") || // XGA compatible controller
-            device.class.as_deref() == Some("0x030200") || // 3D Controller
-            device.class.as_deref() == Some("0x038000") // Display controller
-        })
-        .filter_map(|device| match build_gpu(device) {
-            Ok(gpu) => Some(gpu),
-            Err(e) => {
-                warn!("Failed to build GPU for PCI {}: {}", device.pci_address, e);
-                None
-            }
-        })
-        .collect();
-
-    Ok(gpus
-        .into_iter()
-        .enumerate()
-        .map(|(id, mut gpu)| {
-            gpu.id = id as u32;
-            (id, gpu)
-        })
-        .collect())
+pub fn read_gpu(
+    pci_devices: &BTreeMap<String, PciDevice>,
+) -> io::Result<BTreeMap<usize, GpuDevice>> {
+    let mut gpus: BTreeMap<usize, GpuDevice> = BTreeMap::new();
+    let mut i = 0;
+    for device in pci_devices.values() {
+        match device.class().as_deref() {
+            Some("0x030000") => gpus.insert(i, build_gpu(device)?),
+            Some("0x030100") => gpus.insert(i, build_gpu(device)?),
+            Some("0x030200") => gpus.insert(i, build_gpu(device)?),
+            Some("0x038000") => gpus.insert(i, build_gpu(device)?),
+            Some(_) => continue,
+            None => continue,
+        };
+        if gpus.contains_key(&i) {
+            i += 1;
+        }
+    }
+    Ok(gpus)
 }
 
-fn build_gpu(device: &PciDevice) -> io::Result<Gpu> {
-    let nvidia: bool = device.vendor_id.as_deref() == Some("0x10de");
+fn build_gpu(device: &PciDevice) -> io::Result<GpuDevice> {
+    let nvidia: bool = device.vendor_id().as_deref() == Some("0x10de");
     let nvidia_minor: Option<u32> = if nvidia {
-        nvidia_get_minor(&device.pci_address)
+        nvidia_get_minor(device.pci_address())
     } else {
         None
     };
 
-    Ok(Gpu {
-        id: 0, // reassigned after sorting
-        name: device
-            .device_name
+    Ok(GpuDevice::new(
+        device
+            .device_name()
             .clone()
             .unwrap_or_else(|| "Unknown Device".to_string()),
-        pci: device.pci_address.clone(),
-        render: drm_node_path(&device.pci_address, "render")?,
-        card: drm_node_path(&device.pci_address, "card")?,
-        default: None,
+        device.clone(),
+        drm_node_path(device.pci_address(), "render")?,
+        drm_node_path(device.pci_address(), "card")?,
+        None,
         nvidia,
         nvidia_minor,
-    })
+    ))
 }
 /// Try to read from sysfs first, then fallback to udev /dev/dri
 /// with a sleep at each attempt so the system has time to spawn the drm nodes
@@ -149,7 +141,7 @@ fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
         .ok()
 }
 /// Method from kwin
-pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, Gpu>) -> io::Result<()> {
+pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io::Result<()> {
     let class_path = Path::new("/sys/class/drm");
     let mut drm_entries = Vec::new();
     if class_path.exists() {
@@ -184,7 +176,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, Gpu>) -> io::Resul
 
     for (id, gpu) in &mut *gpu_list {
         let mut stat = GpuStats::default();
-        let prefix = format!("card{}-", gpu.card);
+        let prefix = format!("card{}-", gpu.card());
         for name in &drm_entries {
             if let Some(drm) = name.strip_prefix(&prefix) {
                 let status_path = class_path.join(name).join("status");
@@ -212,7 +204,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, Gpu>) -> io::Resul
 
         info!(
             "gpu {} id: {} internal: {}, desktop: {}, connected: {}, total: {}, connected_internal: {}, connected_desktop: {}",
-            gpu.name,
+            gpu.name(),
             id,
             stat.internal_displays,
             stat.desktop_displays,
@@ -238,25 +230,22 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, Gpu>) -> io::Resul
         })
         .unzip();
 
-    for gpu in gpu_list.values_mut() {
-        if gpu.id == *default.0.unwrap() as u32 {
-            gpu.default = Some(true);
+    for (id, gpu) in &mut *gpu_list {
+        if id == default.0.unwrap() {
+            gpu.set_default(Some(true));
         } else {
-            gpu.default = Some(false);
+            gpu.set_default(Some(false));
         }
     }
 
     // Default GPU gets ID 0, rest ordered by PCI address
-    let mut gpus: Vec<Gpu> = std::mem::take(gpu_list).into_values().collect();
-    gpus.sort_by(|a, b| b.default.cmp(&a.default).then(a.pci.cmp(&b.pci)));
-    *gpu_list = gpus
-        .into_iter()
-        .enumerate()
-        .map(|(id, mut gpu)| {
-            gpu.id = id as u32;
-            (id, gpu)
-        })
-        .collect();
+    let mut gpus: Vec<GpuDevice> = std::mem::take(gpu_list).into_values().collect();
+    gpus.sort_by(|a, b| {
+        b.default()
+            .cmp(&a.default())
+            .then(a.pci.pci_address().cmp(b.pci.pci_address()))
+    });
+    *gpu_list = gpus.into_iter().enumerate().collect();
 
     Ok(())
 }

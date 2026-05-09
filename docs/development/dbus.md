@@ -63,6 +63,8 @@ List all detected PCI devices
 - `device_name`: `s` -- Device name (empty string if unknown)
 - `driver`: `s` -- Kernel driver in use (empty string if unknown)
 - `class`: `s` -- PCI class (empty string if unknown)
+- `parent_pci` : `s` -- Parent PCI (empty string if unknown)
+- `child_pci` : `s` -- Parent PCI (empty string if unknown)
 
 ## Properties
 

@@ -8,11 +8,12 @@ using AUR:
 yay -S cardwire
 ```
 
-then enable the service and reboot
+then enable and start the service 
 
 ```bash
 sudo systemctl enable cardwired.service
-reboot
+
+sudo systemctl start cardwired.service
 ```
 
 > [!NOTE]
@@ -44,12 +45,14 @@ services.cardwire.enable = true;
 
 ## Fedora
 
-Using the offical copr:
+Using Terra
 
 ```bash
-sudo dnf copr enable luytan/cardwire
-
 sudo dnf install cardwire
+
+sudo systemctl enable cardwired.service
+
+sudo systemctl start cardwired.service
 ```
 
 ## Other distros

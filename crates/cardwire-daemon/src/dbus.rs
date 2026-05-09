@@ -22,6 +22,7 @@ impl Daemon {
             warn!("mode couldn't be saved to config: {e}");
         }
         let mut blocker = self.state.ebpf_blocker.write().await;
+        let pci_list = &self.state.pci_devices;
 
         match mode {
             // Integrated/Hybrid only works on laptop with two gpus, will refuse if the computer has
@@ -40,7 +41,7 @@ impl Daemon {
                 // Loop to find the non default gpu and block it,
                 for gpu in self.state.gpu_list.values() {
                     if !gpu.is_default() {
-                        block_gpu(&mut blocker, gpu, mode == Modes::Integrated)
+                        block_gpu(&mut blocker, gpu, mode == Modes::Integrated, pci_list)
                             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
                     };
                 }
@@ -50,22 +51,24 @@ impl Daemon {
             Modes::Manual => {
                 let config = self.state.config.read().await;
                 let gpu_state = self.state.gpu_state.read().await;
-                for gpu in self.state.gpu_list.values() {
-                    if gpu_state.gpu_block_state(&gpu.pci) && config.auto_apply_gpu_state() {
+                for (id, gpu) in &self.state.gpu_list {
+                    if gpu_state.gpu_block_state(&gpu.pci.pci_address().to_string())
+                        && config.auto_apply_gpu_state()
+                    {
                         if gpu.is_default() {
                             error!(
                                 "cannot set block state for GPU {}: device is marked as default",
-                                gpu.id
+                                id
                             );
                             // For safety, unblock if default
-                            block_gpu(&mut blocker, gpu, false)
+                            block_gpu(&mut blocker, gpu, false, pci_list)
                                 .map_err(|e| fdo::Error::Failed(e.to_string()))?;
                         } else {
-                            block_gpu(&mut blocker, gpu, true)
+                            block_gpu(&mut blocker, gpu, true, pci_list)
                                 .map_err(|e| fdo::Error::Failed(e.to_string()))?;
                         }
                     } else {
-                        block_gpu(&mut blocker, gpu, false)
+                        block_gpu(&mut blocker, gpu, false, pci_list)
                             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
                     }
                 }
@@ -93,6 +96,7 @@ impl Daemon {
         }
         let mut blocker = self.state.ebpf_blocker.write().await;
         let mut gpu_state = self.state.gpu_state.write().await;
+        let pci_list = &self.state.pci_devices;
         let gpu = self
             .state
             .gpu_list
@@ -106,7 +110,8 @@ impl Daemon {
                 gpu_id
             );
             // for safety, unblock if default & save
-            block_gpu(&mut blocker, gpu, false).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+            block_gpu(&mut blocker, gpu, false, pci_list)
+                .map_err(|e| fdo::Error::Failed(e.to_string()))?;
             if let Err(e) = gpu_state.save_state(&self.state.gpu_list, &blocker).await {
                 warn!("could not save gpu_state to file: {e}");
             }
@@ -116,9 +121,15 @@ impl Daemon {
             )));
         }
 
-        block_gpu(&mut blocker, gpu, block).map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        block_gpu(&mut blocker, gpu, block, pci_list)
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
-        info!("Set GPU {} ({}) block={}", gpu_id, gpu.pci_address(), block);
+        info!(
+            "Set GPU {} ({}) block={}",
+            gpu_id,
+            gpu.pci.pci_address(),
+            block
+        );
         if let Err(e) = gpu_state.save_state(&self.state.gpu_list, &blocker).await {
             warn!("could not save gpu_state to file: {e}");
         }
@@ -131,14 +142,14 @@ impl Daemon {
         let mut dbus_list: BTreeMap<usize, DbusGpuDevice> = BTreeMap::new();
         for (id, gpu) in list {
             let temp_gpu = DbusGpuDevice {
-                id: gpu.id,
-                pci: gpu.pci.clone(),
-                render: gpu.render,
-                name: gpu.name.clone(),
-                card: gpu.card,
-                default: gpu.default.unwrap_or(false),
+                id: id as u32,
+                pci: gpu.pci.pci_address().to_string(),
+                render: *gpu.render(),
+                name: gpu.name().to_string(),
+                card: *gpu.card(),
+                default: gpu.default().unwrap_or(false),
                 blocked: is_gpu_blocked(&blocker, &gpu).unwrap_or(false),
-                nvidia: gpu.is_nvidia(),
+                nvidia: gpu.nvidia(),
                 nvidia_minor: if gpu.nvidia_minor().is_some() {
                     gpu.nvidia_minor().unwrap().to_string()
                 } else {
@@ -155,18 +166,20 @@ impl Daemon {
         let mut dbus_list: BTreeMap<String, DbusPciDevice> = BTreeMap::new();
         for (id, pci) in pci_list {
             let temp_pci = DbusPciDevice {
-                pci_address: pci.pci_address.clone(),
-                iommu_group: if let Some(iommu) = pci.iommu_group {
+                pci_address: pci.pci_address().to_string(),
+                iommu_group: if let Some(iommu) = pci.iommu_group() {
                     iommu.to_string()
                 } else {
                     "".to_string()
                 },
-                vendor_id: pci.vendor_id.clone().unwrap_or("".to_string()),
-                device_id: pci.device_id.clone().unwrap_or("".to_string()),
-                vendor_name: pci.vendor_name.clone().unwrap_or("".to_string()),
-                device_name: pci.device_name.clone().unwrap_or("".to_string()),
-                driver: pci.driver.clone().unwrap_or("".to_string()),
-                class: pci.class.clone().unwrap_or("".to_string()),
+                vendor_id: pci.vendor_id().clone().unwrap_or("".to_string()),
+                device_id: pci.device_id().clone().unwrap_or("".to_string()),
+                vendor_name: pci.vendor_name().clone().unwrap_or("".to_string()),
+                device_name: pci.device_name().clone().unwrap_or("".to_string()),
+                driver: pci.driver().clone().unwrap_or("".to_string()),
+                class: pci.class().clone().unwrap_or("".to_string()),
+                parent_pci: pci.parent_pci().clone().unwrap_or("".to_string()),
+                child_pci: pci.child_pci().clone().unwrap_or("".to_string()),
             };
             dbus_list.insert(id.clone(), temp_pci);
         }
