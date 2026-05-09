@@ -1,6 +1,6 @@
 //! helper to manage cardwired configs, include the user config .toml, and the .json states like
 //! gpu, mode or pci
-use crate::file::{CardwireConfig, CardwireGpuState, CardwireGpuUnit, CardwireModeState};
+use crate::file::{CardwireConfig, CardwireGpuUnit, CardwireModeState};
 use anyhow::{Context, Ok};
 use std::{collections::BTreeMap, fs, io};
 const CONFIG_PATH: &str = "/etc/cardwire";
