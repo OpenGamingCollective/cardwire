@@ -1,5 +1,5 @@
 //! where the struct and impl are declared
-use crate::config::{CardwireConfig, CardwireGpuState, CardwireModeState};
+use crate::file::{CardwireConfig, CardwireGpuState, CardwireModeState};
 use anyhow::{Context, Result};
 use cardwire_core::{
     gpu::{self, GpuBlocker, check_default_drm_class}, pci
