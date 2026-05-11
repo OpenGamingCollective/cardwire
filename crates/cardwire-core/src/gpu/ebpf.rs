@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 
 use crate::{errors::Error as CardwireError, gpu::models::GpuDevice, pci::PciDevice};
 use cardwire_ebpf::EbpfBlocker;
+use log::{info, warn};
 
 pub struct GpuBlocker {
     inner: EbpfBlocker,
@@ -74,7 +75,7 @@ pub fn block_gpu(
     if block {
         blocker.inner.block_card(card_id)?;
         blocker.inner.block_render(render_id)?;
-        recursive_block_pci(blocker, gpu, pci_list)?;
+        chain_block_pci(blocker, gpu, pci_list)?;
         if gpu.nvidia() {
             blocker.inner.block_nvidia(gpu.nvidia_minor().unwrap())?
         }
@@ -82,7 +83,7 @@ pub fn block_gpu(
     } else {
         blocker.inner.unblock_card(card_id)?;
         blocker.inner.unblock_render(render_id)?;
-        recursive_unblock_pci(blocker, gpu, pci_list)?;
+        chain_unblock_pci(blocker, gpu, pci_list)?;
         if gpu.nvidia() {
             blocker.inner.unblock_nvidia(gpu.nvidia_minor().unwrap())?
         }
@@ -90,44 +91,42 @@ pub fn block_gpu(
     }
 }
 
-fn recursive_block_pci(
+fn chain_block_pci(
     blocker: &mut GpuBlocker,
     gpu: &GpuDevice,
     pci_list: &BTreeMap<String, PciDevice>,
 ) -> Result<(), CardwireError> {
     // Block the gpu pci
     blocker.inner.block_pci(gpu.pci.pci_address())?;
+    info!("blocking pci: {}", gpu.pci.pci_address());
     // also block audio card
     if gpu.pci.pci_address().ends_with(".0") {
-        let gpu_audio_adress = gpu.pci.pci_address().to_string().replace(".0", ".1");
+        let gpu_audio_adress = gpu.pci.pci_address().replace(".0", ".1");
         blocker.inner.block_pci(&gpu_audio_adress)?;
     }
     // Check if gpu has a parent pci
-    if gpu.pci.parent_pci().is_some() {
-        // first pci to block
-        let mut parent_pci: String = gpu.pci.parent_pci().clone().unwrap();
-        loop {
-            // Also block the parent pci
-            if let Some(pci_device) = pci_list.get(&parent_pci) {
-                blocker.inner.block_pci(pci_device.pci_address())?;
-                if pci_device.parent_pci().is_some() {
-                    // if the device contain a parent, continue the loop
-                    parent_pci = pci_device.parent_pci().clone().unwrap()
-                } else {
-                    // if no parent. exit the loop
-                    break;
-                }
-            }
+    // first pci to block
+    let mut current_parent = gpu.pci.parent_pci().clone();
+
+    while let Some(parent_pci) = current_parent {
+        if let Some(pci_device) = pci_list.get(&parent_pci) {
+            info!("chain blocking pci: {}", gpu.pci.pci_address());
+            blocker.inner.block_pci(pci_device.pci_address())?;
+            current_parent = pci_device.parent_pci().clone();
+        } else {
+            warn!("expected parent pci {} not found in pci_list", parent_pci);
+            break;
         }
     }
     Ok(())
 }
-fn recursive_unblock_pci(
+fn chain_unblock_pci(
     blocker: &mut GpuBlocker,
     gpu: &GpuDevice,
     pci_list: &BTreeMap<String, PciDevice>,
 ) -> Result<(), CardwireError> {
     // Unblock the gpu pci
+    info!("unblocking pci: {}", gpu.pci.pci_address());
     blocker.inner.unblock_pci(gpu.pci.pci_address())?;
     // also unblock audio card
     if gpu.pci.pci_address().ends_with(".0") {
@@ -135,21 +134,17 @@ fn recursive_unblock_pci(
         blocker.inner.block_pci(&gpu_audio_adress)?;
     }
     // Check if gpu has a parent pci
-    if gpu.pci.parent_pci().is_some() {
-        // first pci to block
-        let mut parent_pci: String = gpu.pci.parent_pci().clone().unwrap();
-        loop {
-            // Also block the parent pci
-            if let Some(pci_device) = pci_list.get(&parent_pci) {
-                blocker.inner.unblock_pci(pci_device.pci_address())?;
-                if pci_device.parent_pci().is_some() {
-                    // if the device contain a parent, continue the loop
-                    parent_pci = pci_device.parent_pci().clone().unwrap()
-                } else {
-                    // if no parent. exit the loop
-                    break;
-                }
-            }
+    // first pci to block
+    let mut current_parent = gpu.pci.parent_pci().clone();
+
+    while let Some(parent_pci) = current_parent {
+        if let Some(pci_device) = pci_list.get(&parent_pci) {
+            info!("chain unblocking pci: {}", gpu.pci.pci_address());
+            blocker.inner.unblock_pci(pci_device.pci_address())?;
+            current_parent = pci_device.parent_pci().clone();
+        } else {
+            warn!("expected parent pci {} not found in pci_list", parent_pci);
+            break;
         }
     }
     Ok(())
