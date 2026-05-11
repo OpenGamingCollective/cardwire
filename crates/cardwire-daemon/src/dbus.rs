@@ -18,9 +18,6 @@ impl Daemon {
         // Valide inputs and turn into a Modes
         let mode = Modes::parse(&mode)?;
         let mut current_mode = self.state.mode_state.write().await;
-        if let Err(e) = current_mode.save_state(mode).await {
-            warn!("mode couldn't be saved to config: {e}");
-        }
         let mut blocker = self.state.ebpf_blocker.write().await;
         let pci_list = &self.state.pci_devices;
 
@@ -73,6 +70,9 @@ impl Daemon {
                     }
                 }
             }
+        }
+        if let Err(e) = current_mode.save_state(mode).await {
+            warn!("mode couldn't be saved to config: {e}");
         }
         info!("Switched to {}", mode);
         Ok(())
