@@ -4,7 +4,14 @@
 }:
 {
   # Cardwire stuffs
-  services.cardwire.enable = true;
+  services.cardwire = {
+    enable = true;
+    settings = {
+      auto_apply_gpu_state = true;
+      experimental_nvidia_block = true;
+      battery_auto_switch = true;
+    };
+  };
   services.dbus.enable = true;
   # VM stuffs
   boot.loader.systemd-boot.enable = true;
