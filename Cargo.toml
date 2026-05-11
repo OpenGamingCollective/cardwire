@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.7.1"
 authors = ["luytan <luytan@khora.me>"]
 repository = "https://github.com/OpenGamingCollective/cardwire"
 edition = "2024"
