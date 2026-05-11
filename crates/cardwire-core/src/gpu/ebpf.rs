@@ -110,7 +110,7 @@ fn chain_block_pci(
 
     while let Some(parent_pci) = current_parent {
         if let Some(pci_device) = pci_list.get(&parent_pci) {
-            info!("chain blocking pci: {}", gpu.pci.pci_address());
+            info!("chain blocking pci: {}", pci_device.pci_address());
             blocker.inner.block_pci(pci_device.pci_address())?;
             current_parent = pci_device.parent_pci().clone();
         } else {
@@ -139,7 +139,7 @@ fn chain_unblock_pci(
 
     while let Some(parent_pci) = current_parent {
         if let Some(pci_device) = pci_list.get(&parent_pci) {
-            info!("chain unblocking pci: {}", gpu.pci.pci_address());
+            info!("chain unblocking pci: {}", pci_device.pci_address());
             blocker.inner.unblock_pci(pci_device.pci_address())?;
             current_parent = pci_device.parent_pci().clone();
         } else {
