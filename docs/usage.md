@@ -9,7 +9,7 @@ cardwire list
 ```
 
 For each detected GPU, the command will return:
-- An identifier (`ID`) (used for manual blocking and unblocking)
+- An identifier (`ID`). These are used for manual blocking and unblocking. 
 - The GPU's name (`NAME`)
 - The GPU's PCI address (`PCI`) 
 - The associated render node (`RENDER`)
@@ -21,7 +21,7 @@ For each detected GPU, the command will return:
 
 GPU modes can be switched using the `cardwire set` command. 
 
-To have carwdire block all GPUs except the default GPU, use: 
+To have cardwire block all GPUs except the default GPU, use: 
 
 ```
 cardwire set integrated
