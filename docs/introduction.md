@@ -1,11 +1,11 @@
 # Introduction
 
-Cardwire is GPU manager for linux that uses eBPF LSM hooks to block GPUs
+Cardwire is GPU manager for Linux systems with Hybrid GPU configurations which allows users to smoothly and safely switch between "integrated" and "hybrid" GPU modes. It was created as a successor to the deprecated [supergfxctl](https://gitlab.com/asus-linux/supergfxctl) project.
 
-It was made to be a successor to the deprecated supergfxctl
+In "Integrated" mode, cardwire uses eBPF LSM hooks to block applications from accessing dedicated GPUs. This saves power by preventing the GPU from being woken up and allowing it to enter an extremely energy-efficient sleep state (`D3Cold`). In "Hybrid" mode, these blocks are removed and the system functions as it usually would. Switching is fast and does not require reboots or logouts to take effect. 
 
 > [!CAUTION]
-> Cardwire is in an early development stage, expect breaking changes and unstability.
+> Cardwire is in an early development stage, expect breaking changes and instability.
 
 ## Getting Started
 
