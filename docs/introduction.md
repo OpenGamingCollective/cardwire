@@ -9,4 +9,4 @@ In "Integrated" mode, cardwire uses eBPF LSM hooks to block applications from ac
 
 ## Getting Started
 
-Before proceeding, take a look at the [requirements](getting-started/requirements.md) to make sure your system is supported.
+To get started with cardwire, please take a look at the [requirements](getting-started/requirements.md) to make sure your system is supported, and then head over to [the installation instructions](getting-started/installation.md) 
