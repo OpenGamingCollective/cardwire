@@ -8,7 +8,7 @@ using AUR:
 yay -S cardwire
 ```
 
-then enable and start the service 
+then enable and start the service
 
 ```bash
 sudo systemctl enable cardwired.service
@@ -40,7 +40,14 @@ configuration.nix:
 ```nix
 imports = [ inputs.cardwire.nixosModules.default ];
 
-services.cardwire.enable = true;
+services.cardwire = {
+enable = true;
+settings = {
+    auto_apply_gpu_state = true;
+    experimental_nvidia_block = true;
+    battery_auto_switch = true;
+};
+};
 ```
 
 ## Fedora
