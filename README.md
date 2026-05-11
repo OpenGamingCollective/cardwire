@@ -60,6 +60,16 @@ battery_auto_switch = false
 
 `experimental_nvidia_block` is an experimental feature that blocks specifics NVIDIA's files, must be used with caution
 
+## Community projects:
+_for issues related to these projects, please report to their respective repo_
+
+
+GNOME extension (by Moxuz):
+https://extensions.gnome.org/extension/9919/cardwire-gpu-toggle/
+
+Cardwire-tray (by SeawolfTony):
+https://github.com/JuanDelPueblo/cardwire-tray
+
 
 ## How it works
 
