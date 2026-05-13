@@ -131,7 +131,7 @@ fn chain_unblock_pci(
     // also unblock audio card
     if gpu.pci.pci_address().ends_with(".0") {
         let gpu_audio_adress = gpu.pci.pci_address().to_string().replace(".0", ".1");
-        blocker.inner.block_pci(&gpu_audio_adress)?;
+        blocker.inner.unblock_pci(&gpu_audio_adress)?;
     }
     // Check if gpu has a parent pci
     // first pci to block
