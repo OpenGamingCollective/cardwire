@@ -6,6 +6,9 @@
 - [Requirements](getting-started/requirements.md)
 - [Installation](getting-started/installation.md)
 
+# Usage
+- [Usage](usage.md)
+
 # Diagnostics
 
 - [Troubleshooting](diagnostics/troubleshooting.md)
