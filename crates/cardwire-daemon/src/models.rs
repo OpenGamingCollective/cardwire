@@ -23,6 +23,7 @@ const BLOCKED_NVIDIA_FILES: &[&str] = &[
     "nvidia_icd.json",
     "nvidia_icd.x86_64.json",
     "nvidiactl",
+    "nvidia_0",
 ];
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default)]
