@@ -68,10 +68,25 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Gpu { id, action } => {
-            match client.set_gpu_block(id, action.block).await {
-                Ok(_) => println!("Mode has been set to {} on GPU {}", action.block, id),
-                Err(e) => handle_error(e),
-            };
+            if action.status {
+                // Handle --status
+                match client.get_status(id).await {
+                    Ok(status) => println!("GPU {} status: {}", id, status),
+                    Err(e) => handle_error(e),
+                };
+            } else if action.block {
+                // Handle --block
+                match client.set_gpu_block(id, true).await {
+                    Ok(_) => println!("GPU {} has been blocked", id),
+                    Err(e) => handle_error(e),
+                };
+            } else if action.unblock {
+                // Handle --unblock
+                match client.set_gpu_block(id, false).await {
+                    Ok(_) => println!("GPU {} has been unblocked", id),
+                    Err(e) => handle_error(e),
+                };
+            }
         }
         _ => {}
     }

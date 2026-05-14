@@ -6,6 +6,7 @@ use cardwire_core::{
     gpu::{DbusGpuDevice, block_gpu, is_gpu_blocked}, pci::DbusPciDevice
 };
 use log::{error, info, warn};
+use tokio::fs;
 use zbus::{fdo, interface};
 
 #[interface(name = "com.github.opengamingcollective.cardwire")]
@@ -185,5 +186,21 @@ impl Daemon {
         }
 
         Ok(dbus_list)
+    }
+
+    pub async fn get_status(&self, gpu_id: u32) -> fdo::Result<String> {
+        let gpu = self
+            .state
+            .gpu_list
+            .get(&(gpu_id as usize))
+            .ok_or_else(|| fdo::Error::InvalidArgs(format!("Unknown GPU id: {}", gpu_id)))?;
+        let gpu_pci = gpu.pci.pci_address();
+        let power_state =
+            fs::read_to_string(format!("/sys/bus/pci/devices/{gpu_pci}/power_state")).await;
+        if let Ok(state) = power_state {
+            Ok(state)
+        } else {
+            Err(fdo::Error::Failed("Couldn't read power_state".to_string()))
+        }
     }
 }

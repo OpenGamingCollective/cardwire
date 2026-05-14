@@ -69,4 +69,7 @@ pub struct GpuAction {
 
     #[arg(long, help = "Unblock a specific gpu")]
     pub unblock: bool,
+
+    #[arg(long, help = "Get gpu status")]
+    pub status: bool,
 }
