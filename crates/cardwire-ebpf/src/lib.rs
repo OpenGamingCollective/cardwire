@@ -11,9 +11,11 @@ pub struct EbpfBlocker {
 
 impl EbpfBlocker {
     pub fn new() -> CardwireEbpfResult<Self> {
+        // quit if bpf is not enabled
         if !Self::is_bpf_enabled() {
             return Err(CardwireEbpfError::LSMNotEnabled);
         }
+        // load the program from the .o
         let mut ebpf = match Ebpf::load(aya::include_bytes_aligned!(concat!(
             env!("OUT_DIR"),
             "/bpf.o"
@@ -24,42 +26,16 @@ impl EbpfBlocker {
 
         let btf = Btf::from_sys_fs().map_err(CardwireEbpfError::aya)?;
 
-        let program_file_open: &mut Lsm = ebpf
-            .program_mut("file_open")
-            .ok_or_else(|| Self::missing_entity("program", "file_open"))?
-            .try_into()
-            .map_err(CardwireEbpfError::aya)?;
-        program_file_open
-            .load("file_open", &btf)
-            .map_err(CardwireEbpfError::aya)?;
-        program_file_open.attach().map_err(CardwireEbpfError::aya)?;
-
-        // For lsm/inode_permission
-        let program_inode_permission: &mut Lsm = ebpf
-            .program_mut("inode_permission")
-            .ok_or_else(|| Self::missing_entity("program", "inode_permission"))?
-            .try_into()
-            .map_err(CardwireEbpfError::aya)?;
-        program_inode_permission
-            .load("inode_permission", &btf)
-            .map_err(CardwireEbpfError::aya)?;
-        program_inode_permission
-            .attach()
-            .map_err(CardwireEbpfError::aya)?;
-
-        // For lsm/inode_getattr
-        let program_inode_getattr: &mut Lsm = ebpf
-            .program_mut("inode_getattr")
-            .ok_or_else(|| Self::missing_entity("program", "inode_getattr"))?
-            .try_into()
-            .map_err(CardwireEbpfError::aya)?;
-        program_inode_getattr
-            .load("inode_getattr", &btf)
-            .map_err(CardwireEbpfError::aya)?;
-        program_inode_getattr
-            .attach()
-            .map_err(CardwireEbpfError::aya)?;
-
+        let load_list: [&str; 3] = ["file_open", "inode_permission", "inode_getattr"];
+        for entity in load_list {
+            let program: &mut Lsm = ebpf
+                .program_mut(entity)
+                .ok_or_else(|| Self::missing_entity("program", entity))?
+                .try_into()
+                .map_err(CardwireEbpfError::aya)?;
+            program.load(entity, &btf).map_err(CardwireEbpfError::aya)?;
+            program.attach().map_err(CardwireEbpfError::aya)?;
+        }
         Ok(Self { ebpf })
     }
 
