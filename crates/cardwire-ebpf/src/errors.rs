@@ -11,16 +11,19 @@ pub enum CardwireEbpfError {
     #[error("couldn't load ebpf: {0}")]
     EbpfLoadError(String),
     #[error("missing {kind}: {name}")]
-    MissingEntity { kind: String, name: String },
-    #[error("aya error: {0}")]
+    MissingLsm { kind: String, name: String },
+    // for block/unblock, used if passed String is not in a pci format for example
+    #[error("wrong format, expected {kind} got: {input}")]
+    WrongFormat { kind: String, input: String },
+    #[error("{0}")]
     Aya(String),
     #[error("{0}")]
     Other(String),
 }
 
 impl CardwireEbpfError {
-    pub fn missing_entity(kind: &str, name: &str) -> Self {
-        Self::MissingEntity {
+    pub fn missing_lsm(kind: &str, name: &str) -> Self {
+        Self::MissingLsm {
             kind: kind.to_string(),
             name: name.to_string(),
         }

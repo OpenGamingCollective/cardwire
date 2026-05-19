@@ -73,19 +73,42 @@ pub fn block_gpu(
     let render_id = *gpu.render();
 
     if block {
-        blocker.inner.block_card(card_id)?;
-        blocker.inner.block_render(render_id)?;
+        //blocker.inner.block_card(card_id)?;
+        // block card
+        blocker
+            .inner
+            .block_kind(&card_id.to_string(), cardwire_ebpf::BlockKind::Card)?;
+        // block render
+        blocker
+            .inner
+            .block_kind(&render_id.to_string(), cardwire_ebpf::BlockKind::Render)?;
+        // block pci
         chain_block_pci(blocker, gpu, pci_list)?;
+        // block nvidia
         if gpu.nvidia() {
-            blocker.inner.block_nvidia(gpu.nvidia_minor().unwrap())?
+            blocker.inner.block_kind(
+                &gpu.nvidia_minor().unwrap().to_string(),
+                cardwire_ebpf::BlockKind::Nvidia,
+            )?;
         }
         Ok(())
     } else {
-        blocker.inner.unblock_card(card_id)?;
-        blocker.inner.unblock_render(render_id)?;
+        // unblock card
+        blocker
+            .inner
+            .unblock_kind(&card_id.to_string(), cardwire_ebpf::BlockKind::Card)?;
+        // unblock render
+        blocker
+            .inner
+            .unblock_kind(&render_id.to_string(), cardwire_ebpf::BlockKind::Render)?;
+        // unblock pci
         chain_unblock_pci(blocker, gpu, pci_list)?;
+        // unblock nvidia
         if gpu.nvidia() {
-            blocker.inner.unblock_nvidia(gpu.nvidia_minor().unwrap())?
+            blocker.inner.unblock_kind(
+                &gpu.nvidia_minor().unwrap().to_string(),
+                cardwire_ebpf::BlockKind::Nvidia,
+            )?;
         }
         Ok(())
     }
