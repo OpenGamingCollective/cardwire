@@ -34,8 +34,17 @@ impl<'a> DaemonClient<'a> {
         self.proxy.call("ListDevicesPci", &()).await
     }
 
-    pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::Result<()> {
-        self.proxy.call("SetGpuBlock", &(id, blocked)).await
+    pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::fdo::Result<()> {
+        let path = format!("/com/github/opengamingcollective/cardwire/gpu/{}", id);
+        let block_proxy = zbus::Proxy::new(
+            self.proxy.connection(),
+            "com.github.opengamingcollective.cardwire", // Destination
+            path.as_str(),                              // The new dynamic path
+            "com.github.opengamingcollective.cardwire.gpu", // Interface name
+        )
+        .await
+        .map_err(|e| zbus::fdo::Error::Failed(format!("Failed to create proxy: {}", e)))?;
+        block_proxy.set_property("Block", &(blocked)).await
     }
     pub async fn get_status(&self, id: u32) -> zbus::Result<String> {
         self.proxy.call("GetStatus", &id).await

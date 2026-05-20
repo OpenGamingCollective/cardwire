@@ -1,12 +1,12 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use anyhow::{Context, Error};
 use cardwire_core::{
     gpu::{GpuBlocker, GpuDevice, block_gpu, is_gpu_blocked}, pci::PciDevice
 };
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
+#[derive(Clone)]
 pub struct Gpu {
     pub device: GpuDevice,
     blocker: Arc<RwLock<GpuBlocker>>,
@@ -14,30 +14,35 @@ pub struct Gpu {
     blocked: bool,
 }
 
-impl Gpu {
+#[derive(Clone)]
+pub struct GpuState {
+    pub inner: Arc<RwLock<Gpu>>,
+}
+
+impl GpuState {
     pub fn new(
         blocker: Arc<RwLock<GpuBlocker>>,
         device: GpuDevice,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     ) -> Self {
         Self {
-            device,
-            blocker,
-            pci_list,
-            blocked: false,
+            inner: Arc::new(RwLock::new(Gpu {
+                device,
+                blocker,
+                pci_list,
+                blocked: false,
+            })),
         }
     }
-
+}
+impl Gpu {
     // block the gpu
     pub async fn block_gpu(&mut self) -> fdo::Result<()> {
         let mut blocker = self.blocker.write().await;
-        let gpu = &self.device;
         let pci_list = self.pci_list.read().await;
-
-        println!("blocking gpu {}, with {}", gpu.name(), true);
-        block_gpu(&mut blocker, gpu, true, &pci_list)
+        block_gpu(&mut blocker, &self.device, true, &pci_list)
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        if let Ok(result) = is_gpu_blocked(&blocker, &gpu) {
+        if let Ok(result) = is_gpu_blocked(&blocker, &self.device) {
             if !result {
                 return Err(fdo::Error::Failed(
                     "gpu is supposed to be blocked, bpf says it's not".to_string(),
@@ -51,12 +56,11 @@ impl Gpu {
     // unblock the gpu
     pub async fn unblock_gpu(&mut self) -> fdo::Result<()> {
         let mut blocker = self.blocker.write().await;
-        let gpu = &self.device;
         let pci_list = self.pci_list.read().await;
 
-        block_gpu(&mut blocker, gpu, false, &pci_list)
+        block_gpu(&mut blocker, &self.device, false, &pci_list)
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        if let Ok(result) = is_gpu_blocked(&blocker, &gpu) {
+        if let Ok(result) = is_gpu_blocked(&blocker, &self.device) {
             if result {
                 return Err(fdo::Error::Failed(
                     "gpu is supposed to be unblocked, bpf says it's not".to_string(),
@@ -73,15 +77,20 @@ impl Gpu {
 }
 
 #[interface(name = "com.github.opengamingcollective.cardwire.gpu")]
-
-impl Gpu {
+impl GpuState {
     #[zbus(property)]
-    pub async fn set_block(&self, block: bool) -> fdo::Result<()> {
-        Ok(())
+    pub async fn set_block(&mut self, block: bool) -> fdo::Result<()> {
+        let mut state = self.inner.write().await;
+        if block {
+            state.block_gpu().await
+        } else {
+            state.unblock_gpu().await
+        }
     }
 
     #[zbus(property)]
     pub async fn block(&self) -> fdo::Result<bool> {
-        Ok(true)
+        let state = self.inner.read().await;
+        Ok(state.blocked())
     }
 }

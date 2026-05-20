@@ -1,6 +1,6 @@
 //! where the struct and impl are declared
 use crate::{
-    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, gpu_dbus::Gpu
+    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, gpu_dbus::{Gpu, GpuState}
 };
 use anyhow::{Context, Result};
 use cardwire_core::{
@@ -60,37 +60,27 @@ impl Modes {
     }
 }
 
-pub struct DaemonState {
-    // these are file related
-    pub gpu_state: RwLock<CardwireGpuState>,
-    pub mode_state: RwLock<CardwireModeState>,
-    // temp data
-    pub gpu_list: BTreeMap<usize, Gpu>,
-    pub ebpf_blocker: RwLock<GpuBlocker>,
-    // for future uses, related to vfio
-    pub pci_devices: BTreeMap<String, pci::PciDevice>,
-}
+#[derive(Clone)]
 pub struct ModeState {
     pub mode_config: Arc<RwLock<CardwireModeState>>,
-    pub gpu_list: Arc<RwLock<BTreeMap<usize, Gpu>>>,
+    pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuState>>>,
     pub config: Arc<RwLock<CardwireConfig>>,
 }
-
+#[derive(Clone)]
 pub struct ConfigState {
     pub config: Arc<RwLock<CardwireConfig>>,
 }
-pub struct GpuState {
-    pub mode_config: Arc<RwLock<CardwireModeState>>,
-    pub gpu_list: Arc<RwLock<BTreeMap<usize, Gpu>>>,
-}
+#[derive(Clone)]
 pub struct PciState {
     pub pci_list: Arc<RwLock<BTreeMap<String, pci::PciDevice>>>,
 }
+
+#[derive(Clone)]
 pub struct Daemon {
     pub mode_state: ModeState,
-    pub gpu_state: GpuState,
     pub config_state: ConfigState,
     pub pci_state: PciState,
+    pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuState>>>,
 }
 
 impl Daemon {
@@ -114,20 +104,14 @@ impl Daemon {
         // Exit if ebpf returns an error
         let blocker = Arc::new(RwLock::new(GpuBlocker::new()?));
         // create gpu list
-        let mut new_gpu_list: BTreeMap<usize, Gpu> = BTreeMap::new();
+        let mut new_gpu_list: BTreeMap<usize, GpuState> = BTreeMap::new();
         for (id, gpu) in gpu_list {
             new_gpu_list.insert(
                 id,
-                Gpu::new(Arc::clone(&blocker), gpu, Arc::clone(&pci_list)),
+                GpuState::new(Arc::clone(&blocker), gpu, Arc::clone(&pci_list)),
             );
         }
-        let gpu_list: Arc<RwLock<BTreeMap<usize, Gpu>>> = Arc::new(RwLock::new(new_gpu_list));
-
-        // Create GpuState
-        let gpu_state: GpuState = GpuState {
-            mode_config: Arc::clone(&mode_config),
-            gpu_list: Arc::clone(&gpu_list),
-        };
+        let gpu_list: Arc<RwLock<BTreeMap<usize, GpuState>>> = Arc::new(RwLock::new(new_gpu_list));
 
         let mode_state: ModeState = ModeState {
             mode_config: Arc::clone(&mode_config),
@@ -143,9 +127,9 @@ impl Daemon {
 
         Ok(Self {
             mode_state,
-            gpu_state,
             config_state,
             pci_state,
+            gpu_list: Arc::clone(&gpu_list),
         })
     }
 }

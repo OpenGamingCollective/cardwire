@@ -16,8 +16,7 @@ impl Daemon {
         // Valide inputs and turn into a Modes
         let mode = Modes::parse(&mode)?;
         let mut current_mode = self.mode_state.mode_config.write().await;
-        let mut gpu_list = self.mode_state.gpu_list.write().await;
-
+        let mut gpu_list = self.gpu_list.write().await;
         match mode {
             // Integrated/Hybrid only works on laptop with two gpus, will refuse if the computer has
             // more than 2 gpus
@@ -34,8 +33,13 @@ impl Daemon {
                 }
                 // Loop to find the non default gpu and block it,
                 for gpu in gpu_list.values_mut() {
-                    if !gpu.device.is_default() {
-                        gpu.block_gpu().await?;
+                    let mut state = gpu.inner.write().await;
+                    if !state.device.is_default() {
+                        if mode == Modes::Integrated {
+                            state.block_gpu().await?;
+                        } else {
+                            state.unblock_gpu().await?;
+                        }
                     };
                 }
             }
@@ -44,7 +48,8 @@ impl Daemon {
             Modes::Manual => {
                 //let gpu_state = self.state.gpu_state.read().await;
                 for (_, gpu) in gpu_list.iter_mut() {
-                    gpu.unblock_gpu().await?;
+                    let mut state = gpu.inner.write().await;
+                    state.unblock_gpu().await?;
                 }
             }
         }
@@ -65,20 +70,21 @@ impl Daemon {
     }
 
     pub(crate) async fn list_devices(&self) -> fdo::Result<BTreeMap<usize, DbusGpuDevice>> {
-        let gpu_list = self.gpu_state.gpu_list.read().await;
+        let gpu_list = self.mode_state.gpu_list.read().await;
         let mut dbus_list: BTreeMap<usize, DbusGpuDevice> = BTreeMap::new();
         for (id, gpu) in gpu_list.iter() {
+            let state = gpu.inner.write().await;
             let temp_gpu = DbusGpuDevice {
                 id: *id as u32,
-                pci: gpu.device.pci.pci_address().to_string(),
-                render: *gpu.device.render(),
-                name: gpu.device.name().to_string(),
-                card: *gpu.device.card(),
-                default: gpu.device.default().unwrap_or(false),
-                blocked: gpu.blocked(),
-                nvidia: gpu.device.nvidia(),
-                nvidia_minor: if gpu.device.nvidia_minor().is_some() {
-                    gpu.device.nvidia_minor().unwrap().to_string()
+                pci: state.device.pci.pci_address().to_string(),
+                render: *state.device.render(),
+                name: state.device.name().to_string(),
+                card: *state.device.card(),
+                default: state.device.default().unwrap_or(false),
+                blocked: state.blocked(),
+                nvidia: state.device.nvidia(),
+                nvidia_minor: if state.device.nvidia_minor().is_some() {
+                    state.device.nvidia_minor().unwrap().to_string()
                 } else {
                     "".to_string()
                 },
@@ -87,46 +93,4 @@ impl Daemon {
         }
         Ok(dbus_list)
     }
-
-    //pub(crate) async fn list_devices_pci(&self) -> fdo::Result<BTreeMap<String, DbusPciDevice>> {
-    //    let pci_list = &self.state.pci_devices;
-    //    let mut dbus_list: BTreeMap<String, DbusPciDevice> = BTreeMap::new();
-    //    for (id, pci) in pci_list {
-    //        let temp_pci = DbusPciDevice {
-    //            pci_address: pci.pci_address().to_string(),
-    //            iommu_group: if let Some(iommu) = pci.iommu_group() {
-    //                iommu.to_string()
-    //            } else {
-    //                "".to_string()
-    //            },
-    //            vendor_id: pci.vendor_id().clone().unwrap_or("".to_string()),
-    //            device_id: pci.device_id().clone().unwrap_or("".to_string()),
-    //            vendor_name: pci.vendor_name().clone().unwrap_or("".to_string()),
-    //            device_name: pci.device_name().clone().unwrap_or("".to_string()),
-    //            driver: pci.driver().clone().unwrap_or("".to_string()),
-    //            class: pci.class().clone().unwrap_or("".to_string()),
-    //            parent_pci: pci.parent_pci().clone().unwrap_or("".to_string()),
-    //            child_pci: pci.child_pci().clone().unwrap_or("".to_string()),
-    //        };
-    //        dbus_list.insert(id.clone(), temp_pci);
-    //    }
-    //
-    //    Ok(dbus_list)
-    //}
-    //
-    //pub async fn get_status(&self, gpu_id: u32) -> fdo::Result<String> {
-    //    let gpu = self
-    //        .state
-    //        .gpu_list
-    //        .get(&(gpu_id as usize))
-    //        .ok_or_else(|| fdo::Error::InvalidArgs(format!("Unknown GPU id: {}", gpu_id)))?;
-    //    let gpu_pci = gpu.pci.pci_address();
-    //    let power_state =
-    //        fs::read_to_string(format!("/sys/bus/pci/devices/{gpu_pci}/power_state")).await;
-    //    if let Ok(state) = power_state {
-    //        Ok(state)
-    //    } else {
-    //        Err(fdo::Error::Failed("Couldn't read power_state".to_string()))
-    //    }
-    //}
 }

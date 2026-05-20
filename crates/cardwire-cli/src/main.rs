@@ -78,13 +78,13 @@ async fn main() -> anyhow::Result<()> {
                 // Handle --block
                 match client.set_gpu_block(id, true).await {
                     Ok(_) => println!("GPU {} has been blocked", id),
-                    Err(e) => handle_error(e),
+                    Err(e) => handle_error(e.into()),
                 };
             } else if action.unblock {
                 // Handle --unblock
                 match client.set_gpu_block(id, false).await {
                     Ok(_) => println!("GPU {} has been unblocked", id),
-                    Err(e) => handle_error(e),
+                    Err(e) => handle_error(e.into()),
                 };
             }
         }
