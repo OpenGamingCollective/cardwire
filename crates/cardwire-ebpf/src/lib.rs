@@ -56,7 +56,7 @@ impl EbpfBlocker {
         for entity in load_list {
             let program: &mut Lsm = ebpf
                 .program_mut(entity)
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("program", entity))?
+                .ok_or_else(|| CardwireEbpfError::missing_lsm(entity))?
                 .try_into()
                 .map_err(CardwireEbpfError::aya)?;
             program.load(entity, &btf).map_err(CardwireEbpfError::aya)?;
@@ -128,7 +128,7 @@ impl EbpfBlocker {
                 let mut map: HashMap<_, [u8; 16], u8> = HashMap::try_from(
                     self.ebpf
                         .map_mut(&kind_string)
-                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", &kind_string))?,
+                        .ok_or_else(|| CardwireEbpfError::missing_map(&kind_string))?,
                 )
                 .map_err(CardwireEbpfError::aya)?;
 
@@ -140,7 +140,7 @@ impl EbpfBlocker {
                 let mut map: HashMap<_, [u8; 30], u8> = HashMap::try_from(
                     self.ebpf
                         .map_mut(&kind_string)
-                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", &kind_string))?,
+                        .ok_or_else(|| CardwireEbpfError::missing_map(&kind_string))?,
                 )
                 .map_err(CardwireEbpfError::aya)?;
                 let key = Self::file_key(entity);
@@ -151,7 +151,7 @@ impl EbpfBlocker {
                     let mut map: HashMap<_, u32, u8> = HashMap::try_from(
                         self.ebpf
                             .map_mut(&kind_string)
-                            .ok_or_else(|| CardwireEbpfError::missing_lsm("map", &kind_string))?,
+                            .ok_or_else(|| CardwireEbpfError::missing_map(&kind_string))?,
                     )
                     .map_err(CardwireEbpfError::aya)?;
                     if block {
@@ -165,7 +165,7 @@ impl EbpfBlocker {
                 let mut map: HashMap<_, u32, u8> = HashMap::try_from(
                     self.ebpf
                         .map_mut(&kind_string)
-                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", &kind_string))?,
+                        .ok_or_else(|| CardwireEbpfError::missing_map(&kind_string))?,
                 )
                 .map_err(CardwireEbpfError::aya)?;
 
@@ -196,8 +196,8 @@ impl EbpfBlocker {
             BlockKind::Pci => {
                 let mut map: HashMap<_, [u8; 16], u8> = HashMap::try_from(
                     self.ebpf
-                        .map_mut("BLOCKED_PCI")
-                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_PCI"))?,
+                        .map_mut(&kind_string)
+                        .ok_or_else(|| CardwireEbpfError::missing_map(&kind_string))?,
                 )
                 .map_err(CardwireEbpfError::aya)?;
 
@@ -210,7 +210,7 @@ impl EbpfBlocker {
                 let mut map: HashMap<_, u32, u8> = HashMap::try_from(
                     self.ebpf
                         .map_mut(&kind_string)
-                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", &kind_string))?,
+                        .ok_or_else(|| CardwireEbpfError::missing_map(&kind_string))?,
                 )
                 .map_err(CardwireEbpfError::aya)?;
 
@@ -241,8 +241,8 @@ impl EbpfBlocker {
             BlockKind::Pci => {
                 let map: HashMap<_, [u8; 16], u8> = HashMap::try_from(
                     self.ebpf
-                        .map("BLOCKED_PCI")
-                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_PCI"))?,
+                        .map(&kind_string)
+                        .ok_or_else(|| CardwireEbpfError::missing_map(&kind_string))?,
                 )
                 .map_err(CardwireEbpfError::aya)?;
 
@@ -259,7 +259,7 @@ impl EbpfBlocker {
                 let map: HashMap<_, u32, u8> = HashMap::try_from(
                     self.ebpf
                         .map(&kind_string)
-                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", &kind_string))?,
+                        .ok_or_else(|| CardwireEbpfError::missing_map(&kind_string))?,
                 )
                 .map_err(CardwireEbpfError::aya)?;
 
