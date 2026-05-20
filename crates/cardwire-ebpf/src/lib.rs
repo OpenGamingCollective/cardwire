@@ -17,6 +17,9 @@ pub enum BlockKind {
     Render,
     Pci,
     Nvidia,
+    NvidiaSetting,
+    NvidiaFile,
+    File,
 }
 impl fmt::Display for BlockKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -25,6 +28,9 @@ impl fmt::Display for BlockKind {
             BlockKind::Render => write!(f, "BLOCKED_RENDERID"),
             BlockKind::Pci => write!(f, "BLOCKED_PCI"),
             BlockKind::Nvidia => write!(f, "BLOCKED_NVIDIAID"),
+            BlockKind::NvidiaSetting => write!(f, "SETTINGS"),
+            BlockKind::NvidiaFile => write!(f, "BLOCKED_NVIDIA_FILES"),
+            BlockKind::File => write!(f, "BLOCKED_PCI_FILES"),
         }
     }
 }
@@ -94,11 +100,18 @@ impl EbpfBlocker {
             BlockKind::Render => entity.parse::<u32>().is_ok(),
             BlockKind::Card => entity.parse::<u32>().is_ok(),
             BlockKind::Nvidia => entity.parse::<u32>().is_ok(),
+            // either 0 or 1
+            BlockKind::NvidiaSetting => entity.parse::<bool>().is_ok(),
+            // just a string
+            BlockKind::NvidiaFile | BlockKind::File => true,
             // Only the Pci need a real check
             BlockKind::Pci => entity.starts_with("0000:") && !entity.contains("pcie"),
         }
     }
 
+    /*
+        Block a kind
+    */
     pub fn block_kind(&mut self, entity: &str, kind: BlockKind) -> CardwireEbpfResult<()> {
         // validate input format for the bpf map, else return Err
         if !Self::is_format_valid(entity, &kind) {
@@ -114,13 +127,39 @@ impl EbpfBlocker {
             BlockKind::Pci => {
                 let mut map: HashMap<_, [u8; 16], u8> = HashMap::try_from(
                     self.ebpf
-                        .map_mut("BLOCKED_PCI")
-                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_PCI"))?,
+                        .map_mut(&kind_string)
+                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", &kind_string))?,
                 )
                 .map_err(CardwireEbpfError::aya)?;
 
                 let key = Self::pci_key(entity);
                 map.insert(key, 1, 0).map_err(CardwireEbpfError::aya)?;
+            }
+            // set file blocklist
+            BlockKind::NvidiaFile | BlockKind::File => {
+                let mut map: HashMap<_, [u8; 30], u8> = HashMap::try_from(
+                    self.ebpf
+                        .map_mut(&kind_string)
+                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", &kind_string))?,
+                )
+                .map_err(CardwireEbpfError::aya)?;
+                let key = Self::file_key(entity);
+                map.insert(key, 1, 0).map_err(CardwireEbpfError::aya)?;
+            }
+            BlockKind::NvidiaSetting => {
+                if let Ok(block) = entity.parse::<bool>() {
+                    let mut map: HashMap<_, u32, u8> = HashMap::try_from(
+                        self.ebpf
+                            .map_mut(&kind_string)
+                            .ok_or_else(|| CardwireEbpfError::missing_lsm("map", &kind_string))?,
+                    )
+                    .map_err(CardwireEbpfError::aya)?;
+                    if block {
+                        map.insert(0, 1, 0).map_err(CardwireEbpfError::aya)?;
+                    } else {
+                        let _ = map.remove(&0);
+                    }
+                }
             }
             BlockKind::Render | BlockKind::Card | BlockKind::Nvidia => {
                 let mut map: HashMap<_, u32, u8> = HashMap::try_from(
@@ -139,6 +178,9 @@ impl EbpfBlocker {
         Ok(())
     }
 
+    /*
+        Unblock a kind
+    */
     pub fn unblock_kind(&mut self, entity: &str, kind: BlockKind) -> CardwireEbpfResult<()> {
         // validate input format for the bpf map, else return Err
         if !Self::is_format_valid(entity, &kind) {
@@ -162,6 +204,8 @@ impl EbpfBlocker {
                 let value = Self::pci_key(entity);
                 let _ = map.remove(&value);
             }
+            // no file unblock
+            BlockKind::NvidiaFile | BlockKind::File | BlockKind::NvidiaSetting => (),
             BlockKind::Render | BlockKind::Card | BlockKind::Nvidia => {
                 let mut map: HashMap<_, u32, u8> = HashMap::try_from(
                     self.ebpf
@@ -178,201 +222,57 @@ impl EbpfBlocker {
 
         Ok(())
     }
+
     /*
-       This part is for blocking a specific CardID
+        Check a block
     */
-
-    pub fn block_card(&mut self, id: u32) -> CardwireEbpfResult<()> {
-        let mut map: HashMap<_, u32, u8> = HashMap::try_from(
-            self.ebpf
-                .map_mut("BLOCKED_CARDID")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_CARDID"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        map.insert(id, 1, 0).map_err(CardwireEbpfError::aya)?;
-        Ok(())
-    }
-
-    pub fn unblock_card(&mut self, id: u32) -> CardwireEbpfResult<()> {
-        let mut map: HashMap<_, u32, u8> = HashMap::try_from(
-            self.ebpf
-                .map_mut("BLOCKED_CARDID")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_CARDID"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        let _ = map.remove(&id);
-        Ok(())
-    }
-
-    pub fn is_card_blocked(&self, id: u32) -> CardwireEbpfResult<bool> {
-        let map: HashMap<_, u32, u8> = HashMap::try_from(
-            self.ebpf
-                .map("BLOCKED_CARDID")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_CARDID"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        match map.get(&id, 0) {
-            Ok(_) => Ok(true),
-            Err(MapError::KeyNotFound) => Ok(false),
-            Err(err) => Err(CardwireEbpfError::aya(err)),
+    pub fn is_kind_blocked(&self, entity: &str, kind: BlockKind) -> CardwireEbpfResult<bool> {
+        // validate input format for the bpf map, else return Err
+        if !Self::is_format_valid(entity, &kind) {
+            return Err(CardwireEbpfError::WrongFormat {
+                kind: kind.to_string(),
+                input: entity.to_string(),
+            });
         }
-    }
-    /*
-       This part is for blocking a specific RenderID
-    */
 
-    pub fn block_render(&mut self, id: u32) -> CardwireEbpfResult<()> {
-        let mut map: HashMap<_, u32, u8> = HashMap::try_from(
-            self.ebpf
-                .map_mut("BLOCKED_RENDERID")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_RENDERID"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        map.insert(id, 1, 0).map_err(CardwireEbpfError::aya)?;
-        Ok(())
-    }
+        let kind_string = kind.to_string();
 
-    pub fn unblock_render(&mut self, id: u32) -> CardwireEbpfResult<()> {
-        let mut map: HashMap<_, u32, u8> = HashMap::try_from(
-            self.ebpf
-                .map_mut("BLOCKED_RENDERID")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_RENDERID"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        let _ = map.remove(&id);
-        Ok(())
-    }
+        match kind {
+            BlockKind::Pci => {
+                let map: HashMap<_, [u8; 16], u8> = HashMap::try_from(
+                    self.ebpf
+                        .map("BLOCKED_PCI")
+                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_PCI"))?,
+                )
+                .map_err(CardwireEbpfError::aya)?;
 
-    pub fn is_render_blocked(&self, id: u32) -> CardwireEbpfResult<bool> {
-        let map: HashMap<_, u32, u8> = HashMap::try_from(
-            self.ebpf
-                .map("BLOCKED_RENDERID")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_RENDERID"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        match map.get(&id, 0) {
-            Ok(_) => Ok(true),
-            Err(MapError::KeyNotFound) => Ok(false),
-            Err(err) => Err(CardwireEbpfError::aya(err)),
+                let value = Self::pci_key(entity);
+                return match map.get(&value, 0) {
+                    Ok(_) => Ok(true),
+                    Err(MapError::KeyNotFound) => Ok(false),
+                    Err(err) => Err(CardwireEbpfError::aya(err)),
+                };
+            }
+            // no file unblock
+            BlockKind::NvidiaFile | BlockKind::File | BlockKind::NvidiaSetting => (),
+            BlockKind::Render | BlockKind::Card | BlockKind::Nvidia => {
+                let map: HashMap<_, u32, u8> = HashMap::try_from(
+                    self.ebpf
+                        .map(&kind_string)
+                        .ok_or_else(|| CardwireEbpfError::missing_lsm("map", &kind_string))?,
+                )
+                .map_err(CardwireEbpfError::aya)?;
+
+                if let Ok(value) = entity.parse::<u32>() {
+                    return match map.get(&value, 0) {
+                        Ok(_) => Ok(true),
+                        Err(MapError::KeyNotFound) => Ok(false),
+                        Err(err) => Err(CardwireEbpfError::aya(err)),
+                    };
+                }
+            }
         }
-    }
-    /*
-       This part is for blocking a specific NvidiaID
-    */
 
-    pub fn block_nvidia(&mut self, id: u32) -> CardwireEbpfResult<()> {
-        let mut map: HashMap<_, u32, u8> = HashMap::try_from(
-            self.ebpf
-                .map_mut("BLOCKED_NVIDIAID")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_NVIDIAID"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        map.insert(id, 1, 0).map_err(CardwireEbpfError::aya)?;
-        Ok(())
-    }
-
-    pub fn unblock_nvidia(&mut self, id: u32) -> CardwireEbpfResult<()> {
-        let mut map: HashMap<_, u32, u8> = HashMap::try_from(
-            self.ebpf
-                .map_mut("BLOCKED_NVIDIAID")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_NVIDIAID"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        let _ = map.remove(&id);
-        Ok(())
-    }
-
-    pub fn is_nvidia_blocked(&self, id: u32) -> CardwireEbpfResult<bool> {
-        let map: HashMap<_, u32, u8> = HashMap::try_from(
-            self.ebpf
-                .map("BLOCKED_NVIDIAID")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_NVIDIAID"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        match map.get(&id, 0) {
-            Ok(_) => Ok(true),
-            Err(MapError::KeyNotFound) => Ok(false),
-            Err(err) => Err(CardwireEbpfError::aya(err)),
-        }
-    }
-    /*
-       This part is for blocking a specific PCI
-    */
-    pub fn block_pci(&mut self, pci: &str) -> CardwireEbpfResult<()> {
-        let mut map: HashMap<_, [u8; 16], u8> = HashMap::try_from(
-            self.ebpf
-                .map_mut("BLOCKED_PCI")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_PCI"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        let key = Self::pci_key(pci);
-        map.insert(key, 1, 0).map_err(CardwireEbpfError::aya)?;
-        Ok(())
-    }
-
-    pub fn unblock_pci(&mut self, pci: &str) -> CardwireEbpfResult<()> {
-        let mut map: HashMap<_, [u8; 16], u8> = HashMap::try_from(
-            self.ebpf
-                .map_mut("BLOCKED_PCI")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_PCI"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        let key = Self::pci_key(pci);
-        let _ = map.remove(&key);
-        Ok(())
-    }
-
-    pub fn is_pci_blocked(&self, pci: &str) -> CardwireEbpfResult<bool> {
-        let map: HashMap<_, [u8; 16], u8> = HashMap::try_from(
-            self.ebpf
-                .map("BLOCKED_PCI")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_PCI"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        let key = Self::pci_key(pci);
-        match map.get(&key, 0) {
-            Ok(_) => Ok(true),
-            Err(MapError::KeyNotFound) => Ok(false),
-            Err(err) => Err(CardwireEbpfError::aya(err)),
-        }
-    }
-
-    pub fn set_nvidia_block(&mut self, block: bool) -> CardwireEbpfResult<()> {
-        let mut map: HashMap<_, u32, u8> = HashMap::try_from(
-            self.ebpf
-                .map_mut("SETTINGS")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "SETTINGS"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        if block {
-            map.insert(0, 1, 0).map_err(CardwireEbpfError::aya)?;
-        } else {
-            let _ = map.remove(&0);
-        }
-        Ok(())
-    }
-
-    pub fn set_nvidia_file_block(&mut self, file: &str) -> CardwireEbpfResult<()> {
-        let mut map: HashMap<_, [u8; 30], u8> = HashMap::try_from(
-            self.ebpf
-                .map_mut("BLOCKED_NVIDIA_FILES")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_PCI"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        let key = Self::file_key(file);
-        map.insert(key, 1, 0).map_err(CardwireEbpfError::aya)?;
-        Ok(())
-    }
-
-    pub fn set_file_block(&mut self, file: &str) -> CardwireEbpfResult<()> {
-        let mut map: HashMap<_, [u8; 30], u8> = HashMap::try_from(
-            self.ebpf
-                .map_mut("BLOCKED_PCI_FILES")
-                .ok_or_else(|| CardwireEbpfError::missing_lsm("map", "BLOCKED_PCI"))?,
-        )
-        .map_err(CardwireEbpfError::aya)?;
-        let key = Self::file_key(file);
-        map.insert(key, 1, 0).map_err(CardwireEbpfError::aya)?;
-        Ok(())
+        Ok(false)
     }
 }
