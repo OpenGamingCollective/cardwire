@@ -45,6 +45,10 @@ struct dentry {
 	} d_u;
 } __attribute__((preserve_access_index));
 
+struct dentry___new {
+	struct hlist_node d_alias;
+} __attribute__((preserve_access_index));
+
 struct path {
 	struct dentry *dentry;
 } __attribute__((preserve_access_index));
@@ -250,8 +254,12 @@ int BPF_PROG(inode_permission, struct inode *inode, int mask)
 		return 0;
 	}
 
-	unsigned long offset =
-		bpf_core_field_offset(struct dentry, d_u.d_alias);
+	unsigned long offset;
+	if (bpf_core_field_exists(((struct dentry *)0)->d_u.d_alias)) {
+		offset = bpf_core_field_offset(struct dentry, d_u.d_alias);
+	} else {
+		offset = bpf_core_field_offset(struct dentry___new, d_alias);
+	}
 	struct dentry *d = (struct dentry *)((void *)first - offset);
 	//
 	return is_blocked_device(d);
