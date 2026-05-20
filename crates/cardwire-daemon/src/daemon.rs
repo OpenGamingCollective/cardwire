@@ -1,6 +1,7 @@
 //! entry point of cardwired
 mod dbus;
 mod file;
+mod gpu_dbus;
 mod listeners;
 mod models;
 
@@ -17,11 +18,7 @@ async fn main() -> Result<()> {
         .format_timestamp(None)
         .filter_level(log::LevelFilter::Info)
         .init();
-    let mut daemon = Daemon::new().await?;
-    // Now apply the config
-    if let Err(e) = daemon.apply_config().await {
-        log::error!("Failed to apply startup configuration: {e}");
-    }
+    let daemon = Daemon::new().await?;
     let conn_builder = connection::Builder::system()?;
     let _conn = conn_builder
         .name("com.github.opengamingcollective.cardwire")?

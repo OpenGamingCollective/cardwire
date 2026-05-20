@@ -1,12 +1,16 @@
 //! where the struct and impl are declared
-use crate::file::{CardwireConfig, CardwireGpuState, CardwireModeState};
+use crate::{
+    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, gpu_dbus::Gpu
+};
 use anyhow::{Context, Result};
 use cardwire_core::{
     gpu::{self, GpuBlocker, check_default_drm_class}, pci
 };
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt};
+use std::{
+    collections::{BTreeMap, HashMap}, fmt, sync::Arc
+};
 use tokio::sync::RwLock;
 use zbus::fdo::Error;
 
@@ -58,94 +62,90 @@ impl Modes {
 
 pub struct DaemonState {
     // these are file related
-    pub config: RwLock<CardwireConfig>,
     pub gpu_state: RwLock<CardwireGpuState>,
     pub mode_state: RwLock<CardwireModeState>,
     // temp data
-    pub gpu_list: BTreeMap<usize, gpu::GpuDevice>,
+    pub gpu_list: BTreeMap<usize, Gpu>,
     pub ebpf_blocker: RwLock<GpuBlocker>,
     // for future uses, related to vfio
     pub pci_devices: BTreeMap<String, pci::PciDevice>,
 }
+pub struct ModeState {
+    pub mode_config: Arc<RwLock<CardwireModeState>>,
+    pub gpu_list: Arc<RwLock<BTreeMap<usize, Gpu>>>,
+    pub config: Arc<RwLock<CardwireConfig>>,
+}
 
+pub struct ConfigState {
+    pub config: Arc<RwLock<CardwireConfig>>,
+}
+pub struct GpuState {
+    pub mode_config: Arc<RwLock<CardwireModeState>>,
+    pub gpu_list: Arc<RwLock<BTreeMap<usize, Gpu>>>,
+}
+pub struct PciState {
+    pub pci_list: Arc<RwLock<BTreeMap<String, pci::PciDevice>>>,
+}
 pub struct Daemon {
-    pub state: DaemonState,
+    pub mode_state: ModeState,
+    pub gpu_state: GpuState,
+    pub config_state: ConfigState,
+    pub pci_state: PciState,
 }
 
 impl Daemon {
     pub async fn new() -> Result<Self> {
-        let config = CardwireConfig::build().context("Error building config")?;
-        let mut gpu_state = CardwireGpuState::build().context("Error building gpu_state")?;
-        let mode_state = CardwireModeState::build().context("Error building mode")?;
+        //let mut gpu_state = CardwireGpuState::build().context("Error building gpu_state")?;
+        let user_config = CardwireConfig::build().context("Error building toml config")?;
+        let user_config: Arc<RwLock<CardwireConfig>> = Arc::new(RwLock::new(user_config));
+        // Get mode from config
+        let mode_config = CardwireModeState::build().context("Error building mode")?;
+        let mode_config: Arc<RwLock<CardwireModeState>> = Arc::new(RwLock::new(mode_config));
         // TODO: Exit if no pci devices or manual refresh command
-        let pci_devices = pci::read_pci_devices()?;
+        let pci_devices: BTreeMap<String, pci::PciDevice> = pci::read_pci_devices()?;
         // TODO: Should the daemon exits if no gpu??
         let mut gpu_list = gpu::read_gpu(&pci_devices)?;
         // Executed after the read_gpu to use the current gpu_list
         if let Err(err) = check_default_drm_class(&mut gpu_list) {
             warn!("Failed to determine default GPU: {}", err);
         }
+        let pci_list: Arc<RwLock<BTreeMap<String, pci::PciDevice>>> =
+            Arc::new(RwLock::new(pci_devices));
         // Exit if ebpf returns an error
-        let ebpf_blocker = GpuBlocker::new()?;
-
-        if !gpu_list.is_empty() && gpu_state.is_default_state() {
-            gpu_state
-                .save_state(&gpu_list, &ebpf_blocker)
-                .await
-                .context("Could not save gpu state")?;
-        } else if gpu_list.is_empty() {
-            // the daemon needs to be running to print out the pci list
-            warn!("could not detect gpus, daemon is still running for debugging")
+        let blocker = Arc::new(RwLock::new(GpuBlocker::new()?));
+        // create gpu list
+        let mut new_gpu_list: BTreeMap<usize, Gpu> = BTreeMap::new();
+        for (id, gpu) in gpu_list {
+            new_gpu_list.insert(
+                id,
+                Gpu::new(Arc::clone(&blocker), gpu, Arc::clone(&pci_list)),
+            );
         }
+        let gpu_list: Arc<RwLock<BTreeMap<usize, Gpu>>> = Arc::new(RwLock::new(new_gpu_list));
+
+        // Create GpuState
+        let gpu_state: GpuState = GpuState {
+            mode_config: Arc::clone(&mode_config),
+            gpu_list: Arc::clone(&gpu_list),
+        };
+
+        let mode_state: ModeState = ModeState {
+            mode_config: Arc::clone(&mode_config),
+            gpu_list: Arc::clone(&gpu_list),
+            config: Arc::clone(&user_config),
+        };
+        let config_state: ConfigState = ConfigState {
+            config: Arc::clone(&user_config),
+        };
+        let pci_state: PciState = PciState {
+            pci_list: Arc::clone(&pci_list),
+        };
 
         Ok(Self {
-            state: DaemonState {
-                config: RwLock::new(config),
-                gpu_state: RwLock::new(gpu_state),
-                mode_state: RwLock::new(mode_state),
-                pci_devices,
-                gpu_list,
-                ebpf_blocker: RwLock::new(ebpf_blocker),
-            },
+            mode_state,
+            gpu_state,
+            config_state,
+            pci_state,
         })
-    }
-    pub async fn apply_config(&mut self) -> anyhow::Result<()> {
-        let config = self.state.config.read().await;
-        let mode = self.state.mode_state.read().await;
-        let mut blocker = self.state.ebpf_blocker.write().await;
-
-        info!("applying this config: {:?}", config);
-        // Apply nvidia block
-        blocker.set_nvidia_setting(config.experimental_nvidia_block())?;
-        // Apply file blocks
-        for file in BLOCKED_PCI_FILES {
-            blocker.set_file_block(file)?;
-        }
-        for gpu in self.state.gpu_list.values() {
-            if gpu.nvidia() {
-                for file in BLOCKED_NVIDIA_FILES {
-                    blocker.set_nvidia_file_block(file)?;
-                }
-                break;
-            }
-        }
-        // Dropping the locks prevent set_mode being stuck
-        drop(blocker);
-        drop(config);
-        // Apply mode
-        let mode_to_apply = mode.mode();
-        drop(mode);
-        let mode_to_apply: usize = match mode_to_apply {
-            Modes::Integrated => 0,
-            Modes::Hybrid => 1,
-            Modes::Manual => 2,
-        };
-        self.set_mode(mode_to_apply as u32).await?;
-        // get config lock again
-        let config = self.state.config.read().await;
-        if config.battery_auto_switch() {
-            tokio::task::spawn(crate::listeners::watch_battery_status());
-        }
-        Ok(())
     }
 }
