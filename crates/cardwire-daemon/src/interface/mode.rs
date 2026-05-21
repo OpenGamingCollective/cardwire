@@ -1,6 +1,6 @@
 //! Define the mode dbus
 use crate::{
-    file::{CardwireConfig, CardwireModeState}, interface::GpuInterface
+    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::GpuInterface
 };
 use anyhow::Result;
 use log::{error, info, warn};
@@ -44,6 +44,7 @@ impl Modes {
 #[derive(Clone)]
 pub struct ModeInterface {
     pub mode_state: Arc<RwLock<CardwireModeState>>,
+    gpu_state: Arc<RwLock<CardwireGpuState>>,
     pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config: Arc<RwLock<CardwireConfig>>,
 }
@@ -51,11 +52,13 @@ pub struct ModeInterface {
 impl ModeInterface {
     pub fn build(
         mode_state: Arc<RwLock<CardwireModeState>>,
+        gpu_state: Arc<RwLock<CardwireGpuState>>,
         gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
         config: Arc<RwLock<CardwireConfig>>,
     ) -> Result<ModeInterface> {
         Ok(ModeInterface {
             mode_state,
+            gpu_state,
             gpu_list,
             config,
         })
@@ -108,8 +111,25 @@ impl ModeInterface {
             // Else apply the gpu_state but still unblock other gpus
             Modes::Manual => {
                 //let gpu_state = self.state.gpu_state.read().await;
+                let config = self.config.read().await;
+                let gpu_state = self.gpu_state.read().await;
                 for (_, gpu) in gpu_list.iter_mut() {
-                    gpu.unblock_gpu().await?;
+                    if gpu_state.gpu_block_state(gpu.device.pci().pci_address())
+                        && config.auto_apply_gpu_state()
+                    {
+                        if gpu.device.is_default() {
+                            // For safety, warn and unblock if default
+                            warn!(
+                                "auto_apply_gpu_state tried to block gpu: {}, which is the default gpu, unblocking for safety...",
+                                gpu.device.name()
+                            );
+                            gpu.unblock_gpu().await?;
+                        } else {
+                            gpu.block().await?;
+                        }
+                    } else {
+                        gpu.unblock_gpu().await?;
+                    }
                 }
             }
         }

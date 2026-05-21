@@ -144,7 +144,7 @@ impl CardwireGpuState {
         self.gpu.contains_key("Null")
     }
     /// search key in gpu hashmap,
-    pub fn gpu_block_state(&self, pci: &String) -> bool {
+    pub fn gpu_block_state(&self, pci: &str) -> bool {
         match self.gpu.get_key_value(pci) {
             Some(value) => value.1.block,
             None => false,

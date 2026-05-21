@@ -1,6 +1,6 @@
 //! where the struct and impl are declared
 use crate::{
-    file::{CardwireConfig, CardwireModeState}, interface::{GpuInterface, ModeInterface}
+    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{GpuInterface, ModeInterface}
 };
 use anyhow::{Context, Result};
 use cardwire_core::{
@@ -43,6 +43,9 @@ impl DaemonManager {
         let user_config = CardwireConfig::build().context("Error building toml config")?;
         let user_config: Arc<RwLock<CardwireConfig>> = Arc::new(RwLock::new(user_config));
 
+        let gpu_state: CardwireGpuState = CardwireGpuState::build()?;
+        let gpu_state: Arc<RwLock<CardwireGpuState>> = Arc::new(RwLock::new(gpu_state));
+
         let pci_devices: BTreeMap<String, pci::PciDevice> = pci::read_pci_devices()?;
 
         let mut gpu_list = gpu::read_gpu(&pci_devices)?;
@@ -69,6 +72,7 @@ impl DaemonManager {
         Ok(Self {
             mode_interface: ModeInterface::build(
                 mode_state,
+                Arc::clone(&gpu_state),
                 Arc::clone(&gpu_interfaces),
                 Arc::clone(&user_config),
             )?,
@@ -78,6 +82,7 @@ impl DaemonManager {
 }
 
 #[interface(name = "com.github.opengamingcollective.cardwire")]
+// simple dbus to check if the daemon is alive
 impl DaemonManager {
     pub async fn status(&self) -> fdo::Result<()> {
         Ok(())
