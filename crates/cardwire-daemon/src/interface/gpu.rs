@@ -74,13 +74,7 @@ impl GpuInterface {
     }
 }
 
-#[interface(
-    name = "com.github.opengamingcollective.Gpu",
-    proxy(
-        default_service = "com.github.opengamingcollective.cardwire",
-        default_path = "/com/github/opengamingcollective/cardwire"
-    )
-)]
+#[interface(name = "com.github.opengamingcollective.cardwire.Gpu")]
 impl GpuInterface {
     #[zbus(property)]
     pub async fn set_block(&mut self, block: bool) -> fdo::Result<()> {

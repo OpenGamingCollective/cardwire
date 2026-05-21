@@ -86,7 +86,7 @@ impl DaemonManager {
     }
 }
 
-#[interface(name = "com.github.opengamingcollective.cardwire")]
+#[interface(name = "com.github.opengamingcollective.cardwire.Manager")]
 // simple dbus to check if the daemon is alive
 impl DaemonManager {
     pub async fn status(&self) -> fdo::Result<()> {

@@ -65,13 +65,7 @@ impl ModeInterface {
     }
 }
 
-#[interface(
-    name = "com.github.opengamingcollective.Mode",
-    proxy(
-        default_service = "com.github.opengamingcollective.cardwire",
-        default_path = "/com/github/opengamingcollective/cardwire"
-    )
-)]
+#[interface(name = "com.github.opengamingcollective.cardwire.Mode")]
 impl ModeInterface {
     /*
         Set the mode
