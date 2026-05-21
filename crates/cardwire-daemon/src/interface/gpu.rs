@@ -14,7 +14,6 @@ pub struct GpuInterface {
     pub device: GpuDevice,
     blocker: Arc<RwLock<GpuBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
-    blocked: bool,
 }
 
 impl GpuInterface {
@@ -27,7 +26,6 @@ impl GpuInterface {
             device,
             blocker,
             pci_list,
-            blocked: false,
         })
     }
 }
@@ -39,15 +37,13 @@ impl GpuInterface {
         let pci_list = self.pci_list.read().await;
         block_gpu(&mut blocker, &self.device, true, &pci_list)
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        if let Ok(result) = is_gpu_blocked(&blocker, &self.device) {
-            if !result {
-                return Err(fdo::Error::Failed(
-                    "gpu is supposed to be blocked, bpf says it's not".to_string(),
-                ));
-            } else {
-                self.blocked = result;
-            }
-        }
+        if let Ok(result) = is_gpu_blocked(&blocker, &self.device)
+            && !result
+        {
+            return Err(fdo::Error::Failed(
+                "gpu is supposed to be blocked, bpf says it's not".to_string(),
+            ));
+        };
         Ok(())
     }
     // unblock the gpu
@@ -57,19 +53,18 @@ impl GpuInterface {
 
         block_gpu(&mut blocker, &self.device, false, &pci_list)
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        if let Ok(result) = is_gpu_blocked(&blocker, &self.device) {
-            if result {
-                return Err(fdo::Error::Failed(
-                    "gpu is supposed to be unblocked, bpf says it's not".to_string(),
-                ));
-            } else {
-                self.blocked = result;
-            }
-        }
+        if let Ok(result) = is_gpu_blocked(&blocker, &self.device)
+            && result
+        {
+            return Err(fdo::Error::Failed(
+                "gpu is supposed to be unblocked, bpf says it's not".to_string(),
+            ));
+        };
         Ok(())
     }
-    pub fn blocked(&self) -> bool {
-        self.blocked
+    pub async fn gpu_blocked(&self) -> fdo::Result<bool> {
+        let blocker = self.blocker.read().await;
+        is_gpu_blocked(&blocker, &self.device).map_err(|e| fdo::Error::Failed(e.to_string()))
     }
 }
 
@@ -92,6 +87,6 @@ impl GpuInterface {
 
     #[zbus(property)]
     pub async fn block(&self) -> fdo::Result<bool> {
-        Ok(self.blocked())
+        self.gpu_blocked().await
     }
 }
