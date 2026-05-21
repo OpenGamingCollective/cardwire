@@ -4,7 +4,7 @@ use crate::{
     file::common::{FileKind, create_default_file}, interface::Modes
 };
 use anyhow::{Context, Ok};
-use cardwire_core::gpu::{GpuBlocker, GpuDevice, is_gpu_blocked};
+use cardwire_core::gpu::GpuDevice;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs};
@@ -115,25 +115,17 @@ impl CardwireGpuState {
         Ok(())
     }
     /// Save the new state into the daemon and to the gpu_state.json file
-    pub async fn save_state(
-        &mut self,
-        gpu_list: &BTreeMap<usize, GpuDevice>,
-        blocker: &GpuBlocker,
-    ) -> anyhow::Result<()> {
+    pub async fn save_state(&mut self, gpu: &GpuDevice, state: bool) -> anyhow::Result<()> {
         // Prevent overwriting default config if it's not replaceable
         if self.gpu.contains_key("Null") {
             info!("detected default gpu_state file, overwriting it...");
             self.gpu.clear();
         }
         // Save to daemon state
-        for gpu in gpu_list.values() {
-            self.gpu.insert(
-                gpu.pci.pci_address().to_string(),
-                CardwireGpuUnit {
-                    block: is_gpu_blocked(blocker, gpu)?,
-                },
-            );
-        }
+        self.gpu.insert(
+            gpu.pci.pci_address().to_string(),
+            CardwireGpuUnit { block: state },
+        );
         // Save the whole hashmap into json
         let state_file = serde_json::to_string_pretty(&self.gpu)?;
         tokio::fs::write(format!("{STATE_PATH}/gpu_state.json"), state_file).await?;

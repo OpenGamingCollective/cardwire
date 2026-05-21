@@ -20,7 +20,7 @@ use zbus::{
 //    "max_link_width",
 //    "current_link_width",
 //];
-//// Files that get blocked when the NVIDIA block is on
+/// Files that get blocked when the NVIDIA block is on
 //const BLOCKED_NVIDIA_FILES: &[&str] = &[
 //    "libGLX_nvidia.so.0",
 //    "nvidia_icd.json",
@@ -62,7 +62,12 @@ impl DaemonManager {
         let mut gpu_interfaces_map: BTreeMap<usize, GpuInterface> = BTreeMap::new();
 
         for (id, device) in gpu_list {
-            let gpu = GpuInterface::build(device, Arc::clone(&blocker), Arc::clone(&pci_list))?;
+            let gpu = GpuInterface::build(
+                device,
+                Arc::clone(&blocker),
+                Arc::clone(&pci_list),
+                Arc::clone(&gpu_state),
+            )?;
             gpu_interfaces_map.insert(id, gpu);
         }
 

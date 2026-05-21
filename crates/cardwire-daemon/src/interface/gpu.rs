@@ -5,8 +5,11 @@ use std::{collections::BTreeMap, sync::Arc};
 use cardwire_core::{
     gpu::{GpuBlocker, GpuDevice, block_gpu, is_gpu_blocked}, pci::PciDevice
 };
+use log::{info, warn};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
+
+use crate::file::CardwireGpuState;
 
 // Represent a single gpu
 #[derive(Clone)]
@@ -14,6 +17,7 @@ pub struct GpuInterface {
     pub device: GpuDevice,
     blocker: Arc<RwLock<GpuBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
+    gpu_state: Arc<RwLock<CardwireGpuState>>,
 }
 
 impl GpuInterface {
@@ -21,11 +25,13 @@ impl GpuInterface {
         device: GpuDevice,
         blocker: Arc<RwLock<GpuBlocker>>,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
+        gpu_state: Arc<RwLock<CardwireGpuState>>,
     ) -> anyhow::Result<GpuInterface> {
         Ok(Self {
             device,
             blocker,
             pci_list,
+            gpu_state,
         })
     }
 }
@@ -79,9 +85,32 @@ impl GpuInterface {
     #[zbus(property)]
     pub async fn set_block(&mut self, block: bool) -> fdo::Result<()> {
         if block {
-            self.block_gpu().await
+            // Don't block if default
+            if self.device.is_default() {
+                return Err(fdo::Error::AccessDenied(format!(
+                    "GPU {} is the default device and cannot be blocked",
+                    self.device.name()
+                )));
+            }
+            // Now block
+            self.block_gpu().await?;
+            info!("Set GPU {} block={}", self.device.name(), block);
+            // save new state to file
+            let mut gpu_state = self.gpu_state.write().await;
+            if let Err(e) = gpu_state.save_state(&self.device, true).await {
+                warn!("could not save gpu_state to file: {e}");
+            };
+            Ok(())
         } else {
-            self.unblock_gpu().await
+            // unblock
+            self.unblock_gpu().await?;
+            info!("Set GPU {} block={}", self.device.name(), block);
+            // save new state to file
+            let mut gpu_state = self.gpu_state.write().await;
+            if let Err(e) = gpu_state.save_state(&self.device, false).await {
+                warn!("could not save gpu_state to file: {e}");
+            };
+            Ok(())
         }
     }
 
