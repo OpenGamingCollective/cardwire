@@ -1,3 +1,5 @@
+//! DBUS Interface for single gpu interaction
+
 use std::{collections::BTreeMap, sync::Arc};
 
 use cardwire_core::{
@@ -6,36 +8,31 @@ use cardwire_core::{
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
+// Represent a single gpu
 #[derive(Clone)]
-pub struct Gpu {
+pub struct GpuInterface {
     pub device: GpuDevice,
     blocker: Arc<RwLock<GpuBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     blocked: bool,
 }
 
-#[derive(Clone)]
-pub struct GpuState {
-    pub inner: Arc<RwLock<Gpu>>,
-}
-
-impl GpuState {
-    pub fn new(
-        blocker: Arc<RwLock<GpuBlocker>>,
+impl GpuInterface {
+    pub fn build(
         device: GpuDevice,
+        blocker: Arc<RwLock<GpuBlocker>>,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
-    ) -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(Gpu {
-                device,
-                blocker,
-                pci_list,
-                blocked: false,
-            })),
-        }
+    ) -> anyhow::Result<GpuInterface> {
+        Ok(Self {
+            device,
+            blocker,
+            pci_list,
+            blocked: false,
+        })
     }
 }
-impl Gpu {
+
+impl GpuInterface {
     // block the gpu
     pub async fn block_gpu(&mut self) -> fdo::Result<()> {
         let mut blocker = self.blocker.write().await;
@@ -76,21 +73,25 @@ impl Gpu {
     }
 }
 
-#[interface(name = "com.github.opengamingcollective.cardwire.gpu")]
-impl GpuState {
+#[interface(
+    name = "com.github.opengamingcollective.Gpu",
+    proxy(
+        default_service = "com.github.opengamingcollective.cardwire",
+        default_path = "/com/github/opengamingcollective/cardwire"
+    )
+)]
+impl GpuInterface {
     #[zbus(property)]
     pub async fn set_block(&mut self, block: bool) -> fdo::Result<()> {
-        let mut state = self.inner.write().await;
         if block {
-            state.block_gpu().await
+            self.block_gpu().await
         } else {
-            state.unblock_gpu().await
+            self.unblock_gpu().await
         }
     }
 
     #[zbus(property)]
     pub async fn block(&self) -> fdo::Result<bool> {
-        let state = self.inner.read().await;
-        Ok(state.blocked())
+        Ok(self.blocked())
     }
 }

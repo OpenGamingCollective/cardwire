@@ -1,11 +1,10 @@
 //! entry point of cardwired
-mod dbus;
 mod file;
-mod gpu_dbus;
+mod interface;
 mod listeners;
 mod models;
 
-use crate::models::Daemon;
+use crate::models::DaemonManager;
 use anyhow::Result;
 use log::info;
 use std::future::pending;
@@ -18,7 +17,7 @@ async fn main() -> Result<()> {
         .format_timestamp(None)
         .filter_level(log::LevelFilter::Info)
         .init();
-    let daemon = Daemon::new().await?;
+    let daemon = DaemonManager::new().await?;
 
     let conn_builder = connection::Builder::system()?;
     let conn = conn_builder
@@ -28,14 +27,15 @@ async fn main() -> Result<()> {
         .await?;
 
     let object_server = conn.object_server();
-
-    let gpu_list = daemon.gpu_list.read().await;
-
-    for (id, gpu) in gpu_list.iter() {
-        let path = format!("/com/github/opengamingcollective/cardwire/gpu/{}", id);
-        object_server.at(path, gpu.clone()).await?;
+    let gpu_interfaces = daemon.gpu_interfaces.read().await;
+    let path = format!("/com/github/opengamingcollective/cardwire/Mode");
+    object_server.at(path, daemon.mode_interface).await?;
+    for (id, gpu_interface) in gpu_interfaces.iter() {
+        let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+        object_server.at(path, gpu_interface.clone()).await?;
     }
-    drop(gpu_list);
+    // drop gpu list to prevent deadlock
+    drop(gpu_interfaces);
     info!("Daemon started");
     pending::<()>().await;
     Ok(())

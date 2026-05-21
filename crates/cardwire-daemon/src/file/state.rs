@@ -1,7 +1,7 @@
 //! helper to manage cardwired configs, include the user config .toml, and the .json states like
 //! gpu, mode or pci
 use crate::{
-    file::common::{FileKind, create_default_file}, models::Modes
+    file::common::{FileKind, create_default_file}, interface::Modes
 };
 use anyhow::{Context, Ok};
 use cardwire_core::gpu::{GpuBlocker, GpuDevice, is_gpu_blocked};
