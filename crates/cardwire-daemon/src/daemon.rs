@@ -30,6 +30,8 @@ async fn main() -> Result<()> {
     let gpu_interfaces = daemon.gpu_interfaces.read().await;
     let path = "/com/github/opengamingcollective/cardwire";
     object_server.at(path, daemon.mode_interface).await?;
+    object_server.at(path, daemon.config_interface).await?;
+
     for (id, gpu_interface) in gpu_interfaces.iter() {
         let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
         object_server.at(path, gpu_interface.clone()).await?;

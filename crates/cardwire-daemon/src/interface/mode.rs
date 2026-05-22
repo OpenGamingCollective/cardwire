@@ -1,6 +1,6 @@
 //! Define the mode dbus
 use crate::{
-    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::GpuInterface
+    file::{CardwireGpuState, CardwireModeState}, interface::{GpuInterface, config::ConfigMemory}
 };
 use anyhow::Result;
 use log::{error, info, warn};
@@ -46,7 +46,7 @@ pub struct ModeInterface {
     pub mode_state: Arc<RwLock<CardwireModeState>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
-    pub config: Arc<RwLock<CardwireConfig>>,
+    pub config: Arc<ConfigMemory>,
 }
 
 impl ModeInterface {
@@ -54,7 +54,7 @@ impl ModeInterface {
         mode_state: Arc<RwLock<CardwireModeState>>,
         gpu_state: Arc<RwLock<CardwireGpuState>>,
         gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
-        config: Arc<RwLock<CardwireConfig>>,
+        config: Arc<ConfigMemory>,
     ) -> Result<ModeInterface> {
         Ok(ModeInterface {
             mode_state,
@@ -105,12 +105,10 @@ impl ModeInterface {
             // Else apply the gpu_state but still unblock other gpus
             Modes::Manual => {
                 //let gpu_state = self.state.gpu_state.read().await;
-                let config = self.config.read().await;
+                let config = self.config.auto_apply_gpu_state.read().await;
                 let gpu_state = self.gpu_state.read().await;
                 for (_, gpu) in gpu_list.iter_mut() {
-                    if gpu_state.gpu_block_state(gpu.device.pci().pci_address())
-                        && config.auto_apply_gpu_state()
-                    {
+                    if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && *config {
                         if gpu.device.is_default() {
                             // For safety, warn and unblock if default
                             warn!(

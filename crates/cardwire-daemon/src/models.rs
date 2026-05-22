@@ -1,6 +1,6 @@
 //! where the struct and impl are declared
 use crate::{
-    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{GpuInterface, ModeInterface}
+    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{ConfigInterface, ConfigMemory, GpuInterface, ModeInterface}
 };
 use anyhow::{Context, Result};
 use cardwire_core::{
@@ -32,6 +32,7 @@ use zbus::{
 pub struct DaemonManager {
     pub mode_interface: ModeInterface,
     pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
+    pub config_interface: ConfigInterface,
 }
 
 impl DaemonManager {
@@ -40,8 +41,9 @@ impl DaemonManager {
             CardwireModeState::build().context("Error building mode")?;
         let mode_state: Arc<RwLock<CardwireModeState>> = Arc::new(RwLock::new(mode_state));
 
-        let user_config = CardwireConfig::build().context("Error building toml config")?;
-        let user_config: Arc<RwLock<CardwireConfig>> = Arc::new(RwLock::new(user_config));
+        let user_config: CardwireConfig =
+            CardwireConfig::build().context("Error building toml config")?;
+        let user_config = Arc::new(ConfigMemory::build(user_config));
 
         let gpu_state: CardwireGpuState = CardwireGpuState::build()?;
         let gpu_state: Arc<RwLock<CardwireGpuState>> = Arc::new(RwLock::new(gpu_state));
@@ -82,6 +84,7 @@ impl DaemonManager {
                 Arc::clone(&user_config),
             )?,
             gpu_interfaces: Arc::clone(&gpu_interfaces),
+            config_interface: ConfigInterface::build(Arc::clone(&user_config))?,
         })
     }
 }
