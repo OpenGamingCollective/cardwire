@@ -1,6 +1,8 @@
 //! where the struct and impl are declared
 use crate::{
-    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{ConfigInterface, ConfigMemory, GpuInterface, ModeInterface}
+    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
+        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
+    }
 };
 use anyhow::{Context, Result};
 use cardwire_core::{
@@ -13,26 +15,27 @@ use zbus::{
     fdo::{self}, interface
 };
 
-//const BLOCKED_PCI_FILES: &[&str] = &[
-//    "config",
-//    "current_link_speed",
-//    "max_link_speed",
-//    "max_link_width",
-//    "current_link_width",
-//];
+const BLOCKED_PCI_FILES: &[&str] = &[
+    "config",
+    "current_link_speed",
+    "max_link_speed",
+    "max_link_width",
+    "current_link_width",
+];
 /// Files that get blocked when the NVIDIA block is on
-//const BLOCKED_NVIDIA_FILES: &[&str] = &[
-//    "libGLX_nvidia.so.0",
-//    "nvidia_icd.json",
-//    "nvidia_icd.x86_64.json",
-//    "nvidiactl",
-//];
+const BLOCKED_NVIDIA_FILES: &[&str] = &[
+    "libGLX_nvidia.so.0",
+    "nvidia_icd.json",
+    "nvidia_icd.x86_64.json",
+    "nvidiactl",
+];
 
 #[derive(Clone)]
 pub struct DaemonManager {
     pub mode_interface: ModeInterface,
     pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config_interface: ConfigInterface,
+    pub debug_interface: DebugInterface,
 }
 
 impl DaemonManager {
@@ -78,14 +81,72 @@ impl DaemonManager {
 
         Ok(Self {
             mode_interface: ModeInterface::build(
-                mode_state,
+                Arc::clone(&mode_state),
                 Arc::clone(&gpu_state),
                 Arc::clone(&gpu_interfaces),
                 Arc::clone(&user_config),
             )?,
             gpu_interfaces: Arc::clone(&gpu_interfaces),
             config_interface: ConfigInterface::build(Arc::clone(&user_config))?,
+            debug_interface: DebugInterface::build(
+                Arc::clone(&mode_state),
+                Arc::clone(&gpu_state),
+                Arc::clone(&gpu_interfaces),
+                Arc::clone(&user_config),
+                Arc::clone(&blocker),
+                Arc::clone(&pci_list),
+            )?,
         })
+    }
+
+    /// Tasks that need to be run before running the daemon, like applying the mode,
+    pub async fn pre_daemon_tasks(&self) -> Result<()> {
+        let gpus_list = self.debug_interface.gpu_list.read().await;
+        let config = self
+            .debug_interface
+            .config
+            .experimental_nvidia_block
+            .read()
+            .await;
+        let mode = self.debug_interface.mode_state.read().await;
+        let mut blocker = self.debug_interface.blocker.write().await;
+        // steal a gpu blocker
+        blocker.set_nvidia_setting(*config)?;
+
+        for file in BLOCKED_PCI_FILES {
+            blocker.set_file_block(file)?;
+        }
+        let mut default: bool = false;
+        // if there is an nvidia device, block nvidia file once
+        for (_, gpu) in gpus_list.iter() {
+            let state = gpu.gpu_state.read().await;
+            default = state.is_default_state();
+            if gpu.device.nvidia() {
+                for file in BLOCKED_NVIDIA_FILES {
+                    blocker.set_nvidia_file_block(file)?;
+                }
+                break;
+            }
+        }
+        if default {
+            for (_, gpu) in gpus_list.iter() {
+                let mut state = gpu.gpu_state.write().await;
+                state.save_state(&gpu.device, false).await?;
+            }
+        }
+        // Dropping the locks prevent set_mode being stuck
+        drop(blocker);
+        drop(config);
+        drop(gpus_list);
+        let mode_to_apply = mode.mode();
+        drop(mode);
+        let mode_to_apply: u32 = match mode_to_apply {
+            Modes::Integrated => 0,
+            Modes::Hybrid => 1,
+            Modes::Manual => 2,
+        };
+        self.mode_interface.set_mode(mode_to_apply).await?;
+        Ok(())
     }
 }
 
@@ -93,6 +154,10 @@ impl DaemonManager {
 // simple dbus to check if the daemon is alive
 impl DaemonManager {
     pub async fn status(&self) -> fdo::Result<()> {
+        Ok(())
+    }
+    pub async fn refresh_gpu(&self) -> fdo::Result<()> {
+        let _gpu_interfaces = self.gpu_interfaces.write().await;
         Ok(())
     }
 }

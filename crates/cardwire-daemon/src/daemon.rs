@@ -19,6 +19,9 @@ async fn main() -> Result<()> {
         .init();
     let daemon = DaemonManager::new().await?;
 
+    // Before we publish the API
+    daemon.pre_daemon_tasks().await?;
+
     let conn_builder = connection::Builder::system()?;
     let conn = conn_builder
         .name("com.github.opengamingcollective.cardwire")?
@@ -29,9 +32,13 @@ async fn main() -> Result<()> {
     let object_server = conn.object_server();
     let gpu_interfaces = daemon.gpu_interfaces.read().await;
     let path = "/com/github/opengamingcollective/cardwire";
+    // cardwire.Mode
     object_server.at(path, daemon.mode_interface).await?;
+    // cardwire.Config
     object_server.at(path, daemon.config_interface).await?;
-
+    // cardwire.Debug
+    object_server.at(path, daemon.debug_interface).await?;
+    // cardwire.Gpu
     for (id, gpu_interface) in gpu_interfaces.iter() {
         let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
         object_server.at(path, gpu_interface.clone()).await?;
