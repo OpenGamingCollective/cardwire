@@ -110,17 +110,15 @@ impl DaemonManager {
             .await;
         let mode = self.debug_interface.mode_state.read().await;
         let mut blocker = self.debug_interface.blocker.write().await;
-        // steal a gpu blocker
+        let mut state = self.debug_interface.gpu_state.write().await;
         blocker.set_nvidia_setting(*config)?;
 
         for file in BLOCKED_PCI_FILES {
             blocker.set_file_block(file)?;
         }
-        let mut default: bool = false;
+        let default: bool = state.is_default_state();
         // if there is an nvidia device, block nvidia file once
         for (_, gpu) in gpus_list.iter() {
-            let state = gpu.gpu_state.read().await;
-            default = state.is_default_state();
             if gpu.device.nvidia() {
                 for file in BLOCKED_NVIDIA_FILES {
                     blocker.set_nvidia_file_block(file)?;
@@ -130,7 +128,6 @@ impl DaemonManager {
         }
         if default {
             for (_, gpu) in gpus_list.iter() {
-                let mut state = gpu.gpu_state.write().await;
                 state.save_state(&gpu.device, false).await?;
             }
         }
