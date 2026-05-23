@@ -72,6 +72,7 @@ impl DaemonManager {
                 Arc::clone(&blocker),
                 Arc::clone(&pci_list),
                 Arc::clone(&gpu_state),
+                Arc::clone(&mode_state),
             )?;
             gpu_interfaces_map.insert(id, gpu);
         }
@@ -135,6 +136,7 @@ impl DaemonManager {
         drop(blocker);
         drop(config);
         drop(gpus_list);
+        drop(state);
         let mode_to_apply = mode.mode();
         drop(mode);
         let mode_to_apply: u32 = match mode_to_apply {

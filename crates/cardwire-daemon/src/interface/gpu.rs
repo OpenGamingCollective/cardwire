@@ -9,7 +9,9 @@ use log::{info, warn};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
-use crate::file::CardwireGpuState;
+use crate::{
+    file::{CardwireGpuState, CardwireModeState}, interface::Modes
+};
 
 // Represent a single gpu
 #[derive(Clone)]
@@ -18,6 +20,7 @@ pub struct GpuInterface {
     blocker: Arc<RwLock<GpuBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
+    mode_state: Arc<RwLock<CardwireModeState>>,
 }
 
 impl GpuInterface {
@@ -26,12 +29,14 @@ impl GpuInterface {
         blocker: Arc<RwLock<GpuBlocker>>,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
         gpu_state: Arc<RwLock<CardwireGpuState>>,
+        mode_state: Arc<RwLock<CardwireModeState>>,
     ) -> anyhow::Result<GpuInterface> {
         Ok(Self {
             device,
             blocker,
             pci_list,
             gpu_state,
+            mode_state,
         })
     }
 }
@@ -78,6 +83,13 @@ impl GpuInterface {
 impl GpuInterface {
     #[zbus(property)]
     pub async fn set_block(&mut self, block: bool) -> fdo::Result<()> {
+        let mode = self.mode_state.read().await;
+        if mode.mode() != Modes::Manual {
+            return Err(fdo::Error::AccessDenied(
+                "Per GPU block is only available on manual mode".to_string(),
+            ));
+        }
+        drop(mode);
         if block {
             // Don't block if default
             if self.device.is_default() {
