@@ -1,13 +1,14 @@
 //! entry point of cardwired
 mod file;
 mod interface;
-mod listeners;
 mod models;
+mod tasks;
 
 use crate::models::DaemonManager;
 use anyhow::Result;
 use log::info;
-use std::future::pending;
+use std::{future::pending, sync::Arc};
+use tokio::task;
 use zbus::connection;
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -21,6 +22,11 @@ async fn main() -> Result<()> {
 
     // Before we publish the API
     daemon.pre_daemon_tasks().await?;
+
+    // Prepare the future before moving debug
+    let battery_switch = tasks::watch_battery_status(Arc::clone(
+        &daemon.debug_interface.config.battery_auto_switch,
+    ));
 
     let conn_builder = connection::Builder::system()?;
     let conn = conn_builder
@@ -45,6 +51,10 @@ async fn main() -> Result<()> {
     }
     // drop gpu list to prevent deadlock
     drop(gpu_interfaces);
+
+    // Now spawn background tasks
+    let _ = task::spawn(battery_switch);
+
     info!("Daemon started");
     pending::<()>().await;
     Ok(())
