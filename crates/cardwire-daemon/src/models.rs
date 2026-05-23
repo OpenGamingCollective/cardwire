@@ -107,12 +107,11 @@ impl DaemonManager {
             .debug_interface
             .config
             .experimental_nvidia_block
-            .read()
-            .await;
+            .load(std::sync::atomic::Ordering::Relaxed);
         let mode = self.debug_interface.mode_state.read().await;
         let mut blocker = self.debug_interface.blocker.write().await;
         let mut state = self.debug_interface.gpu_state.write().await;
-        blocker.set_nvidia_setting(*config)?;
+        blocker.set_nvidia_setting(config)?;
 
         for file in BLOCKED_PCI_FILES {
             blocker.set_file_block(file)?;
@@ -134,7 +133,6 @@ impl DaemonManager {
         }
         // Dropping the locks prevent set_mode being stuck
         drop(blocker);
-        drop(config);
         drop(gpus_list);
         drop(state);
         let mode_to_apply = mode.mode();

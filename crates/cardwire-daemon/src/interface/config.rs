@@ -1,21 +1,22 @@
-use std::sync::Arc;
+use std::sync::{
+    Arc, atomic::{AtomicBool, Ordering}
+};
 
 use crate::file::CardwireConfig;
-use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
 // Use a custom Config struct instead of CarwireConfig to allow more control over the settings
 pub struct ConfigMemory {
-    pub auto_apply_gpu_state: Arc<RwLock<bool>>,
-    pub experimental_nvidia_block: Arc<RwLock<bool>>,
-    pub battery_auto_switch: Arc<RwLock<bool>>,
+    pub auto_apply_gpu_state: Arc<AtomicBool>,
+    pub experimental_nvidia_block: Arc<AtomicBool>,
+    pub battery_auto_switch: Arc<AtomicBool>,
 }
 impl ConfigMemory {
     pub fn build(user_config: CardwireConfig) -> ConfigMemory {
-        let auto_apply_gpu_state = Arc::new(RwLock::new(user_config.auto_apply_gpu_state()));
+        let auto_apply_gpu_state = Arc::new(AtomicBool::new(user_config.auto_apply_gpu_state()));
         let experimental_nvidia_block =
-            Arc::new(RwLock::new(user_config.experimental_nvidia_block()));
-        let battery_auto_switch = Arc::new(RwLock::new(user_config.battery_auto_switch()));
+            Arc::new(AtomicBool::new(user_config.experimental_nvidia_block()));
+        let battery_auto_switch = Arc::new(AtomicBool::new(user_config.battery_auto_switch()));
 
         ConfigMemory {
             auto_apply_gpu_state,
@@ -39,48 +40,48 @@ impl ConfigInterface {
 impl ConfigInterface {
     #[zbus(property)]
     pub async fn auto_apply_gpu_state(&self) -> fdo::Result<bool> {
-        let current_config = self.config.auto_apply_gpu_state.read().await;
-        Ok(*current_config)
+        Ok(self.config.auto_apply_gpu_state.load(Ordering::Relaxed))
     }
     #[zbus(property)]
     pub async fn set_auto_apply_gpu_state(&mut self, state: bool) -> fdo::Result<()> {
-        let mut current_config = self.config.auto_apply_gpu_state.write().await;
-        *current_config = state;
+        self.config
+            .auto_apply_gpu_state
+            .store(state, Ordering::Relaxed);
         Ok(())
     }
     #[zbus(property)]
     pub async fn experimental_nvidia_block(&self) -> fdo::Result<bool> {
-        let current_config = self.config.experimental_nvidia_block.read().await;
-        Ok(*current_config)
+        Ok(self
+            .config
+            .experimental_nvidia_block
+            .load(Ordering::Relaxed))
     }
     #[zbus(property)]
     pub async fn set_experimental_nvidia_block(&mut self, state: bool) -> fdo::Result<()> {
-        let mut current_config = self.config.experimental_nvidia_block.write().await;
-        *current_config = state;
+        self.config
+            .experimental_nvidia_block
+            .store(state, Ordering::Relaxed);
         Ok(())
     }
     #[zbus(property)]
     pub async fn battery_auto_switch(&self) -> fdo::Result<bool> {
-        let current_config = self.config.battery_auto_switch.read().await;
-        Ok(*current_config)
+        Ok(self.config.battery_auto_switch.load(Ordering::Relaxed))
     }
     #[zbus(property)]
     pub async fn set_battery_auto_switch(&mut self, state: bool) -> fdo::Result<()> {
-        let mut current_config = self.config.battery_auto_switch.write().await;
-        *current_config = state;
+        self.config
+            .battery_auto_switch
+            .store(state, Ordering::Relaxed);
         Ok(())
     }
     /// Save the daemon's configuration to cardwire.toml
     pub async fn save_to_file(&self) -> fdo::Result<()> {
-        // lock the whole config
-        let battery_auto_switch = self.config.battery_auto_switch.read().await;
-        let experimental_nvidia_block = self.config.experimental_nvidia_block.read().await;
-        let auto_apply_gpu_state = self.config.auto_apply_gpu_state.read().await;
-
         let config = CardwireConfig::new(
-            *auto_apply_gpu_state,
-            *experimental_nvidia_block,
-            *battery_auto_switch,
+            self.config.auto_apply_gpu_state.load(Ordering::Relaxed),
+            self.config
+                .experimental_nvidia_block
+                .load(Ordering::Relaxed),
+            self.config.battery_auto_switch.load(Ordering::Relaxed),
         );
         config.save_config().await?;
         Ok(())

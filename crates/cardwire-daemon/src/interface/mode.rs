@@ -105,10 +105,14 @@ impl ModeInterface {
             // Else apply the gpu_state but still unblock other gpus
             Modes::Manual => {
                 //let gpu_state = self.state.gpu_state.read().await;
-                let config = self.config.auto_apply_gpu_state.read().await;
+                let config = self
+                    .config
+                    .auto_apply_gpu_state
+                    .load(std::sync::atomic::Ordering::Relaxed);
                 let gpu_state = self.gpu_state.read().await;
                 for (_, gpu) in gpu_list.iter_mut() {
-                    if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && *config {
+                    if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && config {
+                        println!("config: {config}");
                         if gpu.device.is_default() {
                             // For safety, warn and unblock if default
                             warn!(
@@ -117,7 +121,8 @@ impl ModeInterface {
                             );
                             gpu.unblock_gpu().await?;
                         } else {
-                            gpu.block().await?;
+                            println!("blocking: {} ", gpu.device.pci().pci_address());
+                            gpu.block_gpu().await?;
                         }
                     } else {
                         gpu.unblock_gpu().await?;
