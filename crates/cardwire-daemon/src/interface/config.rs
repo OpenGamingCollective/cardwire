@@ -4,6 +4,7 @@ use crate::file::CardwireConfig;
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
+// Use a custom Config struct instead of CarwireConfig to allow more control over the settings
 pub struct ConfigMemory {
     pub auto_apply_gpu_state: Arc<RwLock<bool>>,
     pub experimental_nvidia_block: Arc<RwLock<bool>>,
@@ -67,6 +68,21 @@ impl ConfigInterface {
     pub async fn set_battery_auto_switch(&mut self, state: bool) -> fdo::Result<()> {
         let mut current_config = self.config.battery_auto_switch.write().await;
         *current_config = state;
+        Ok(())
+    }
+    /// Save the daemon's configuration to cardwire.toml
+    pub async fn save_to_file(&self) -> fdo::Result<()> {
+        // lock the whole config
+        let battery_auto_switch = self.config.battery_auto_switch.read().await;
+        let experimental_nvidia_block = self.config.experimental_nvidia_block.read().await;
+        let auto_apply_gpu_state = self.config.auto_apply_gpu_state.read().await;
+
+        let config = CardwireConfig::new(
+            *auto_apply_gpu_state,
+            *experimental_nvidia_block,
+            *battery_auto_switch,
+        );
+        config.save_config().await?;
         Ok(())
     }
 }
