@@ -8,7 +8,7 @@ use crate::{
     file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
 use cardwire_core::{
-    gpu::{GpuBlocker, GpuDevice, block_gpu, is_gpu_blocked}, pci::PciDevice
+    gpu::{DbusGpuDevice, GpuBlocker, GpuDevice, block_gpu, is_gpu_blocked}, pci::PciDevice
 };
 use log::{info, warn};
 use tokio::sync::RwLock;
@@ -207,5 +207,21 @@ impl GpuInterface {
         }
 
         Ok(proc_map)
+    }
+    pub async fn get_device(&self) -> fdo::Result<DbusGpuDevice> {
+        let gpu = &self.device;
+        Ok(DbusGpuDevice {
+            pci: gpu.pci.pci_address().to_string(),
+            render: *gpu.render(),
+            name: gpu.name().to_string(),
+            card: *gpu.card(),
+            default: gpu.default().unwrap_or(false),
+            nvidia: gpu.nvidia(),
+            nvidia_minor: if gpu.nvidia_minor().is_some() {
+                gpu.nvidia_minor().unwrap().to_string()
+            } else {
+                "".to_string()
+            },
+        })
     }
 }
