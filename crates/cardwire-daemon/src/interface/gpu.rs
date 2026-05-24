@@ -1,7 +1,7 @@
 //! DBUS Interface for single gpu interaction
 
 use std::{
-    collections::BTreeMap, ffi::OsStr, fs::{self, read_dir}, path::{Path, PathBuf}, sync::Arc
+    collections::{BTreeMap, HashMap}, ffi::OsStr, fs::{self, read_dir}, path::{Path, PathBuf}, sync::Arc
 };
 
 use crate::{
@@ -13,12 +13,6 @@ use cardwire_core::{
 use log::{info, warn};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
-
-#[derive(serde::Serialize, zbus::zvariant::Type)]
-pub struct LsofResult {
-    pub card: Vec<String>,
-    pub render: Vec<String>,
-}
 
 // Represent a single gpu
 #[derive(Clone)]
@@ -191,12 +185,27 @@ impl GpuInterface {
     pub async fn block(&self) -> fdo::Result<bool> {
         self.gpu_blocked().await
     }
-    pub async fn lsof(&self) -> fdo::Result<LsofResult> {
+    pub async fn lsof(&self) -> fdo::Result<HashMap<String, Vec<String>>> {
         let card_path = format!("/dev/dri/card{}", self.device.card());
         let render_path = format!("/dev/dri/renderD{}", self.device.render());
+        let mut proc_map: HashMap<String, Vec<String>> = HashMap::new();
+
         let (card, render) =
             tokio::try_join!(self.lsof_read(&card_path), self.lsof_read(&render_path))?;
+        proc_map.insert(card_path, card);
+        proc_map.insert(render_path, render);
 
-        Ok(LsofResult { card, render })
+        if let Some(minor) = self.device.nvidia_minor() {
+            let nvidia_path = format!("/dev/nvidia{}", minor);
+            let nvidiactl_path = "/dev/nvidiactl".to_string();
+            let (nvidia, nvidiactl) = tokio::try_join!(
+                self.lsof_read(&nvidia_path),
+                self.lsof_read(&nvidiactl_path)
+            )?;
+            proc_map.insert(nvidia_path, nvidia);
+            proc_map.insert(nvidiactl_path, nvidiactl);
+        }
+
+        Ok(proc_map)
     }
 }
