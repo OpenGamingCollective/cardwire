@@ -6,9 +6,11 @@
 
 ---
 
-## Object Path: `/com/github/opengamingcollective/cardwire`
+## Object Path
+`/com/github/opengamingcollective/cardwire`
 
-### Interface: `com.github.opengamingcollective.cardwire.Manager`
+### Manager
+`com.github.opengamingcollective.cardwire.Manager`
 
 **Methods:**
 
@@ -22,7 +24,8 @@
   - **Inputs:** None
   - **Outputs:** None
 
-### Interface: `com.github.opengamingcollective.cardwire.Mode`
+### Mode
+`com.github.opengamingcollective.cardwire.Mode`
 
 **Properties:**
 
@@ -36,7 +39,8 @@
     - `1` Hybrid: Unblock the dGPU. Requires exactly 2 GPUs
     - `2` Manual: Allow per-GPU blocking via individual GPU objects. Applies saved GPU state on mode change if `auto_apply_gpu_state` is enabled
 
-### Interface: `com.github.opengamingcollective.cardwire.Config`
+### Config
+`com.github.opengamingcollective.cardwire.Config`
 
 **Properties:**
 
@@ -62,7 +66,8 @@
   - **Inputs:** None
   - **Outputs:** None
 
-### Interface: `com.github.opengamingcollective.cardwire.Debug`
+### Debug
+`com.github.opengamingcollective.cardwire.Debug`
 
 **Methods:**
 
@@ -82,11 +87,10 @@
 
 ---
 
-## Object Path: `/com/github/opengamingcollective/cardwire/Gpu/{id}`
+## Gpu
+`/com/github/opengamingcollective/cardwire/Gpu/{id}`
 
 Represents a single GPU device, where `{id}` is the numeric identifier of the GPU (0 is always the default one). These objects can be dynamically discovered by calling `GetManagedObjects` on the standard `org.freedesktop.DBus.ObjectManager` interface located at the root path (`/com/github/opengamingcollective/cardwire`)
-
-### Interface: `com.github.opengamingcollective.cardwire.Gpu`
 
 **Properties:**
 
