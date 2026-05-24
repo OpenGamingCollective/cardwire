@@ -49,13 +49,13 @@ impl GpuInterface {
         let pci_list = self.pci_list.read().await;
         block_gpu(&mut blocker, &self.device, true, &pci_list)
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        if let Ok(result) = is_gpu_blocked(&blocker, &self.device)
-            && !result
-        {
+        let blocked = is_gpu_blocked(&blocker, &self.device)
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        if !blocked {
             return Err(fdo::Error::Failed(
                 "gpu is supposed to be blocked, bpf says it's not".to_string(),
             ));
-        };
+        }
         Ok(())
     }
     /// unblock the gpu
@@ -65,13 +65,13 @@ impl GpuInterface {
 
         block_gpu(&mut blocker, &self.device, false, &pci_list)
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        if let Ok(result) = is_gpu_blocked(&blocker, &self.device)
-            && result
-        {
+        let blocked = is_gpu_blocked(&blocker, &self.device)
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        if blocked {
             return Err(fdo::Error::Failed(
                 "gpu is supposed to be unblocked, bpf says it's not".to_string(),
             ));
-        };
+        }
         Ok(())
     }
     /// check if the gpu is blocked
