@@ -128,7 +128,8 @@ impl DaemonManager {
         }
         if default {
             for (_, gpu) in gpus_list.iter() {
-                state.save_state(&gpu.device, false).await?;
+                let blocked = cardwire_core::gpu::is_gpu_blocked(&blocker, &gpu.device)?;
+                state.save_state(&gpu.device, blocked).await?;
             }
         }
         // Dropping the locks prevent set_mode being stuck
