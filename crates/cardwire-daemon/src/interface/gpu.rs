@@ -1,7 +1,12 @@
 //! DBUS Interface for single gpu interaction
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap, ffi::OsStr, fs::{self, read_dir}, path::{Path, PathBuf}, sync::Arc
+};
 
+use crate::{
+    file::{CardwireGpuState, CardwireModeState}, interface::Modes
+};
 use cardwire_core::{
     gpu::{GpuBlocker, GpuDevice, block_gpu, is_gpu_blocked}, pci::PciDevice
 };
@@ -9,9 +14,11 @@ use log::{info, warn};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
-use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::Modes
-};
+#[derive(serde::Serialize, zbus::zvariant::Type)]
+pub struct LsofResult {
+    pub card: Vec<String>,
+    pub render: Vec<String>,
+}
 
 // Represent a single gpu
 #[derive(Clone)]
@@ -77,6 +84,64 @@ impl GpuInterface {
         let blocker = self.blocker.read().await;
         is_gpu_blocked(&blocker, &self.device).map_err(|e| fdo::Error::Failed(e.to_string()))
     }
+    async fn lsof_read(&self, s: &str) -> fdo::Result<Vec<String>> {
+        let proc_path = Path::new("/proc");
+        let mut proc_found: Vec<String> = Vec::new();
+        // If proc path doesn't exist, exit
+        if !proc_path.exists() || !proc_path.is_dir() {
+            return Err(fdo::Error::Failed("couldn't find /proc path".to_string()));
+        }
+        // read /proc
+        for entry in read_dir(proc_path)
+            .map_err(|e| fdo::Error::IOError(e.to_string()))?
+            .flatten()
+        {
+            // Check if folder name is a numerical, if not skip
+            if let Ok(string) = entry.file_name().into_string()
+                && string.parse::<u32>().is_err()
+            {
+                continue;
+            }
+            let path = entry.path();
+            // now read eg: /proc/1
+            if path.is_dir() {
+                // now get fd directory
+                let fd_dir: PathBuf = read_dir(&path)
+                    .map_err(|e| fdo::Error::IOError(e.to_string()))?
+                    .filter(|r| r.is_ok())
+                    .map(|r| r.unwrap().path())
+                    .filter(|r| r.file_name() == Some(OsStr::new("fd")))
+                    .collect();
+                for entry in read_dir(fd_dir)
+                    .map_err(|e| fdo::Error::IOError(e.to_string()))?
+                    .flatten()
+                {
+                    if let Ok(link) = entry.path().read_link()
+                        && let Some(file) = link.to_str()
+                    {
+                        let file = file.to_string();
+                        if file.contains(s) {
+                            // Found the file, now get process name
+                            let status_read = fs::read_to_string(path.join("status"));
+                            let mut process_name: String = String::new();
+                            if let Ok(status) = status_read {
+                                process_name =
+                                    status.lines().filter(|l| l.contains("Name:")).collect();
+                                process_name = process_name
+                                    .split(":")
+                                    .last()
+                                    .unwrap_or("")
+                                    .trim()
+                                    .to_string();
+                            }
+                            proc_found.push(process_name);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(proc_found)
+    }
 }
 
 #[interface(name = "com.github.opengamingcollective.cardwire.Gpu")]
@@ -123,5 +188,13 @@ impl GpuInterface {
     #[zbus(property)]
     pub async fn block(&self) -> fdo::Result<bool> {
         self.gpu_blocked().await
+    }
+    pub async fn lsof(&self) -> fdo::Result<LsofResult> {
+        let card_path = format!("/dev/dri/card{}", self.device.card());
+        let render_path = format!("/dev/dri/renderD{}", self.device.render());
+        let (card, render) =
+            tokio::try_join!(self.lsof_read(&card_path), self.lsof_read(&render_path))?;
+
+        Ok(LsofResult { card, render })
     }
 }
