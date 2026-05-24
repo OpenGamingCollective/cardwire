@@ -32,6 +32,10 @@ async fn main() -> Result<()> {
     let conn = conn_builder
         .name("com.github.opengamingcollective.cardwire")?
         .serve_at("/com/github/opengamingcollective/cardwire", daemon.clone())?
+        .serve_at(
+            "/com/github/opengamingcollective/cardwire",
+            zbus::fdo::ObjectManager,
+        )?
         .build()
         .await?;
 
