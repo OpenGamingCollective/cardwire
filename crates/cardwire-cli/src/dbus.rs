@@ -38,9 +38,9 @@ impl<'a> DaemonClient<'a> {
         let path = format!("/com/github/opengamingcollective/cardwire/gpu/{}", id);
         let block_proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire", // Destination
-            path.as_str(),                              // The new dynamic path
-            "com.github.opengamingcollective.cardwire.gpu", // Interface name
+            "com.github.opengamingcollective.cardwire",
+            path.as_str(),
+            "com.github.opengamingcollective.cardwire.gpu",
         )
         .await
         .map_err(|e| zbus::fdo::Error::Failed(format!("Failed to create proxy: {}", e)))?;

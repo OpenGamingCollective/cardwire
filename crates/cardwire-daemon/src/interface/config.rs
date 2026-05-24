@@ -12,6 +12,7 @@ pub struct ConfigMemory {
     pub battery_auto_switch: Arc<AtomicBool>,
 }
 impl ConfigMemory {
+    /// build a ConfigMemory from CardwireConfig
     pub fn build(user_config: CardwireConfig) -> ConfigMemory {
         let auto_apply_gpu_state = Arc::new(AtomicBool::new(user_config.auto_apply_gpu_state()));
         let experimental_nvidia_block =

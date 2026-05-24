@@ -49,7 +49,7 @@ impl GpuInterface {
 }
 
 impl GpuInterface {
-    // block the gpu
+    /// block the gpu
     pub async fn block_gpu(&mut self) -> fdo::Result<()> {
         let mut blocker = self.blocker.write().await;
         let pci_list = self.pci_list.read().await;
@@ -64,7 +64,7 @@ impl GpuInterface {
         };
         Ok(())
     }
-    // unblock the gpu
+    /// unblock the gpu
     pub async fn unblock_gpu(&mut self) -> fdo::Result<()> {
         let mut blocker = self.blocker.write().await;
         let pci_list = self.pci_list.read().await;
@@ -80,10 +80,12 @@ impl GpuInterface {
         };
         Ok(())
     }
+    /// check if the gpu is blocked
     pub async fn gpu_blocked(&self) -> fdo::Result<bool> {
         let blocker = self.blocker.read().await;
         is_gpu_blocked(&blocker, &self.device).map_err(|e| fdo::Error::Failed(e.to_string()))
     }
+    /// read fd link to find which apps opened the gpu
     async fn lsof_read(&self, s: &str) -> fdo::Result<Vec<String>> {
         let proc_path = Path::new("/proc");
         let mut proc_found: Vec<String> = Vec::new();

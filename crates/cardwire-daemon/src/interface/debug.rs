@@ -38,6 +38,7 @@ impl DebugInterface {
 
 #[interface(name = "com.github.opengamingcollective.cardwire.Debug")]
 impl DebugInterface {
+    /// Find out if the GPU can sleep or not by checking if the system config is correct
     async fn diagnostic_gpu(
         &self,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
