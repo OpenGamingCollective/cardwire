@@ -10,15 +10,15 @@ use anyhow::{Ok, Result};
 // Here the struct are used to parse the json
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug)]
 pub struct GpuDevice {
-    id: u32,
-    name: String,
-    pci: String,
-    render: u32,
-    card: u32,
-    default: bool,
-    blocked: bool,
-    nvidia: bool,
-    nvidia_minor: String,
+    pub id: u32,
+    pub name: String,
+    pub pci: String,
+    pub render: u32,
+    pub card: u32,
+    pub default: bool,
+    pub blocked: bool,
+    pub nvidia: bool,
+    pub nvidia_minor: String,
 }
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type)]
 pub struct PciDevice {
@@ -99,12 +99,12 @@ fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
         "-".repeat(default_w),
         "-".repeat(blocked_w),
     );
-    for (_, gpu) in gpu_list {
+    for (id, gpu) in gpu_list {
         let render_full = format!("renderD{}", gpu.render);
         let card_full = format!("card{}", gpu.card);
         println!(
             "{:<id_w$}  {:<name_w$}  {:<pci_w$}  {:<render_w$}  {:<card_w$}  {:<default_w$}  {:<blocked_w$}",
-            gpu.id,
+            id,
             gpu.name,
             gpu.pci,
             render_full,
