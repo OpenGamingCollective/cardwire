@@ -73,7 +73,6 @@ impl PciDevice {
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type)]
 pub struct DbusPciDevice {
-    pub pci_address: String,
     // Strings to be able to put nothing
     pub iommu_group: String,
     pub vendor_id: String,

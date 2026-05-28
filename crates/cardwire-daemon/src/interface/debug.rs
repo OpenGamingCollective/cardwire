@@ -1,7 +1,9 @@
-use cardwire_core::{gpu::GpuBlocker, pci::PciDevice};
+use cardwire_core::{
+    gpu::GpuBlocker, pci::{DbusPciDevice, PciDevice}
+};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
-use zbus::{fdo, interface, object_server::SignalEmitter};
+use zbus::{fdo, interface};
 
 use crate::{
     file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface}
@@ -38,17 +40,28 @@ impl DebugInterface {
 
 #[interface(name = "com.github.opengamingcollective.cardwire.Debug")]
 impl DebugInterface {
-    /// Find out if the GPU can sleep or not by checking if the system config is correct
-    async fn diagnostic_gpu(
-        &self,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> fdo::Result<()> {
-        let emitter = emitter.into_owned();
-        emitter.diagnostic_info("Hello").await;
-        Ok(())
+    pub(crate) async fn get_pci_devices(&self) -> fdo::Result<BTreeMap<String, DbusPciDevice>> {
+        let pci_list = &self.pci_list.read().await;
+        let mut dbus_list: BTreeMap<String, DbusPciDevice> = BTreeMap::new();
+        for (id, pci) in pci_list.iter() {
+            let temp_pci = DbusPciDevice {
+                iommu_group: if let Some(iommu) = pci.iommu_group() {
+                    iommu.to_string()
+                } else {
+                    "".to_string()
+                },
+                vendor_id: pci.vendor_id().clone().unwrap_or("".to_string()),
+                device_id: pci.device_id().clone().unwrap_or("".to_string()),
+                vendor_name: pci.vendor_name().clone().unwrap_or("".to_string()),
+                device_name: pci.device_name().clone().unwrap_or("".to_string()),
+                driver: pci.driver().clone().unwrap_or("".to_string()),
+                class: pci.class().clone().unwrap_or("".to_string()),
+                parent_pci: pci.parent_pci().clone().unwrap_or("".to_string()),
+                child_pci: pci.child_pci().clone().unwrap_or("".to_string()),
+            };
+            dbus_list.insert(id.clone(), temp_pci);
+        }
+
+        Ok(dbus_list)
     }
-    #[zbus(signal)]
-    async fn diagnostic_info(emitter: &SignalEmitter<'_>, text: &str) -> zbus::Result<()>;
-    #[zbus(signal)]
-    async fn diagnostic_ended(emitter: &SignalEmitter<'_>) -> zbus::Result<()>;
 }

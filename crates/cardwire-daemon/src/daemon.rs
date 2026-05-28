@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
     drop(gpu_interfaces);
 
     // Now spawn background tasks
-    let _ = task::spawn(battery_switch);
+    task::spawn(battery_switch);
 
     info!("Daemon started");
     pending::<()>().await;
