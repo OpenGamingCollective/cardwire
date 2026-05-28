@@ -57,31 +57,29 @@ async fn main() -> anyhow::Result<()> {
                     let path_str = path.as_str();
                     if let Some(id_str) =
                         path_str.strip_prefix("/com/github/opengamingcollective/cardwire/Gpu/")
+                        && let Ok(id) = id_str.parse::<u32>()
                     {
-                        if let Ok(id) = id_str.parse::<u32>() {
-                            let mut blocked = false;
-                            for (iface, props) in interfaces {
-                                if iface.as_str() == "com.github.opengamingcollective.cardwire.Gpu"
-                                {
-                                    if let Some(block_val) = props.get("Block") {
-                                        blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
-                                    }
-                                }
+                        let mut blocked = false;
+                        for (iface, props) in interfaces {
+                            if iface.as_str() == "com.github.opengamingcollective.cardwire.Gpu"
+                                && let Some(block_val) = props.get("Block")
+                            {
+                                blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
                             }
-                            if let Ok(dbus_dev) = client.get_device(id).await {
-                                let dev = display::GpuDevice {
-                                    id,
-                                    name: dbus_dev.name,
-                                    pci: dbus_dev.pci,
-                                    render: dbus_dev.render,
-                                    card: dbus_dev.card,
-                                    default: dbus_dev.default,
-                                    blocked,
-                                    nvidia: dbus_dev.nvidia,
-                                    nvidia_minor: dbus_dev.nvidia_minor,
-                                };
-                                map.insert(id as usize, dev);
-                            }
+                        }
+                        if let Ok(dbus_dev) = client.get_device(id).await {
+                            let dev = display::GpuDevice {
+                                id,
+                                name: dbus_dev.name,
+                                pci: dbus_dev.pci,
+                                render: dbus_dev.render,
+                                card: dbus_dev.card,
+                                default: dbus_dev.default,
+                                blocked,
+                                nvidia: dbus_dev.nvidia,
+                                nvidia_minor: dbus_dev.nvidia_minor,
+                            };
+                            map.insert(id as usize, dev);
                         }
                     }
                 }
