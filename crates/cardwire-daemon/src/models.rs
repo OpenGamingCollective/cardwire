@@ -88,7 +88,10 @@ impl DaemonManager {
                 Arc::clone(&user_config),
             )?,
             gpu_interfaces: Arc::clone(&gpu_interfaces),
-            config_interface: ConfigInterface::build(Arc::clone(&user_config))?,
+            config_interface: ConfigInterface::build(
+                Arc::clone(&user_config),
+                Arc::clone(&blocker),
+            )?,
             debug_interface: DebugInterface::build(
                 Arc::clone(&mode_state),
                 Arc::clone(&gpu_state),

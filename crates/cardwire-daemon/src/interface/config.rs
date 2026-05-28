@@ -3,6 +3,8 @@ use std::sync::{
 };
 
 use crate::file::CardwireConfig;
+use cardwire_core::gpu::GpuBlocker;
+use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
 // Use a custom Config struct instead of CarwireConfig to allow more control over the settings
@@ -30,10 +32,14 @@ impl ConfigMemory {
 #[derive(Clone)]
 pub struct ConfigInterface {
     pub config: Arc<ConfigMemory>,
+    pub blocker: Arc<RwLock<GpuBlocker>>,
 }
 impl ConfigInterface {
-    pub fn build(config: Arc<ConfigMemory>) -> anyhow::Result<ConfigInterface> {
-        Ok(Self { config })
+    pub fn build(
+        config: Arc<ConfigMemory>,
+        blocker: Arc<RwLock<GpuBlocker>>,
+    ) -> anyhow::Result<ConfigInterface> {
+        Ok(Self { config, blocker })
     }
 }
 
@@ -62,7 +68,10 @@ impl ConfigInterface {
         self.config
             .experimental_nvidia_block
             .store(state, Ordering::Relaxed);
-        Ok(())
+        let mut blocker = self.blocker.write().await;
+        blocker
+            .set_nvidia_setting(state)
+            .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
     }
     #[zbus(property)]
     pub async fn battery_auto_switch(&self) -> fdo::Result<bool> {

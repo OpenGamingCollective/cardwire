@@ -17,8 +17,13 @@ impl GpuBlocker {
     }
 
     pub fn set_nvidia_setting(&mut self, block: bool) -> Result<(), CardwireError> {
-        self.inner
-            .block_kind(&block.to_string(), BlockKind::NvidiaSetting)?;
+        if block {
+            self.inner
+                .block_kind(&block.to_string(), BlockKind::NvidiaSetting)?;
+        } else {
+            self.inner
+                .unblock_kind(&block.to_string(), BlockKind::NvidiaSetting)?;
+        }
         Ok(())
     }
     pub fn set_file_block(&mut self, file: &str) -> Result<(), CardwireError> {
