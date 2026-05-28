@@ -192,7 +192,7 @@ async fn main() -> anyhow::Result<()> {
                     handle_error(e);
                 } else {
                     // TODO: implement debug
-                    println!("DiagnosticGpu signal emitted");
+                    println!("DiagnosticGpu not implemented yet");
                 }
             }
         },
