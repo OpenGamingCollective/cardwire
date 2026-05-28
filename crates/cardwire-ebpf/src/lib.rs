@@ -147,7 +147,7 @@ impl EbpfBlocker {
                 map.insert(key, 1, 0).map_err(CardwireEbpfError::aya)?;
             }
             BlockKind::NvidiaSetting => {
-                if let Ok(_) = entity.parse::<bool>() {
+                if entity.parse::<bool>().is_ok() {
                     let mut map: HashMap<_, u32, u8> = HashMap::try_from(
                         self.ebpf
                             .map_mut(&kind_string)
