@@ -5,6 +5,8 @@ use args::{Args, CliMode, Commands, ConfigAction, DebugAction, ManagerAction};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
 
+use crate::display::print_devices_pci;
+
 const BIN_NAME: &str = "cardwire";
 
 #[tokio::main]
@@ -49,7 +51,12 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::List { full, json } => {
             if full {
-                println!("Full PCI list is not supported in the new D-Bus API");
+                match client.get_pci_device().await {
+                    Ok(response) => {
+                        print_devices_pci(response)?;
+                    }
+                    Err(e) => handle_error(e),
+                }
             } else {
                 let mut map = std::collections::BTreeMap::new();
                 let objects = client.get_managed_objects().await.unwrap_or_default();

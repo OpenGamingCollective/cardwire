@@ -22,7 +22,6 @@ pub struct GpuDevice {
 }
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type)]
 pub struct PciDevice {
-    pci_address: String,
     iommu_group: String,
     vendor_id: String,
     device_id: String,

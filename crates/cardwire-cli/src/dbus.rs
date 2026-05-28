@@ -1,5 +1,10 @@
+use std::collections::BTreeMap;
+
 use zbus::{Proxy, connection::Connection};
 
+use crate::display::PciDevice;
+
+// Cardwire dbus doesnt send blocked state nor the id
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug)]
 pub struct DbusGpuDevice {
     pub name: String,
@@ -58,6 +63,16 @@ impl<'a> DaemonClient<'a> {
         .await?;
         proxy.call("GetDevice", &()).await
     }
+    pub async fn get_pci_device(&self) -> zbus::Result<BTreeMap<String, PciDevice>> {
+        let proxy = zbus::Proxy::new(
+            self.proxy.connection(),
+            "com.github.opengamingcollective.cardwire",
+            "/com/github/opengamingcollective/cardwire",
+            "com.github.opengamingcollective.cardwire.Debug",
+        )
+        .await?;
+        proxy.call("GetPciDevices", &()).await
+    }
 
     pub async fn set_mode(&self, mode: &u32) -> zbus::fdo::Result<()> {
         let proxy = zbus::Proxy::new(
@@ -104,7 +119,7 @@ impl<'a> DaemonClient<'a> {
             "com.github.opengamingcollective.cardwire.Gpu",
         )
         .await?;
-        proxy.call("PowerState", &(())).await
+        proxy.call("PowerState", &()).await
     }
 
     pub async fn lsof(

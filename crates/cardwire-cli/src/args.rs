@@ -1,4 +1,4 @@
-use clap::{ArgAction, Args as ClapArgs, Parser, Subcommand, ValueEnum};
+use clap::{Args as ClapArgs, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use std::fmt;
 #[derive(Clone, Debug, ValueEnum)]
