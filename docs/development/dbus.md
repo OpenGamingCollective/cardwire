@@ -71,23 +71,22 @@
 
 **Methods:**
 
-- **`DiagnosticGpu`**
-  Find out if the GPU can sleep or not by checking if the system config is correct. Emits diagnostic signals during execution (NOT IMPLEMENTED)
+- **`GetPciDevices`**
+  Get a dictionary of all detected PCI devices.
   - **Inputs:** None
-  - **Outputs:** None
+  - **Outputs:**
+    - (out): `a{s(sssssssss)}` -- A dictionary mapping PCI addresses to a struct containing:
+      - `iommu_group`: `s` - IOMMU group number (empty string if none)
+      - `vendor_id`: `s` - PCI vendor ID (empty string if unknown)
+      - `device_id`: `s` - PCI device ID (empty string if unknown)
+      - `vendor_name`: `s` - Vendor name (empty string if unknown)
+      - `device_name`: `s` - Device name (empty string if unknown)
+      - `driver`: `s` - Kernel driver in use (empty string if unknown)
+      - `class`: `s` - PCI class (empty string if unknown)
+      - `parent_pci`: `s` - Parent PCI address (empty string if unknown)
+      - `child_pci`: `s` - Child PCI address (empty string if unknown)
 
-**Signals:**
-
-- **`DiagnosticInfo`**
-  Emitted with diagnostic output text during the diagnostic process
-  - **Parameters:** `s`
-- **`DiagnosticEnded`**
-  Emitted when the diagnostic process finishes
-  - **Parameters:** None
-
----
-
-## Gpu
+### Gpu
 `/com/github/opengamingcollective/cardwire/Gpu/{id}`
 
 Represents a single GPU device, where `{id}` is the numeric identifier of the GPU (0 is always the default one). These objects can be dynamically discovered by calling `GetManagedObjects` on the standard `org.freedesktop.DBus.ObjectManager` interface located at the root path (`/com/github/opengamingcollective/cardwire`)
@@ -102,7 +101,7 @@ Represents a single GPU device, where `{id}` is the numeric identifier of the GP
 **Methods:**
 
 - **`GetDevice`**
-  Get the detailed properties of this GPU
+  Get the detailed informations of this GPU
   - **Inputs:** None
   - **Outputs:**
     - (out): `(ssuubbs)` -- A struct containing:
@@ -114,8 +113,20 @@ Represents a single GPU device, where `{id}` is the numeric identifier of the GP
       - `nvidia`: `b` - Whether the GPU is an NVIDIA device
       - `nvidia_minor`: `s` - NVIDIA driver minor number (empty string if not applicable)
 
+- **`PowerState`**
+  Get the current power state of the GPU
+  - **Inputs:** None
+  - **Outputs:**
+    - (out): `s` -- The power state (e.g., "D0", "D3cold")
+
 - **`Lsof`**
-  Read file descriptors to find which applications have currently opened the GPU.
+  Read file descriptors to find which applications have currently opened the GPU
   - **Inputs:** None
   - **Outputs:**
     - (out): `a{sas}` -- A dictionary mapping file paths (like `/dev/dri/card0`) to an array of process names
+
+**Signals:**
+
+- **`PowerStateChanged`**
+  Emitted when the power state of the GPU changes
+  - **Parameters:** `s` (string) -- The new power state
