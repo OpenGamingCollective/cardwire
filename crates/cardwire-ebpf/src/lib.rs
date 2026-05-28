@@ -147,18 +147,14 @@ impl EbpfBlocker {
                 map.insert(key, 1, 0).map_err(CardwireEbpfError::aya)?;
             }
             BlockKind::NvidiaSetting => {
-                if let Ok(block) = entity.parse::<bool>() {
+                if entity.parse::<bool>().is_ok() {
                     let mut map: HashMap<_, u32, u8> = HashMap::try_from(
                         self.ebpf
                             .map_mut(&kind_string)
                             .ok_or_else(|| CardwireEbpfError::missing_map(&kind_string))?,
                     )
                     .map_err(CardwireEbpfError::aya)?;
-                    if block {
-                        map.insert(0, 1, 0).map_err(CardwireEbpfError::aya)?;
-                    } else {
-                        let _ = map.remove(&0);
-                    }
+                    map.insert(0, 1, 0).map_err(CardwireEbpfError::aya)?;
                 }
             }
             BlockKind::Render | BlockKind::Card | BlockKind::Nvidia => {
@@ -205,7 +201,7 @@ impl EbpfBlocker {
                 let _ = map.remove(&value);
             }
             // no file unblock
-            BlockKind::NvidiaFile | BlockKind::File | BlockKind::NvidiaSetting => (),
+            BlockKind::NvidiaFile | BlockKind::File => (),
             BlockKind::Render | BlockKind::Card | BlockKind::Nvidia => {
                 let mut map: HashMap<_, u32, u8> = HashMap::try_from(
                     self.ebpf
@@ -217,6 +213,15 @@ impl EbpfBlocker {
                 if let Ok(value) = entity.parse::<u32>() {
                     let _ = map.remove(&value);
                 }
+            }
+            BlockKind::NvidiaSetting => {
+                let mut map: HashMap<_, u32, u8> = HashMap::try_from(
+                    self.ebpf
+                        .map_mut(&kind_string)
+                        .ok_or_else(|| CardwireEbpfError::missing_map(&kind_string))?,
+                )
+                .map_err(CardwireEbpfError::aya)?;
+                let _ = map.remove(&0);
             }
         }
 

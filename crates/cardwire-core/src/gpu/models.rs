@@ -68,13 +68,11 @@ impl GpuDevice {
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type)]
 pub struct DbusGpuDevice {
-    pub id: u32,
     pub name: String,
     pub pci: String,
     pub render: u32,
     pub card: u32,
     pub default: bool,
-    pub blocked: bool,
     pub nvidia: bool,
     pub nvidia_minor: String,
 }
