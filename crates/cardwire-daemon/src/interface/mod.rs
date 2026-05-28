@@ -5,5 +5,5 @@ mod mode;
 
 pub use config::{ConfigInterface, ConfigMemory};
 pub use debug::DebugInterface;
-pub use gpu::GpuInterface;
+pub use gpu::{GpuInterface, GpuInterfaceSignals};
 pub use mode::{ModeInterface, Modes};

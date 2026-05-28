@@ -12,7 +12,7 @@ use cardwire_core::{
 };
 use log::{info, warn};
 use tokio::sync::RwLock;
-use zbus::{fdo, interface};
+use zbus::{fdo, interface, object_server::SignalEmitter};
 
 // Represent a single gpu
 #[derive(Clone)]
@@ -224,4 +224,21 @@ impl GpuInterface {
             },
         })
     }
+
+    pub async fn power_state(&self) -> fdo::Result<String> {
+        let power_path = format!(
+            "/sys/bus/pci/devices/{}/power_state",
+            self.device.pci.pci_address()
+        );
+        fs::read_to_string(&power_path).map_err(|e| {
+            fdo::Error::IOError(format!(
+                "error while trying to read {} power_state: {}",
+                self.device.name(),
+                e
+            ))
+        })
+    }
+
+    #[zbus(signal)]
+    pub async fn power_state_changed(emitter: &SignalEmitter<'_>, state: &str) -> zbus::Result<()>;
 }

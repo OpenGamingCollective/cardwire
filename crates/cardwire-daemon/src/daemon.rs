@@ -4,7 +4,7 @@ mod interface;
 mod models;
 mod tasks;
 
-use crate::models::DaemonManager;
+use crate::{models::DaemonManager, tasks::watch_power_state};
 use anyhow::Result;
 use log::info;
 use std::{future::pending, sync::Arc};
@@ -51,7 +51,14 @@ async fn main() -> Result<()> {
     // cardwire.Gpu
     for (id, gpu_interface) in gpu_interfaces.iter() {
         let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
-        object_server.at(path, gpu_interface.clone()).await?;
+        object_server
+            .at(path.clone(), gpu_interface.clone())
+            .await?;
+        // spawn power state watcher
+        task::spawn(watch_power_state(
+            gpu_interface.clone(),
+            object_server.interface(path).await?,
+        ));
     }
     // drop gpu list to prevent deadlock
     drop(gpu_interfaces);
