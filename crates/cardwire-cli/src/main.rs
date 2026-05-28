@@ -110,6 +110,13 @@ async fn main() -> anyhow::Result<()> {
                     }
                     Err(e) => handle_error(e),
                 };
+            } else if action.power {
+                match client.get_power_state(id).await {
+                    Ok(power_state) => {
+                        println!("{}", power_state);
+                    }
+                    Err(e) => handle_error(e),
+                };
             }
         }
         Commands::Config { action } => match action {

@@ -95,16 +95,16 @@ impl<'a> DaemonClient<'a> {
         block_proxy.set_property("Block", &(blocked)).await
     }
 
-    pub async fn get_status(&self, id: u32) -> zbus::Result<bool> {
+    pub async fn get_power_state(&self, id: u32) -> zbus::Result<String> {
         let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
-        let block_proxy = zbus::Proxy::new(
+        let proxy = zbus::Proxy::new(
             self.proxy.connection(),
             "com.github.opengamingcollective.cardwire",
             path.as_str(),
             "com.github.opengamingcollective.cardwire.Gpu",
         )
         .await?;
-        block_proxy.get_property("Block").await
+        proxy.call("PowerState", &(())).await
     }
 
     pub async fn lsof(

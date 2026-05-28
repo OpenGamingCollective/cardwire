@@ -131,4 +131,7 @@ pub struct GpuAction {
 
     #[arg(long, help = "List open files on the GPU")]
     pub lsof: bool,
+
+    #[arg(long, help = "Get GPU power state")]
+    pub power: bool,
 }
