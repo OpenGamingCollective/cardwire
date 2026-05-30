@@ -60,7 +60,18 @@ struct file {
 	struct path f_path;
 } __attribute__((preserve_access_index));
 
+struct event_t {
+	__u32 pid;
+	char comm[32];
+};
+
 // EBPF maps
+// This one is to report the app to cardwire
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} EVENTS SEC(".maps");
+
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 1024);
@@ -163,9 +174,9 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	if (!d) {
 		return 0;
 	}
-
 	char comm[16] = {};
 	bpf_get_current_comm(comm, sizeof(comm));
+	bpf_ringbuf_output(&EVENTS, comm, sizeof(comm), 0);
 	if (__builtin_memcmp(comm, "cardwired", 9) == 0) {
 		return 0;
 	}

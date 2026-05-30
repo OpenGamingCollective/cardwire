@@ -320,6 +320,7 @@ name = "cardwire-daemon"
 version = "0.8.0"
 dependencies = [
  "anyhow",
+ "aya",
  "cardwire-ebpf",
  "config",
  "env_logger",

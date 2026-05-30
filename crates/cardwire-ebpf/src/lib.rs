@@ -5,7 +5,7 @@ use std::fmt;
 
 pub use crate::errors::{CardwireEbpfError, CardwireEbpfResult};
 use aya::{
-    Btf, Ebpf, maps::{HashMap, MapError}, programs::Lsm
+    Btf, Ebpf, maps::{HashMap, MapError, RingBuf}, programs::Lsm
 };
 pub struct EbpfBlocker {
     ebpf: Ebpf,
@@ -279,5 +279,10 @@ impl EbpfBlocker {
         }
 
         Ok(false)
+    }
+    pub fn get_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
+        let map = self.ebpf.take_map("EVENTS").unwrap();
+        let ring_buf: RingBuf<aya::maps::MapData> = RingBuf::try_from(map).unwrap();
+        Ok(ring_buf)
     }
 }

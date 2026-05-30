@@ -15,7 +15,7 @@ use zbus::connection;
 async fn main() -> Result<()> {
     // log
     env_logger::Builder::from_default_env()
-        .format_target(false)
+        .format_target(true)
         .format_timestamp(None)
         .filter_level(log::LevelFilter::Info)
         .init();
@@ -28,7 +28,9 @@ async fn main() -> Result<()> {
     let battery_switch = tasks::watch_battery_status(Arc::clone(
         &daemon.debug_interface.config.battery_auto_switch,
     ));
-
+    let mut blocker = daemon.debug_interface.blocker.write().await;
+    let snitch = tasks::bpf_snitch(blocker.get_ring()?);
+    drop(blocker);
     let conn_builder = connection::Builder::system()?;
     let conn = conn_builder
         .name("com.github.opengamingcollective.cardwire")?
@@ -66,6 +68,7 @@ async fn main() -> Result<()> {
 
     // Now spawn background tasks
     task::spawn(battery_switch);
+    task::spawn(snitch);
 
     info!("Daemon started");
     pending::<()>().await;
