@@ -2,7 +2,8 @@ use std::sync::{
     Arc, atomic::{AtomicBool, Ordering}
 };
 
-use crate::{core::gpu::GpuBlocker, file::CardwireConfig};
+use crate::file::CardwireConfig;
+use cardwire_ebpf::EbpfBlocker;
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
@@ -31,12 +32,12 @@ impl ConfigMemory {
 #[derive(Clone)]
 pub struct ConfigInterface {
     pub config: Arc<ConfigMemory>,
-    pub blocker: Arc<RwLock<GpuBlocker>>,
+    pub blocker: Arc<RwLock<EbpfBlocker>>,
 }
 impl ConfigInterface {
     pub fn build(
         config: Arc<ConfigMemory>,
-        blocker: Arc<RwLock<GpuBlocker>>,
+        blocker: Arc<RwLock<EbpfBlocker>>,
     ) -> anyhow::Result<ConfigInterface> {
         Ok(Self { config, blocker })
     }
@@ -68,9 +69,15 @@ impl ConfigInterface {
             .experimental_nvidia_block
             .store(state, Ordering::Relaxed);
         let mut blocker = self.blocker.write().await;
-        blocker
-            .set_nvidia_setting(state)
-            .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
+        if state {
+            blocker
+                .block_kind(&state.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)
+                .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
+        } else {
+            blocker
+                .unblock_kind(&state.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)
+                .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
+        }
     }
     #[zbus(property)]
     pub async fn battery_auto_switch(&self) -> fdo::Result<bool> {

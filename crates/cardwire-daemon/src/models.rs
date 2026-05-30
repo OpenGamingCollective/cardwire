@@ -1,12 +1,13 @@
 //! where the struct and impl are declared
 use crate::{
     core::{
-        gpu::{self, GpuBlocker, check_default_drm_class}, pci
+        gpu::{self, check_default_drm_class}, pci
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
     }
 };
 use anyhow::{Context, Result};
+use cardwire_ebpf::{BlockKind, EbpfBlocker};
 use log::warn;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -61,7 +62,7 @@ impl DaemonManager {
         let pci_list: Arc<RwLock<BTreeMap<String, pci::PciDevice>>> =
             Arc::new(RwLock::new(pci_devices));
 
-        let blocker = Arc::new(RwLock::new(GpuBlocker::new()?));
+        let blocker = Arc::new(RwLock::new(EbpfBlocker::new()?));
 
         let mut gpu_interfaces_map: BTreeMap<usize, GpuInterface> = BTreeMap::new();
 
@@ -113,25 +114,24 @@ impl DaemonManager {
         let mode = self.debug_interface.mode_state.read().await;
         let mut blocker = self.debug_interface.blocker.write().await;
         let mut state = self.debug_interface.gpu_state.write().await;
-        blocker.set_nvidia_setting(config)?;
+        blocker.block_kind(&config.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)?;
 
         for file in BLOCKED_PCI_FILES {
-            blocker.set_file_block(file)?;
+            blocker.block_kind(file, BlockKind::File)?;
         }
         let default: bool = state.is_default_state();
         // if there is an nvidia device, block nvidia file once
         for (_, gpu) in gpus_list.iter() {
             if gpu.device.nvidia() {
                 for file in BLOCKED_NVIDIA_FILES {
-                    blocker.set_nvidia_file_block(file)?;
+                    blocker.block_kind(file, BlockKind::NvidiaFile)?;
                 }
                 break;
             }
         }
         if default {
             for (_, gpu) in gpus_list.iter() {
-                let blocked = crate::core::gpu::is_gpu_blocked(&blocker, &gpu.device)?;
-                state.save_state(&gpu.device, blocked).await?;
+                state.save_state(&gpu.device, false).await?;
             }
         }
         // Dropping the locks prevent set_mode being stuck
