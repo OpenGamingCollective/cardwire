@@ -30,6 +30,7 @@
   environment.systemPackages = with pkgs; [
     pciutils
     fish
+    tmux
   ];
   services.getty.autologinUser = "john";
   virtualisation.vmVariant = {

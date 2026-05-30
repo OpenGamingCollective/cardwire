@@ -3,6 +3,7 @@
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
+#include <stdbool.h>
 
 char __license[] SEC("license") = "GPL";
 
@@ -174,14 +175,25 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	if (!d) {
 		return 0;
 	}
+	// if it's cardwired, exit
 	char comm[16] = {};
 	bpf_get_current_comm(comm, sizeof(comm));
-	bpf_ringbuf_output(&EVENTS, comm, sizeof(comm), 0);
 	if (__builtin_memcmp(comm, "cardwired", 9) == 0) {
 		return 0;
 	}
+	bool blocked = false;
+	struct event_t *rb_data = {};
+	rb_data = bpf_ringbuf_reserve(&EVENTS, sizeof(struct event_t), 0);
+	if (!rb_data) {
+		// if bpf_ringbuf_reserve fails, print an error message and return
+		bpf_printk("bpf_ringbuf_reserve failed\n");
+		return 0;
+	}
+	rb_data->pid = bpf_get_current_pid_tgid() >> 32;
+	__builtin_memcpy(rb_data->comm, comm, sizeof(comm));
 
 	struct inode *inode = BPF_CORE_READ(d, d_inode);
+	// Match card/render/nvidia minor
 	if (inode) {
 		__u16 i_mode = BPF_CORE_READ(inode, i_mode);
 		if ((i_mode & 00170000) == 00020000) {
@@ -191,17 +203,20 @@ static __always_inline int is_blocked_device(struct dentry *d)
 			if (major == 226) {
 				__u32 id = minor;
 				if (bpf_map_lookup_elem(&BLOCKED_CARDID, &id)) {
-					return -ENOENT;
+					blocked = true;
+					goto end;
 				}
 				if (bpf_map_lookup_elem(&BLOCKED_RENDERID,
 							&id)) {
-					return -ENOENT;
+					blocked = true;
+					goto end;
 				}
 			} else if (major == 195) {
 				__u32 id = minor;
 				if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID,
 							&id)) {
-					return -ENOENT;
+					blocked = true;
+					goto end;
 				}
 			}
 		}
@@ -209,11 +224,11 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	struct qstr q = BPF_CORE_READ(d, d_name);
 	// ignore long files
 	if (!q.name || q.len > 30) {
-		return 0;
+		goto end;
 	}
 	char buf[32] = {};
 	if (bpf_core_read_str(buf, sizeof(buf), q.name) < 0) {
-		return 0;
+		goto end;
 	}
 	// Blocks specific NVIDIA files, it's dangerous and will only work if one nvidia gpu is blocked
 	__u32 block_nvidia_key = 0;
@@ -222,7 +237,8 @@ static __always_inline int is_blocked_device(struct dentry *d)
 			__u32 id0 = 0, id1 = 1;
 			if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id0) &&
 			    !bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id1)) {
-				return -ENOENT;
+				blocked = true;
+				goto end;
 			}
 		}
 	}
@@ -230,16 +246,24 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	if (bpf_map_lookup_elem(&BLOCKED_PCI_FILES, buf)) {
 		char pci_addr[16] = {};
 		if (get_pci_addr(d, pci_addr, sizeof(pci_addr)) != 0) {
-			return 0;
+			goto end;
 		}
 		pci_addr[12] = '\0';
 
 		if (bpf_map_lookup_elem(&BLOCKED_PCI, pci_addr)) {
-			return -ENOENT;
+			blocked = true;
+			goto end;
 		}
 	}
 
-	return 0;
+end:
+	if (blocked) {
+		bpf_ringbuf_submit(rb_data, 0);
+		return -ENOENT;
+	} else {
+		bpf_ringbuf_discard(rb_data, 0);
+		return 0;
+	}
 }
 
 /*
