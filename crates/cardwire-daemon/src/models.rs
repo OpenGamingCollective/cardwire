@@ -1,13 +1,12 @@
 //! where the struct and impl are declared
 use crate::{
-    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
+    core::{
+        gpu::{self, GpuBlocker, check_default_drm_class}, pci
+    }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
     }
 };
 use anyhow::{Context, Result};
-use cardwire_core::{
-    gpu::{self, GpuBlocker, check_default_drm_class}, pci
-};
 use log::warn;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -131,7 +130,7 @@ impl DaemonManager {
         }
         if default {
             for (_, gpu) in gpus_list.iter() {
-                let blocked = cardwire_core::gpu::is_gpu_blocked(&blocker, &gpu.device)?;
+                let blocked = crate::core::gpu::is_gpu_blocked(&blocker, &gpu.device)?;
                 state.save_state(&gpu.device, blocked).await?;
             }
         }

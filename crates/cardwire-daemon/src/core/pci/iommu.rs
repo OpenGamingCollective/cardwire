@@ -1,4 +1,4 @@
-use crate::{errors::Error as CardwireError, pci::IommuGroup};
+use crate::core::{errors::Error as CardwireError, pci::IommuGroup};
 use log::error;
 use std::{collections::BTreeMap, fs, path::Path};
 

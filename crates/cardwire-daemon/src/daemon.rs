@@ -1,4 +1,5 @@
 //! entry point of cardwired
+mod core;
 mod file;
 mod interface;
 mod models;

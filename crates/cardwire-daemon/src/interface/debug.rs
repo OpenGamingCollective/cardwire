@@ -1,4 +1,4 @@
-use cardwire_core::{
+use crate::core::{
     gpu::GpuBlocker, pci::{DbusPciDevice, PciDevice}
 };
 use std::{collections::BTreeMap, sync::Arc};

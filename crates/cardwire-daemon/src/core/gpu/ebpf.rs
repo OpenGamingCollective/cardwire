@@ -1,7 +1,7 @@
 //! this is a middleman between the daemon and the ebpf library
 use std::collections::BTreeMap;
 
-use crate::{errors::Error as CardwireError, gpu::models::GpuDevice, pci::PciDevice};
+use crate::core::{errors::Error as CardwireError, gpu::models::GpuDevice, pci::PciDevice};
 use cardwire_ebpf::{BlockKind, EbpfBlocker};
 use log::{info, warn};
 

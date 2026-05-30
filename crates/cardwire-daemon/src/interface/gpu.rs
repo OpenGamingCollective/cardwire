@@ -5,10 +5,9 @@ use std::{
 };
 
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::Modes
-};
-use cardwire_core::{
-    gpu::{DbusGpuDevice, GpuBlocker, GpuDevice, block_gpu, is_gpu_blocked}, pci::PciDevice
+    core::{
+        gpu::{DbusGpuDevice, GpuBlocker, GpuDevice, block_gpu, is_gpu_blocked}, pci::PciDevice
+    }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
 use log::{info, warn};
 use tokio::sync::RwLock;

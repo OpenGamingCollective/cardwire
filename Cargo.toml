@@ -1,7 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/cardwire-core",
     "crates/cardwire-daemon",
     "crates/cardwire-cli",
     "crates/cardwire-ebpf",

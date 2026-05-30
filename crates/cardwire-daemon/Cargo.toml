@@ -9,7 +9,7 @@ license.workspace = true
 description = "Daemon for cardwire GPU management"
 
 [dependencies]
-cardwire-core = { path = "../cardwire-core" }
+cardwire-ebpf = { path = "../cardwire-ebpf" }
 tokio.workspace = true
 zbus.workspace = true
 config.workspace = true

@@ -1,5 +1,5 @@
 //! Read a pci list and return a list of gpu
-use crate::{gpu::models::GpuDevice, pci::PciDevice};
+use crate::core::{gpu::models::GpuDevice, pci::PciDevice};
 use log::{info, warn};
 use std::{
     collections::{BTreeMap, HashMap}, fs, io, path::Path

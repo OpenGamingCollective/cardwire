@@ -2,8 +2,7 @@ use std::sync::{
     Arc, atomic::{AtomicBool, Ordering}
 };
 
-use crate::file::CardwireConfig;
-use cardwire_core::gpu::GpuBlocker;
+use crate::{core::gpu::GpuBlocker, file::CardwireConfig};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
