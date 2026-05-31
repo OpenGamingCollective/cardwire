@@ -2,7 +2,7 @@
 use crate::{
     core::{
         gpu::{self, check_default_drm_class}, pci
-    }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
+    }, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
     }
 };
@@ -50,6 +50,9 @@ impl DaemonManager {
 
         let gpu_state: CardwireGpuState = CardwireGpuState::build()?;
         let gpu_state: Arc<RwLock<CardwireGpuState>> = Arc::new(RwLock::new(gpu_state));
+
+        let database = CardwireDatabase::build()?;
+        let database = Arc::new(RwLock::new(database));
 
         let pci_devices: BTreeMap<String, pci::PciDevice> = pci::read_pci_devices()?;
 
@@ -99,6 +102,7 @@ impl DaemonManager {
                 Arc::clone(&user_config),
                 Arc::clone(&blocker),
                 Arc::clone(&pci_list),
+                Arc::clone(&database),
             )?,
         })
     }

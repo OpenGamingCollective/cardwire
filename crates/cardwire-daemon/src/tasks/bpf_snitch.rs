@@ -1,10 +1,12 @@
-use std::{
-    ffi::{CStr, CString}, ptr
-};
+use std::{ffi::CStr, ptr, sync::Arc};
 
 use aya::maps::RingBuf;
 use log::info;
-use tokio::io::{Interest, unix::AsyncFd};
+use tokio::{
+    io::{Interest, unix::AsyncFd}, sync::RwLock
+};
+
+use crate::file::CardwireDatabase;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -13,7 +15,10 @@ pub struct Event {
     comm: [u8; 32],
 }
 
-pub async fn bpf_snitch(ring_buffer: RingBuf<aya::maps::MapData>) -> anyhow::Result<()> {
+pub async fn bpf_snitch(
+    ring_buffer: RingBuf<aya::maps::MapData>,
+    database: Arc<RwLock<CardwireDatabase>>,
+) -> anyhow::Result<()> {
     let mut poll = AsyncFd::new(ring_buffer)?;
     loop {
         let mut guard = poll.ready_mut(Interest::READABLE).await?;
@@ -30,6 +35,11 @@ pub async fn bpf_snitch(ring_buffer: RingBuf<aya::maps::MapData>) -> anyhow::Res
                     .map(|c_str| c_str.to_string_lossy().into_owned())
                     .unwrap_or_else(|_| String::from("unknown"));
                 info!(target: "cardwired-snitch", "found this app with pid: {:?} and name: {:?}", event.pid, comm);
+                let mut database_lock = database.write().await;
+                database_lock
+                    .insert_app(comm.clone(), comm.clone(), true)
+                    .await?;
+                drop(database_lock);
             }
             guard.clear_ready();
         }

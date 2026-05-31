@@ -22,7 +22,9 @@ toml.workspace = true
 serde_json.workspace = true
 tokio-stream.workspace = true
 aya.workspace = true
-
+rusqlite.workspace = true
+xdg.workspace = true
+freedesktop-desktop-entry.workspace = true
 
 [[bin]]
 name = "cardwired"

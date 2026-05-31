@@ -3,9 +3,10 @@ mod core;
 mod file;
 mod interface;
 mod models;
+mod profiler;
 mod tasks;
 
-use crate::{models::DaemonManager, tasks::watch_power_state};
+use crate::{models::DaemonManager, profiler::CardwireProfiler, tasks::watch_power_state};
 use anyhow::Result;
 use log::info;
 use std::{future::pending, sync::Arc};
@@ -20,7 +21,7 @@ async fn main() -> Result<()> {
         .filter_level(log::LevelFilter::Info)
         .init();
     let daemon = DaemonManager::new().await?;
-
+    CardwireProfiler::build()?;
     // Before we publish the API
     daemon.pre_daemon_tasks().await?;
 
@@ -29,7 +30,10 @@ async fn main() -> Result<()> {
         &daemon.debug_interface.config.battery_auto_switch,
     ));
     let mut blocker = daemon.debug_interface.blocker.write().await;
-    let snitch = tasks::bpf_snitch(blocker.get_ring()?);
+    let snitch = tasks::bpf_snitch(
+        blocker.get_ring()?,
+        Arc::clone(&daemon.debug_interface.database),
+    );
     drop(blocker);
     let conn_builder = connection::Builder::system()?;
     let conn = conn_builder
