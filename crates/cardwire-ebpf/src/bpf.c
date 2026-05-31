@@ -64,8 +64,12 @@ struct file {
 struct event_t {
 	__u32 pid;
 	char comm[32];
+	__u32 parent_pid;
 };
-
+struct task_struct {
+	int tgid;
+	struct task_struct *real_parent;
+} __attribute__((preserve_access_index));
 // EBPF maps
 // This one is to report the app to cardwire
 struct {
@@ -190,6 +194,8 @@ static __always_inline int is_blocked_device(struct dentry *d)
 		return 0;
 	}
 	rb_data->pid = bpf_get_current_pid_tgid() >> 32;
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	rb_data->parent_pid = BPF_CORE_READ(task, real_parent, tgid);
 	__builtin_memcpy(rb_data->comm, comm, sizeof(comm));
 
 	struct inode *inode = BPF_CORE_READ(d, d_inode);
