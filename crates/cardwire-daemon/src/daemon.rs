@@ -21,7 +21,6 @@ async fn main() -> Result<()> {
         .filter_level(log::LevelFilter::Info)
         .init();
     let daemon = DaemonManager::new().await?;
-    CardwireProfiler::build()?;
     // Before we publish the API
     daemon.pre_daemon_tasks().await?;
 
@@ -30,10 +29,11 @@ async fn main() -> Result<()> {
         &daemon.debug_interface.config.battery_auto_switch,
     ));
     let mut blocker = daemon.debug_interface.blocker.write().await;
-    let snitch = tasks::bpf_snitch(
+    let profiler = CardwireProfiler::build(
         blocker.get_ring()?,
+        blocker.get_app_map()?,
         Arc::clone(&daemon.debug_interface.database),
-    );
+    )?;
     drop(blocker);
     let conn_builder = connection::Builder::system()?;
     let conn = conn_builder
@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
 
     // Now spawn background tasks
     task::spawn(battery_switch);
-    task::spawn(snitch);
+    task::spawn(profiler.spawn_profiler());
 
     info!("Daemon started");
     pending::<()>().await;

@@ -4,24 +4,32 @@
 use std::fs;
 
 use anyhow::Result;
-/// Check cmdline to see if it's an electron app
-pub async fn check_electron(pid: u32) -> Result<bool> {
-    let path = format!("/proc/{}/cmdline", pid);
-    let cmdline = fs::read_to_string(path)?;
-    println!("cmdline is : {}", cmdline);
-    if cmdline.contains("--type=zygote") {
-        Ok(true)
+pub async fn check_gamemode(pid: u32) -> bool {
+    let path = format!("/proc/{}/map", pid);
+    if let Ok(maps) = fs::read_to_string(path) {
+        if maps.contains("gamemode") {
+            true
+        } else {
+            false
+        }
     } else {
-        Ok(false)
+        false
     }
 }
 
-pub async fn check_gamemode(pid: u32) -> Result<bool> {
-    let path = format!("/proc/{}/map", pid);
-    let maps = fs::read_to_string(path)?;
-    if maps.contains("gamemode") {
-        Ok(true)
+/// Check cmdline for common string like SteamLibrary
+pub async fn check_cmdline(pid: u32) -> bool {
+    let path = format!("/proc/{}/cmdline", pid);
+    if let Ok(cmdline) = fs::read_to_string(path) {
+        if cmdline.contains(".exe")
+            && cmdline.contains("SteamLibrary/steamapps/common/")
+            && cmdline.contains("SteamLaunch")
+        {
+            true
+        } else {
+            false
+        }
     } else {
-        Ok(false)
+        false
     }
 }

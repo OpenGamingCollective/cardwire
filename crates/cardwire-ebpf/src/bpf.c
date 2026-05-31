@@ -63,19 +63,45 @@ struct file {
 
 struct event_t {
 	__u32 pid;
-	char comm[32];
 	__u32 parent_pid;
+	char comm[32];
 };
+
+struct report_t {
+	__u32 pid;
+	char comm[32];
+};
+
+struct trace_event_raw_sys_exit {
+	__u64 unused_common_fields;
+	long id;
+	long ret;
+} __attribute__((preserve_access_index));
+
 struct task_struct {
 	int tgid;
 	struct task_struct *real_parent;
 } __attribute__((preserve_access_index));
 // EBPF maps
-// This one is to report the app to cardwire
+// This one is to report the event to cardwire
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
 } EVENTS SEC(".maps");
+
+// This one is to report the app block to cardwire
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} REPORT SEC(".maps");
+
+// List of blocked comm
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 2048);
+	__type(key, __u32);
+	__type(value, __u8);
+} BLOCKED_PID SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -186,17 +212,6 @@ static __always_inline int is_blocked_device(struct dentry *d)
 		return 0;
 	}
 	bool blocked = false;
-	struct event_t *rb_data = {};
-	rb_data = bpf_ringbuf_reserve(&EVENTS, sizeof(struct event_t), 0);
-	if (!rb_data) {
-		// if bpf_ringbuf_reserve fails, print an error message and return
-		bpf_printk("bpf_ringbuf_reserve failed\n");
-		return 0;
-	}
-	rb_data->pid = bpf_get_current_pid_tgid() >> 32;
-	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-	rb_data->parent_pid = BPF_CORE_READ(task, real_parent, tgid);
-	__builtin_memcpy(rb_data->comm, comm, sizeof(comm));
 
 	struct inode *inode = BPF_CORE_READ(d, d_inode);
 	// Match card/render/nvidia minor
@@ -263,11 +278,10 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	}
 
 end:
-	if (blocked) {
-		bpf_ringbuf_submit(rb_data, 0);
+	__u32 pid = bpf_get_current_pid_tgid() >> 32;
+	if (blocked && bpf_map_lookup_elem(&BLOCKED_PID, &pid)) {
 		return -ENOENT;
 	} else {
-		bpf_ringbuf_discard(rb_data, 0);
 		return 0;
 	}
 }
@@ -317,4 +331,34 @@ int BPF_PROG(inode_getattr, const struct path *path)
 {
 	struct dentry *d = BPF_CORE_READ(path, dentry);
 	return is_blocked_device(d);
+}
+
+/*
+	To analyze the app before it's launch, send event_t to cardwire
+*/
+SEC("tracepoint/syscalls/sys_exit_execve")
+int trace_execve_exit(struct trace_event_raw_sys_exit *ctx)
+{
+	if (ctx->ret < 0) {
+		return 0;
+	}
+	// Init the struct
+	struct event_t *rb_data = {};
+	rb_data = bpf_ringbuf_reserve(&EVENTS, sizeof(struct event_t), 0);
+	// Check if present
+	if (!rb_data) {
+		// if bpf_ringbuf_reserve fails, print an error message and return
+		bpf_printk("bpf_ringbuf_reserve failed\n");
+		return 0;
+	}
+
+	// Read PID
+	rb_data->pid = bpf_get_current_pid_tgid() >> 32;
+	// Read parent PID
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	rb_data->parent_pid = BPF_CORE_READ(task, real_parent, tgid);
+	bpf_get_current_comm(rb_data->comm, sizeof(rb_data->comm));
+
+	bpf_ringbuf_submit(rb_data, 0);
+	return 0;
 }

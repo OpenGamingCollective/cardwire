@@ -1,6 +1,6 @@
 //! Functions for static analysis, contains:
 //! - FDO desktop entries analysis
-use freedesktop_desktop_entry::{DesktopEntry, desktop_entry_from_path, get_languages_from_env};
+use freedesktop_desktop_entry::{DesktopEntry, get_languages_from_env};
 use std::{fs, path::PathBuf};
 use xdg::BaseDirectories;
 
