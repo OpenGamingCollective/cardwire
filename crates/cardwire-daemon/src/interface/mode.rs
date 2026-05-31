@@ -15,6 +15,7 @@ pub enum Modes {
     Hybrid,
     #[default]
     Manual,
+    Smart,
 }
 
 impl fmt::Display for Modes {
@@ -23,6 +24,7 @@ impl fmt::Display for Modes {
             Modes::Integrated => write!(f, "Integrated"),
             Modes::Hybrid => write!(f, "Hybrid"),
             Modes::Manual => write!(f, "Manual"),
+            Modes::Smart => write!(f, "Smart"),
         }
     }
 }
@@ -33,8 +35,9 @@ impl Modes {
             0 => Ok(Self::Integrated),
             1 => Ok(Self::Hybrid),
             2 => Ok(Self::Manual),
+            3 => Ok(Self::Smart),
             unknown => Err(Error::InvalidArgs(format!(
-                "unknown mode: {unknown} \n expected integrated|hybrid|manual"
+                "unknown mode: {unknown} \n expected integrated|hybrid|manual|smart"
             ))),
         }
     }
@@ -79,7 +82,7 @@ impl ModeInterface {
         match mode {
             // Integrated/Hybrid only works on laptop with two gpus, will refuse if the computer has
             // more than 2 gpus
-            Modes::Integrated | Modes::Hybrid => {
+            Modes::Integrated | Modes::Hybrid | Modes::Smart => {
                 if gpu_list.len() != 2 {
                     error!(
                         "Couldn't set mode to {}, the mode require exactly 2 GPUs",
@@ -93,7 +96,7 @@ impl ModeInterface {
                 // Loop to find the non default gpu and block it,
                 for gpu in gpu_list.values_mut() {
                     if !gpu.device.is_default() {
-                        if mode == Modes::Integrated {
+                        if mode == Modes::Integrated || mode == Modes::Smart {
                             gpu.block_gpu().await?;
                         } else {
                             gpu.unblock_gpu().await?;
@@ -143,6 +146,7 @@ impl ModeInterface {
             Modes::Integrated => Ok(0),
             Modes::Hybrid => Ok(1),
             Modes::Manual => Ok(2),
+            Modes::Smart => Ok(3),
         }
     }
 }

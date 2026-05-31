@@ -27,6 +27,7 @@ async fn main() -> anyhow::Result<()> {
                 CliMode::Integrated => 0,
                 CliMode::Hybrid => 1,
                 CliMode::Manual => 2,
+                CliMode::Smart => 3,
             };
 
             match client.set_mode(&mode_u32).await {

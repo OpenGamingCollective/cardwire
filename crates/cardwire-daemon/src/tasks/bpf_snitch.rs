@@ -1,4 +1,4 @@
-use std::{ffi::CStr, ptr, sync::Arc};
+use std::{ffi::CStr, fs, path::Path, ptr, sync::Arc};
 
 use aya::maps::RingBuf;
 use log::info;
@@ -13,6 +13,7 @@ use crate::file::CardwireDatabase;
 pub struct Event {
     pid: u32,
     comm: [u8; 32],
+    parent_pid: u32,
 }
 
 pub async fn bpf_snitch(
@@ -34,7 +35,14 @@ pub async fn bpf_snitch(
                 let comm = CStr::from_bytes_until_nul(&event.comm)
                     .map(|c_str| c_str.to_string_lossy().into_owned())
                     .unwrap_or_else(|_| String::from("unknown"));
-                info!(target: "cardwired-snitch", "found this app with pid: {:?} and name: {:?}", event.pid, comm);
+                let parent_path = format!("/proc/{}/comm", event.parent_pid);
+                let parent_name: String = fs::read_to_string(parent_path)?;
+                info!(target: "cardwired-snitch", "found this app with pid: {:?} and name: {:?} and parent: {} and parent name: {}", event.pid, comm, event.parent_pid, parent_name);
+                // Now analysis for debug purpose
+                println!(
+                    "is electron: {}",
+                    crate::profiler::check_electron(event.parent_pid).await?
+                );
                 let mut database_lock = database.write().await;
                 database_lock
                     .insert_app(comm.clone(), comm.clone(), true)

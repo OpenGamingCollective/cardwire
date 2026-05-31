@@ -148,6 +148,7 @@ impl DaemonManager {
             Modes::Integrated => 0,
             Modes::Hybrid => 1,
             Modes::Manual => 2,
+            Modes::Smart => 3,
         };
         self.mode_interface.set_mode(mode_to_apply).await?;
         Ok(())
