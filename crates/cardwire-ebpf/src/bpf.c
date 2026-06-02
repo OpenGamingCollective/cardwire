@@ -279,7 +279,10 @@ static __always_inline int is_blocked_device(struct dentry *d)
 
 end:
 	__u32 pid = bpf_get_current_pid_tgid() >> 32;
-	if (blocked && bpf_map_lookup_elem(&BLOCKED_PID, &pid)) {
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	__u32 parent_pid = BPF_CORE_READ(task, real_parent, tgid);
+	if (blocked && (!bpf_map_lookup_elem(&BLOCKED_PID, &pid) ||
+			!bpf_map_lookup_elem(&BLOCKED_PID, &parent_pid))) {
 		return -ENOENT;
 	} else {
 		return 0;
