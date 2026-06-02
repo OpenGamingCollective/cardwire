@@ -21,9 +21,11 @@ pub async fn check_gamemode(pid: u32) -> bool {
 pub async fn check_cmdline(pid: u32) -> bool {
     let path = format!("/proc/{}/cmdline", pid);
     if let Ok(cmdline) = fs::read_to_string(path) {
-        if cmdline.contains(".exe")
-            && cmdline.contains("SteamLibrary/steamapps/common/")
-            && cmdline.contains("SteamLaunch")
+        if cmdline.contains("SteamLibrary/steamapps/common/")
+            || cmdline.contains("SteamLaunch")
+            || cmdline.contains(r"S:\common")
+            || cmdline.contains(r"c:\windows\system32\steam.exe")
+            || cmdline.contains("steam-runtime-tools")
         {
             true
         } else {
