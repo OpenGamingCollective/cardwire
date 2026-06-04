@@ -11,8 +11,6 @@ Creator and Main maintainer: @luytan
 # Disclaimer
 
 - This project is in early development. Expect bugs and incomplete functionality
-> [!NOTE]
-> Regarding the use of AI in this project: AI was used early on to prototype and fix some errors. The code has since been mostly rewritten by hand. The only AI-generated code left is in `pci_devices.rs`, specifically the `load_pci_name_db` function, which will be rewritten soon
 
 ## Getting Started
 
