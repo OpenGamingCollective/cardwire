@@ -67,6 +67,13 @@ struct event_t {
 	char comm[32];
 };
 
+struct close_t {
+	__u32 pid;
+	__u32 parent_pid;
+	char comm[32];
+	__u32 code;
+};
+
 struct report_t {
 	__u32 pid;
 	char comm[32];
@@ -81,6 +88,7 @@ struct trace_event_raw_sys_exit {
 struct task_struct {
 	int tgid;
 	struct task_struct *real_parent;
+	int exit_code;
 } __attribute__((preserve_access_index));
 // EBPF maps
 // This one is to report the event to cardwire
@@ -88,6 +96,11 @@ struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
 } EVENTS SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} CLOSE_EVENTS SEC(".maps");
 
 // This one is to report the app block to cardwire
 struct {
@@ -361,6 +374,29 @@ int trace_execve_exit(struct trace_event_raw_sys_exit *ctx)
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	rb_data->parent_pid = BPF_CORE_READ(task, real_parent, tgid);
 	bpf_get_current_comm(rb_data->comm, sizeof(rb_data->comm));
+
+	bpf_ringbuf_submit(rb_data, 0);
+	return 0;
+}
+
+SEC("tracepoint/sched/sched_process_exit")
+int trace_process_exit(void *ctx)
+{
+	struct close_t *rb_data =
+		bpf_ringbuf_reserve(&CLOSE_EVENTS, sizeof(struct event_t), 0);
+	if (!rb_data) {
+		bpf_printk("bpf_ringbuf_reserve failed\n");
+		return 0;
+	}
+	rb_data->pid = bpf_get_current_pid_tgid() >> 32;
+
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+
+	rb_data->parent_pid = BPF_CORE_READ(task, real_parent, tgid);
+
+	bpf_get_current_comm(rb_data->comm, sizeof(rb_data->comm));
+
+	rb_data->code = BPF_CORE_READ(task, exit_code);
 
 	bpf_ringbuf_submit(rb_data, 0);
 	return 0;

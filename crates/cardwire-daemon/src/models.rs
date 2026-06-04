@@ -4,7 +4,7 @@ use crate::{
         gpu::{self, check_default_drm_class}, pci
     }, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
-    }
+    }, profiler::CardwireProfiler
 };
 use anyhow::{Context, Result};
 use cardwire_ebpf::{BlockKind, EbpfBlocker};
@@ -36,6 +36,7 @@ pub struct DaemonManager {
     pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config_interface: ConfigInterface,
     pub debug_interface: DebugInterface,
+    //pub cardwire_profiler: Arc<CardwireProfiler>
 }
 
 impl DaemonManager {
@@ -104,6 +105,8 @@ impl DaemonManager {
                 Arc::clone(&pci_list),
                 Arc::clone(&database),
             )?,
+            //cardwire_profiler: Arc::new(CardwireProfiler::build(ring_buffer, app_map, database,
+            // close_map)?)
         })
     }
 

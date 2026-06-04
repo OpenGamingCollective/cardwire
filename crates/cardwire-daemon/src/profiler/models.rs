@@ -1,7 +1,7 @@
-use std::{ffi::CStr, fs, ptr, sync::Arc};
+use std::{collections::HashMap, ffi::CStr, fs, ptr, sync::Arc};
 
 use aya::maps::{
-    HashMap, Map::{self}, RingBuf
+    HashMap as AyaHashMap, Map::{self}, RingBuf
 };
 use log::{info, warn};
 use tokio::{
@@ -19,8 +19,8 @@ pub struct Event {
 
 pub struct CardwireProfiler {
     event_map: AsyncFd<RingBuf<aya::maps::MapData>>,
-    app_map: HashMap<aya::maps::MapData, u32, u8>,
-    database: Arc<RwLock<CardwireDatabase>>,
+    app_map: AyaHashMap<aya::maps::MapData, u32, u8>,
+    close_map: AsyncFd<RingBuf<aya::maps::MapData>>,
     // the key should be the comm name for fast lookup
     //database_app_cached: std::collections::HashMap<String, App>
 }
@@ -30,21 +30,27 @@ pub struct App {}
 impl CardwireProfiler {
     pub fn build(
         ring_buffer: RingBuf<aya::maps::MapData>,
-        app_map: HashMap<aya::maps::MapData, u32, u8>,
+        app_map: AyaHashMap<aya::maps::MapData, u32, u8>,
         database: Arc<RwLock<CardwireDatabase>>,
+        close_map: RingBuf<aya::maps::MapData>,
         //database_app_cached: std::collections::HashMap<String, App>,
     ) -> anyhow::Result<CardwireProfiler> {
+        //let ring_buffer = blocker.
+
         let event_map = AsyncFd::new(ring_buffer)?;
+        let close_map = AsyncFd::new(close_map)?;
         Ok(CardwireProfiler {
             event_map,
             app_map,
-            database,
+            close_map,
             //database_app_cached,
         })
     }
     pub async fn spawn_profiler(mut self) -> anyhow::Result<()> {
         loop {
             let mut events_batch: Vec<Event> = Vec::new();
+            // cache already blocked pid and store their parent id
+            let mut pid_cache: HashMap<u32, u32> = HashMap::new();
             let mut guard = self.event_map.ready_mut(Interest::READABLE).await?;
             if guard.ready().is_readable() {
                 while let Some(item) = guard.get_inner_mut().next() {
@@ -61,6 +67,10 @@ impl CardwireProfiler {
             }
             drop(guard);
             for event in events_batch {
+                // if pid already blocked, skip
+                if pid_cache.contains_key(&event.pid) {
+                    continue;
+                }
                 let comm = CStr::from_bytes_until_nul(&event.comm)
                     .map(|c| c.to_string_lossy().into_owned())
                     .unwrap_or_else(|_| String::from("unknown"));
@@ -79,8 +89,12 @@ impl CardwireProfiler {
                 //  "App launched | PID: {} | Name: {} | Parent PID: {} | Parent Name: {}",
                 //  event.pid, comm, event.parent_pid, parent_name);
                 if self.evaluate_app(event.pid, &comm).await {
-                    info!("added pid: {} to the blocklist", event.pid);
+                    info!(
+                        "BLOCK: pid: {}, comm: {}, parent_pid: {}, parent_comm: {}",
+                        event.pid, comm, event.parent_pid, parent_name
+                    );
                     self.app_map.insert(event.pid, 1, 0)?;
+                    pid_cache.insert(event.pid, event.parent_pid);
                 }
             }
         }
@@ -101,16 +115,11 @@ impl CardwireProfiler {
     async fn evaluate_app(&self, pid: u32, comm: &str) -> bool {
         // Phase 1, dynamic score
         // if it's a game, allow it
-        if check_cmdline(pid).await {
-            log::info!("Dynamic: {pid}:{comm} ALLOWED, Reason: cmdline detected");
-            return true;
-        }
+        check_cmdline(pid).await
 
         //if check_gamemode(pid).await {
         //    log::info!("Dynamic: {comm} ALLOWED, Reason: Gamemode detected");
         //    return Ok(true);
         //}
-
-        return false;
     }
 }

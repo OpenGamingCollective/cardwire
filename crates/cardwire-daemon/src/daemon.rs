@@ -33,6 +33,7 @@ async fn main() -> Result<()> {
         blocker.get_ring()?,
         blocker.get_app_map()?,
         Arc::clone(&daemon.debug_interface.database),
+        blocker.get_close_ring()?,
     )?;
     drop(blocker);
     let conn_builder = connection::Builder::system()?;
@@ -46,15 +47,36 @@ async fn main() -> Result<()> {
         .build()
         .await?;
 
-    let object_server = conn.object_server();
-    let gpu_interfaces = daemon.gpu_interfaces.read().await;
+    let object_server: &zbus::ObjectServer = conn.object_server();
+    spawn_dbus_api(object_server, &daemon).await?;
+    // Now spawn background tasks
+    task::spawn(battery_switch);
+    task::spawn(profiler.spawn_profiler());
+
+    info!("Daemon started");
+    pending::<()>().await;
+    Ok(())
+}
+
+async fn spawn_dbus_api(
+    object_server: &zbus::ObjectServer,
+    daemon: &DaemonManager,
+) -> anyhow::Result<()> {
     let path = "/com/github/opengamingcollective/cardwire";
+
+    let gpu_interfaces = daemon.gpu_interfaces.read().await;
     // cardwire.Mode
-    object_server.at(path, daemon.mode_interface).await?;
+    object_server
+        .at(path, daemon.mode_interface.clone())
+        .await?;
     // cardwire.Config
-    object_server.at(path, daemon.config_interface).await?;
+    object_server
+        .at(path, daemon.config_interface.clone())
+        .await?;
     // cardwire.Debug
-    object_server.at(path, daemon.debug_interface).await?;
+    object_server
+        .at(path, daemon.debug_interface.clone())
+        .await?;
     // cardwire.Gpu
     for (id, gpu_interface) in gpu_interfaces.iter() {
         let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
@@ -69,12 +91,5 @@ async fn main() -> Result<()> {
     }
     // drop gpu list to prevent deadlock
     drop(gpu_interfaces);
-
-    // Now spawn background tasks
-    task::spawn(battery_switch);
-    task::spawn(profiler.spawn_profiler());
-
-    info!("Daemon started");
-    pending::<()>().await;
     Ok(())
 }
