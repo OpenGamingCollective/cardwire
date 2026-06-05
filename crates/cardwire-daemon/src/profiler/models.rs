@@ -6,7 +6,11 @@ use tokio::{
     fs, io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, mpsc}
 };
 
-use crate::profiler::dynamic_analysis::{check_environ, check_gamemode};
+use crate::profiler::{
+    dynamic_analysis::{
+        check_cardwire_allow, check_flatpak_environ, check_gamemode, check_llm_maps, check_steam_environ
+    }, static_analysis
+};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Event {
@@ -34,6 +38,7 @@ pub struct CardwireProfiler {
     exec_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u8>>>,
+    xdg_list: Arc<RwLock<HashMap<String, bool>>>,
 }
 
 impl CardwireProfiler {
@@ -50,12 +55,12 @@ impl CardwireProfiler {
         let exec_ring = Arc::new(Mutex::new(exec_ring));
         let pid_map = Arc::new(RwLock::new(pid_map));
         let close_ring = Arc::new(Mutex::new(close_ring));
-
+        let xdg_list = Arc::new(RwLock::new(static_analysis::get_fdo_apps().await?));
         Ok(CardwireProfiler {
             exec_ring,
             close_ring,
             pid_map,
-            //database_app_cached,
+            xdg_list,
         })
     }
     pub async fn spawn_profiler(self) -> anyhow::Result<()> {
@@ -135,14 +140,15 @@ impl CardwireProfiler {
             }
         });
 
-        let mut pid_cache: HashMap<u32, u32> = HashMap::new();
-
         while let Some(msg) = rx.recv().await {
             match msg {
                 EventMsg::Exec(event) => {
-                    if pid_cache.contains_key(&event.pid) {
+                    let pid_map = self.pid_map.read().await;
+                    // leave if pid already in the map
+                    if pid_map.get(&event.pid, 0).is_ok() {
                         continue;
                     }
+                    drop(pid_map);
                     //tokio::time::sleep(std::time::Duration::from_millis(5)).await;
                     let real_app_name = match get_real_process_name(event.pid).await {
                         Some(name) => name,
@@ -155,13 +161,36 @@ impl CardwireProfiler {
                         if let Err(e) = app_map.insert(event.pid, 1, 0) {
                             warn!("Failed to insert into eBPF map: {}", e);
                         }
-                        pid_cache.insert(event.pid, event.parent_pid);
+                        continue;
                     }
+                    tokio::spawn(async move {});
+                    // if the daemon didn't find anything, spawn this task to check for maps, this
+                    // fixed ollama not using the dgpu
+                    let pid_map_clone = self.pid_map.clone();
+                    tokio::spawn(async move {
+                        let max_attempts = 20;
+                        let mut attempt = 0;
+                        while attempt < max_attempts {
+                            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                            if check_llm_maps(event.pid).await {
+                                debug!("ALLOW: pid: {}, name: {}", event.pid, real_app_name);
+                                let mut app_map = pid_map_clone.write().await;
+                                let _ = app_map.insert(event.pid, 1, 0);
+                                return;
+                            }
+                            let proc_path = format!("/proc/{}", event.pid);
+                            if tokio::fs::metadata(&proc_path).await.is_err() {
+                                break;
+                            }
+                            attempt += 1;
+                        }
+                    });
                 }
                 EventMsg::Close(event) => {
-                    pid_cache.remove(&event.pid);
                     let mut pid_map = self.pid_map.write().await;
-                    let _ = pid_map.remove(&event.pid);
+                    if pid_map.remove(&event.pid).is_ok() {
+                        debug!("REMOVE: pid: {}", event.pid);
+                    }
                 }
             }
         }
@@ -183,11 +212,14 @@ impl CardwireProfiler {
     async fn evaluate_app(&self, pid: u32) -> bool {
         // experimentation
         // TODO: Replace
+        let xdg_list = self.xdg_list.read().await;
         let check = |check: bool| if check { Err(()) } else { Ok(()) };
-        let result = tokio::try_join!(async { check(check_environ(pid).await) }, async {
-            check(check_gamemode(pid).await)
-        },);
-
+        let result = tokio::try_join!(
+            async { check(check_steam_environ(pid).await) },
+            async { check(check_gamemode(pid).await) },
+            async { check(check_flatpak_environ(pid, &xdg_list).await) },
+            async { check(check_cardwire_allow(pid).await) },
+        );
         result.is_err()
     }
 }
