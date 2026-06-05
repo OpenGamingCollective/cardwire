@@ -1,14 +1,16 @@
-use std::{collections::HashMap, ffi::CStr, fs, ptr, sync::Arc};
-
 use aya::maps::{
     HashMap as AyaHashMap, Map::{self}, RingBuf
 };
+use cardwire_ebpf::EbpfBlocker;
 use log::{info, warn};
+use std::{collections::HashMap, ffi::CStr, path::Path, ptr, sync::Arc};
 use tokio::{
-    io::{Interest, unix::AsyncFd}, sync::RwLock
+    fs, io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, mpsc}
 };
 
-use crate::{file::CardwireDatabase, profiler::dynamic_analysis::check_cmdline};
+use crate::{
+    file::CardwireDatabase, profiler::dynamic_analysis::{check_cmdline, check_environ}
+};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Event {
@@ -17,87 +19,165 @@ pub struct Event {
     pub comm: [u8; 32],
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct Close {
+    pub pid: u32,
+    pub parent_pid: u32,
+    pub comm: [u8; 32],
+    pub exit_code: u32,
+}
+
+pub enum EventMsg {
+    Exec(Event),
+    Close(Close),
+}
+
+#[derive(Clone)]
 pub struct CardwireProfiler {
-    event_map: AsyncFd<RingBuf<aya::maps::MapData>>,
-    app_map: AyaHashMap<aya::maps::MapData, u32, u8>,
-    close_map: AsyncFd<RingBuf<aya::maps::MapData>>,
-    // the key should be the comm name for fast lookup
-    //database_app_cached: std::collections::HashMap<String, App>
+    exec_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
+    close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
+    pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u8>>>,
 }
 
 pub struct App {}
 
 impl CardwireProfiler {
-    pub fn build(
-        ring_buffer: RingBuf<aya::maps::MapData>,
-        app_map: AyaHashMap<aya::maps::MapData, u32, u8>,
-        database: Arc<RwLock<CardwireDatabase>>,
-        close_map: RingBuf<aya::maps::MapData>,
-        //database_app_cached: std::collections::HashMap<String, App>,
-    ) -> anyhow::Result<CardwireProfiler> {
-        //let ring_buffer = blocker.
+    pub async fn build(blocker: Arc<RwLock<EbpfBlocker>>) -> anyhow::Result<CardwireProfiler> {
+        let mut blocker = blocker.write().await;
+        let exec_ring = blocker.get_exec_ring()?;
+        let close_ring = blocker.get_close_ring()?;
+        let pid_map = blocker.get_pid_map()?;
 
-        let event_map = AsyncFd::new(ring_buffer)?;
-        let close_map = AsyncFd::new(close_map)?;
+        let exec_ring = AsyncFd::new(exec_ring)?;
+        let close_ring = AsyncFd::new(close_ring)?;
+
+        // Now Rwlock -> Arc
+        let exec_ring = Arc::new(Mutex::new(exec_ring));
+        let pid_map = Arc::new(RwLock::new(pid_map));
+        let close_ring = Arc::new(Mutex::new(close_ring));
+
         Ok(CardwireProfiler {
-            event_map,
-            app_map,
-            close_map,
+            exec_ring,
+            close_ring,
+            pid_map,
             //database_app_cached,
         })
     }
-    pub async fn spawn_profiler(mut self) -> anyhow::Result<()> {
-        loop {
-            let mut events_batch: Vec<Event> = Vec::new();
-            // cache already blocked pid and store their parent id
-            let mut pid_cache: HashMap<u32, u32> = HashMap::new();
-            let mut guard = self.event_map.ready_mut(Interest::READABLE).await?;
-            if guard.ready().is_readable() {
-                while let Some(item) = guard.get_inner_mut().next() {
-                    // Ensure size matches our 40-byte struct
-                    if item.len() < std::mem::size_of::<Event>() {
-                        warn!("Skipping malformed event. Size: {}", item.len());
-                        continue;
+    pub async fn spawn_profiler(self) -> anyhow::Result<()> {
+        // Create the channel
+        let (tx, mut rx) = mpsc::channel::<EventMsg>(10_000);
+
+        // Clone the Arcs and Sender to move into the background task
+        let exec_arc = self.exec_ring.clone();
+        let close_arc = self.close_ring.clone();
+        let tx_task = tx.clone();
+
+        tokio::spawn(async move {
+            // Lock the buffers once
+            let mut exec_ring = exec_arc.lock().await;
+            let mut close_ring = close_arc.lock().await;
+
+            loop {
+                tokio::select! {
+                    Ok(mut guard) = exec_ring.ready_mut(Interest::READABLE) => {
+                        if guard.ready().is_readable() {
+                            while let Some(item) = guard.get_inner_mut().next() {
+                                if item.len() < std::mem::size_of::<Event>() {
+                                    warn!("Skipping malformed exec event. Size: {}", item.len());
+                                    continue;
+                                }
+                                let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Event) };
+                                let _ = tx_task.try_send(EventMsg::Exec(event));
+                            }
+                            guard.clear_ready();
+                        }
                     }
 
-                    let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Event) };
-                    events_batch.push(event);
+                    Ok(mut guard) = close_ring.ready_mut(Interest::READABLE) => {
+                        if guard.ready().is_readable() {
+                            while let Some(item) = guard.get_inner_mut().next() {
+                                if item.len() < std::mem::size_of::<Close>() {
+                                    warn!("Skipping malformed close event. Size: {}", item.len());
+                                    continue;
+                                }
+                                let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Close) };
+                                let _ = tx_task.try_send(EventMsg::Close(event));
+                            }
+                            guard.clear_ready();
+                        }
+                    }
                 }
-                guard.clear_ready();
+            } // end loop
+        });
+
+        // Garbage collector to not overflow the map and to keep it clean
+        let gc_map = self.pid_map.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                log::info!("Running Garbage Collector...");
+                let keys: Vec<u32> = {
+                    let map = gc_map.read().await;
+                    map.keys().flatten().collect()
+                };
+                log::info!("Got map lock yay");
+                let mut dead_pids: Vec<u32> = Vec::new();
+                for pid in keys {
+                    let proc_path = format!("/proc/{}", pid);
+                    if tokio::fs::metadata(&proc_path).await.is_err() {
+                        dead_pids.push(pid);
+                    }
+                }
+                if !dead_pids.is_empty() {
+                    let mut map = gc_map.write().await;
+                    let dead_pids_len = dead_pids.len();
+                    for pid in dead_pids {
+                        let _ = map.remove(&pid);
+                    }
+                    log::info!("Garbage Collector removed {} pids", dead_pids_len);
+                } else {
+                    log::info!("Garbage Collector found 0 ghost pids");
+                }
             }
-            drop(guard);
-            for event in events_batch {
-                // if pid already blocked, skip
-                if pid_cache.contains_key(&event.pid) {
-                    continue;
+        });
+
+        let mut pid_cache: HashMap<u32, u32> = HashMap::new();
+
+        while let Some(msg) = rx.recv().await {
+            match msg {
+                EventMsg::Exec(event) => {
+                    if pid_cache.contains_key(&event.pid) {
+                        continue;
+                    }
+                    //tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                    let process_path = format!("/proc/{}/comm", event.pid);
+                    let comm = match fs::read_to_string(&process_path).await {
+                        Ok(c) => c.trim().to_string(),
+                        Err(_) => continue, // The process died before we could read it, skip
+                    };
+                    let real_app_name = match get_real_process_name(event.pid).await {
+                        Some(name) => name,
+                        None => continue,
+                    };
+                    if self.evaluate_app(event.pid, &comm).await {
+                        info!("ALLOW: pid: {}, name: {}", event.pid, real_app_name);
+                        // Only acquire the write lock right when we need it
+                        let mut app_map = self.pid_map.write().await;
+                        if let Err(e) = app_map.insert(event.pid, 1, 0) {
+                            warn!("Failed to insert into eBPF map: {}", e);
+                        }
+                        pid_cache.insert(event.pid, event.parent_pid);
+                    }
                 }
-                let comm = CStr::from_bytes_until_nul(&event.comm)
-                    .map(|c| c.to_string_lossy().into_owned())
-                    .unwrap_or_else(|_| String::from("unknown"));
-
-                let child_path = format!("/proc/{}/comm", event.pid);
-                if !std::path::Path::new(&child_path).exists() {
-                    continue;
-                }
-
-                let parent_path = format!("/proc/{}/comm", event.parent_pid);
-                let parent_name = fs::read_to_string(parent_path)
-                    .map(|s| s.trim().to_string())
-                    .unwrap_or_else(|_| String::from("<exited>"));
-
-                //info!(target: "cardwired-snitch",
-                //  "App launched | PID: {} | Name: {} | Parent PID: {} | Parent Name: {}",
-                //  event.pid, comm, event.parent_pid, parent_name);
-                if self.evaluate_app(event.pid, &comm).await {
-                    info!(
-                        "BLOCK: pid: {}, comm: {}, parent_pid: {}, parent_comm: {}",
-                        event.pid, comm, event.parent_pid, parent_name
-                    );
-                    self.app_map.insert(event.pid, 1, 0)?;
-                    pid_cache.insert(event.pid, event.parent_pid);
+                EventMsg::Close(event) => {
+                    pid_cache.remove(&event.pid);
+                    let mut pid_map = self.pid_map.write().await;
+                    let _ = pid_map.remove(&event.pid);
                 }
             }
         }
+
         Ok(())
     }
 
@@ -113,13 +193,49 @@ impl CardwireProfiler {
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app
     async fn evaluate_app(&self, pid: u32, comm: &str) -> bool {
-        // Phase 1, dynamic score
-        // if it's a game, allow it
-        check_cmdline(pid).await
-
-        //if check_gamemode(pid).await {
-        //    log::info!("Dynamic: {comm} ALLOWED, Reason: Gamemode detected");
-        //    return Ok(true);
-        //}
+        check_environ(pid).await
     }
+}
+
+async fn get_real_process_name(pid: u32) -> Option<String> {
+    let cmdline_path = format!("/proc/{}/cmdline", pid);
+    let cmdline_bytes = match fs::read(&cmdline_path).await {
+        Ok(b) => b,
+        Err(_) => return None, // process died
+    };
+    if cmdline_bytes.is_empty() {
+        return None;
+    }
+    let args: Vec<&str> = cmdline_bytes
+        .split(|&b| b == 0)
+        .filter_map(|b| std::str::from_utf8(b).ok())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if args.is_empty() {
+        return None;
+    }
+    let binary = args[0];
+
+    // Check Wine/Proton
+    if binary.contains("wine") || binary.contains("proton") {
+        for arg in args.iter().skip(1) {
+            if arg.to_lowercase().ends_with(".exe") {
+                let file_name = arg.split(&['/', '\\'][..]).last().unwrap_or(arg);
+                return Some(file_name.to_string());
+            }
+        }
+    }
+
+    // Minecraft/Java games
+    if binary.ends_with(".java") {
+        for arg in args.iter().skip(1) {
+            if arg.ends_with(".jar") {
+                let file_name = arg.split('/').last().unwrap_or(arg);
+                return Some(file_name.to_string());
+            }
+        }
+    }
+    // Fallback
+    let base_name = binary.split('/').last().unwrap_or(binary);
+    Some(base_name.to_string())
 }

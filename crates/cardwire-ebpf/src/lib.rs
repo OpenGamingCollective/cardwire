@@ -5,7 +5,7 @@ use std::fmt;
 
 pub use crate::errors::{CardwireEbpfError, CardwireEbpfResult};
 use aya::{
-    Btf, Ebpf, maps::{HashMap, Map, MapError, RingBuf}, programs::{Lsm, TracePoint}
+    Btf, Ebpf, maps::{HashMap, MapError, RingBuf}, programs::{Lsm, TracePoint}
 };
 pub struct EbpfBlocker {
     ebpf: Ebpf,
@@ -63,14 +63,24 @@ impl EbpfBlocker {
             program.attach().map_err(CardwireEbpfError::aya)?;
         }
 
-        let tp_program: &mut TracePoint = ebpf
-            .program_mut("trace_execve_exit")
-            .ok_or_else(|| CardwireEbpfError::missing_lsm("trace_execve_exit"))?
+        let exec_program: &mut TracePoint = ebpf
+            .program_mut("trace_exec")
+            .ok_or_else(|| CardwireEbpfError::missing_lsm("trace_exec"))?
             .try_into()
             .map_err(CardwireEbpfError::aya)?;
-        tp_program.load().map_err(CardwireEbpfError::aya)?;
-        tp_program
-            .attach("syscalls", "sys_exit_execve")
+        exec_program.load().map_err(CardwireEbpfError::aya)?;
+        exec_program
+            .attach("sched", "sched_process_exec")
+            .map_err(CardwireEbpfError::aya)?;
+
+        let close_program: &mut TracePoint = ebpf
+            .program_mut("trace_process_exit")
+            .ok_or_else(|| CardwireEbpfError::missing_lsm("trace_process_exit"))?
+            .try_into()
+            .map_err(CardwireEbpfError::aya)?;
+        close_program.load().map_err(CardwireEbpfError::aya)?;
+        close_program
+            .attach("sched", "sched_process_exit")
             .map_err(CardwireEbpfError::aya)?;
         Ok(Self { ebpf })
     }
@@ -290,8 +300,8 @@ impl EbpfBlocker {
 
         Ok(false)
     }
-    pub fn get_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
-        let map = self.ebpf.take_map("EVENTS").unwrap();
+    pub fn get_exec_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
+        let map = self.ebpf.take_map("EXEC_EVENTS").unwrap();
         let ring_buf: RingBuf<aya::maps::MapData> = RingBuf::try_from(map).unwrap();
         Ok(ring_buf)
     }
@@ -300,9 +310,14 @@ impl EbpfBlocker {
         let ring_buf: RingBuf<aya::maps::MapData> = RingBuf::try_from(map).unwrap();
         Ok(ring_buf)
     }
-    pub fn get_app_map(&mut self) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u8>> {
+    pub fn get_pid_map(&mut self) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u8>> {
         let map = self.ebpf.take_map("BLOCKED_PID").unwrap();
         let map: HashMap<aya::maps::MapData, u32, u8> = HashMap::try_from(map).unwrap();
-        return Ok(map);
+        Ok(map)
+    }
+    pub fn get_mode_map(&mut self) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u8, u8>> {
+        let map = self.ebpf.take_map("CURRENT_MODE").unwrap();
+        let map: HashMap<aya::maps::MapData, u8, u8> = HashMap::try_from(map).unwrap();
+        Ok(map)
     }
 }

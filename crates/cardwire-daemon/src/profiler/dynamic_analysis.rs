@@ -30,5 +30,12 @@ fn check_steam(cmdline: &str) -> bool {
         || cmdline.contains("SteamLaunch")
         || cmdline.contains(r"S:\common")
         || cmdline.contains(r"c:\windows\system32\steam.exe")
-        || cmdline.contains("steam-runtime-tools")
+}
+pub async fn check_environ(pid: u32) -> bool {
+    let path = format!("/proc/{}/environ", pid);
+    let Ok(bytes) = fs::read(path).await else {
+        return false;
+    };
+    // Check if the byte array contains the substring
+    bytes.windows(11).any(|window| window == b"SteamAppId=")
 }

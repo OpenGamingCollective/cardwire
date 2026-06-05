@@ -91,11 +91,11 @@ struct task_struct {
 	int exit_code;
 } __attribute__((preserve_access_index));
 // EBPF maps
-// This one is to report the event to cardwire
+// This one is to report the events to cardwire
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
-} EVENTS SEC(".maps");
+} EXEC_EVENTS SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
@@ -109,12 +109,29 @@ struct {
 } REPORT SEC(".maps");
 
 // List of blocked comm
+// Used for smart mode
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 2048);
+	__uint(max_entries, 16384);
 	__type(key, __u32);
 	__type(value, __u8);
 } BLOCKED_PID SEC(".maps");
+
+/*
+	mode map, mode should be stored in key 0
+	possible values:
+	integrated = 0
+	hybrid = 1
+	manual = 2
+	enforce = 3
+	smart = 4
+*/
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 1);
+	__type(key, __u8);
+	__type(value, __u8);
+} CURRENT_MODE SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -329,6 +346,8 @@ int BPF_PROG(inode_permission, struct inode *inode, int mask)
 	}
 
 	unsigned long offset;
+
+	// This is for kernel compatibility
 	if (bpf_core_field_exists(((struct dentry___old *)0)->d_u.d_alias)) {
 		offset =
 			bpf_core_field_offset(struct dentry___old, d_u.d_alias);
@@ -350,21 +369,26 @@ int BPF_PROG(inode_getattr, const struct path *path)
 }
 
 /*
-	To analyze the app before it's launch, send event_t to cardwire
+	To analyze the app before it's launch if the mode is smart or enforce, send event_t to cardwire
 */
-SEC("tracepoint/syscalls/sys_exit_execve")
-int trace_execve_exit(struct trace_event_raw_sys_exit *ctx)
+SEC("tracepoint/sched/sched_process_exec")
+int trace_exec(void *ctx)
 {
-	if (ctx->ret < 0) {
+	// get current cardwired mode, key should always be 0
+	__u32 key = 0;
+	__u8 *mode = bpf_map_lookup_elem(&CURRENT_MODE, &key);
+	if (!mode) {
+		return 0;
+	}
+	//if mode is not smart or enforce, skip
+	if (*mode != 3 && *mode != 4 && *mode != 5) {
 		return 0;
 	}
 	// Init the struct
 	struct event_t *rb_data = {};
-	rb_data = bpf_ringbuf_reserve(&EVENTS, sizeof(struct event_t), 0);
+	rb_data = bpf_ringbuf_reserve(&EXEC_EVENTS, sizeof(struct event_t), 0);
 	// Check if present
 	if (!rb_data) {
-		// if bpf_ringbuf_reserve fails, print an error message and return
-		bpf_printk("bpf_ringbuf_reserve failed\n");
 		return 0;
 	}
 
@@ -382,10 +406,19 @@ int trace_execve_exit(struct trace_event_raw_sys_exit *ctx)
 SEC("tracepoint/sched/sched_process_exit")
 int trace_process_exit(void *ctx)
 {
-	struct close_t *rb_data =
-		bpf_ringbuf_reserve(&CLOSE_EVENTS, sizeof(struct event_t), 0);
+	// get current cardwired mode, key should always be 0
+	__u32 key = 0;
+	__u8 *mode = bpf_map_lookup_elem(&CURRENT_MODE, &key);
+	if (!mode) {
+		return 0;
+	}
+	//if mode is not smart or enforce, skip
+	if (*mode != 3 && *mode != 4 && *mode != 5) {
+		return 0;
+	}
+	struct close_t *rb_data = {};
+	rb_data = bpf_ringbuf_reserve(&CLOSE_EVENTS, sizeof(struct close_t), 0);
 	if (!rb_data) {
-		bpf_printk("bpf_ringbuf_reserve failed\n");
 		return 0;
 	}
 	rb_data->pid = bpf_get_current_pid_tgid() >> 32;

@@ -36,7 +36,7 @@ pub struct DaemonManager {
     pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config_interface: ConfigInterface,
     pub debug_interface: DebugInterface,
-    //pub cardwire_profiler: Arc<CardwireProfiler>
+    pub cardwire_profiler: CardwireProfiler,
 }
 
 impl DaemonManager {
@@ -90,7 +90,9 @@ impl DaemonManager {
                 Arc::clone(&gpu_state),
                 Arc::clone(&gpu_interfaces),
                 Arc::clone(&user_config),
-            )?,
+                Arc::clone(&blocker),
+            )
+            .await?,
             gpu_interfaces: Arc::clone(&gpu_interfaces),
             config_interface: ConfigInterface::build(
                 Arc::clone(&user_config),
@@ -105,8 +107,7 @@ impl DaemonManager {
                 Arc::clone(&pci_list),
                 Arc::clone(&database),
             )?,
-            //cardwire_profiler: Arc::new(CardwireProfiler::build(ring_buffer, app_map, database,
-            // close_map)?)
+            cardwire_profiler: CardwireProfiler::build(Arc::clone(&blocker)).await?,
         })
     }
 
@@ -145,14 +146,8 @@ impl DaemonManager {
         drop(blocker);
         drop(gpus_list);
         drop(state);
-        let mode_to_apply = mode.mode();
+        let mode_to_apply = Modes::parse_to_u32(mode.mode());
         drop(mode);
-        let mode_to_apply: u32 = match mode_to_apply {
-            Modes::Integrated => 0,
-            Modes::Hybrid => 1,
-            Modes::Manual => 2,
-            Modes::Smart => 3,
-        };
         self.mode_interface.set_mode(mode_to_apply).await?;
         Ok(())
     }

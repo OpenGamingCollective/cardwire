@@ -28,14 +28,6 @@ async fn main() -> Result<()> {
     let battery_switch = tasks::watch_battery_status(Arc::clone(
         &daemon.debug_interface.config.battery_auto_switch,
     ));
-    let mut blocker = daemon.debug_interface.blocker.write().await;
-    let profiler = CardwireProfiler::build(
-        blocker.get_ring()?,
-        blocker.get_app_map()?,
-        Arc::clone(&daemon.debug_interface.database),
-        blocker.get_close_ring()?,
-    )?;
-    drop(blocker);
     let conn_builder = connection::Builder::system()?;
     let conn = conn_builder
         .name("com.github.opengamingcollective.cardwire")?
@@ -51,7 +43,7 @@ async fn main() -> Result<()> {
     spawn_dbus_api(object_server, &daemon).await?;
     // Now spawn background tasks
     task::spawn(battery_switch);
-    task::spawn(profiler.spawn_profiler());
+    task::spawn(daemon.cardwire_profiler.spawn_profiler());
 
     info!("Daemon started");
     pending::<()>().await;
