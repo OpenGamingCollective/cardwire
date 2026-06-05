@@ -149,17 +149,19 @@ impl CardwireProfiler {
                         continue;
                     }
                     drop(pid_map);
-                    //tokio::time::sleep(std::time::Duration::from_millis(5)).await;
                     let real_app_name = match get_real_process_name(event.pid).await {
                         Some(name) => name,
                         None => continue,
                     };
-                    if self.evaluate_app(event.pid).await {
-                        debug!("ALLOW: pid: {}, name: {}", event.pid, real_app_name);
-                        // Only acquire the write lock right when we need it
-                        let mut app_map = self.pid_map.write().await;
-                        if let Err(e) = app_map.insert(event.pid, 1, 0) {
-                            warn!("Failed to insert into eBPF map: {}", e);
+                    // If the evaluation return None, skip to the second one that checks for llm
+                    // maps
+                    if let Some(result) = self.evaluate_app(event.pid).await {
+                        if result {
+                            debug!("ALLOW: pid: {}, name: {}", event.pid, real_app_name);
+                            let mut app_map = self.pid_map.write().await;
+                            if let Err(e) = app_map.insert(event.pid, 1, 0) {
+                                warn!("Failed to insert into eBPF map: {}", e);
+                            }
                         }
                         continue;
                     }
@@ -186,6 +188,8 @@ impl CardwireProfiler {
                         }
                     });
                 }
+                // On close event, remove from map, i made a garbage collector just in case a pid
+                // didn't get removed
                 EventMsg::Close(event) => {
                     let mut pid_map = self.pid_map.write().await;
                     if pid_map.remove(&event.pid).is_ok() {
@@ -198,29 +202,26 @@ impl CardwireProfiler {
         Ok(())
     }
 
-    /*
-       Uses two types of analysis:
-           Static (made at startup)
-           Dynamic (on-the-fly)
-
-       Dynamic > Static
-
-       Database is used to store the static analysis for faster lookup + comm name matching
-    */
-
     /// Default app are blocked, try to find if it's a game or a gpu intensive app
-    async fn evaluate_app(&self, pid: u32) -> bool {
+    async fn evaluate_app(&self, pid: u32) -> Option<bool> {
+        // First check CARDWIRE_ALLOW, if  None continue
+        if let Some(allow) = check_cardwire_allow(pid).await {
+            return Some(allow);
+        }
+
+        let xdg_list = self.xdg_list.read().await;
         // experimentation
         // TODO: Replace
-        let xdg_list = self.xdg_list.read().await;
         let check = |check: bool| if check { Err(()) } else { Ok(()) };
         let result = tokio::try_join!(
             async { check(check_steam_environ(pid).await) },
             async { check(check_gamemode(pid).await) },
             async { check(check_flatpak_environ(pid, &xdg_list).await) },
-            async { check(check_cardwire_allow(pid).await) },
         );
-        result.is_err()
+        match result.is_err() {
+            true => Some(true),
+            false => None,
+        }
     }
 }
 

@@ -1,7 +1,6 @@
 //! Functions for dynamic analysis, contains:
 //! - gamemoderun analysis
 //! - library analysis
-use log::debug;
 use std::collections::HashMap;
 use tokio::{
     fs::{self, File}, io::{AsyncBufReadExt, BufReader}
@@ -65,22 +64,21 @@ pub async fn check_llm_maps(pid: u32) -> bool {
 
     false
 }
-pub async fn check_cardwire_allow(pid: u32) -> bool {
+pub async fn check_cardwire_allow(pid: u32) -> Option<bool> {
     let path = format!("/proc/{}/environ", pid);
     let Ok(bytes) = fs::read(path).await else {
-        return false;
+        return None;
     };
-    // Check if the byte array contains the substring
+
     for var in bytes.split(|&b| b == 0) {
         if var.starts_with(b"CARDWIRE_ALLOW=") {
             if var.get(15) == Some(&b'1') {
-                debug!("huge");
-                return true;
+                return Some(true); // CARDWIRE_ALLOW=1
             } else {
-                let val = std::str::from_utf8(&var[15..]).unwrap_or("<invalid utf8>");
-                debug!("not huge... {}", val);
+                return Some(false); // CARDWIRE_ALLOW=0
             }
         }
     }
-    false
+    // Not present
+    None
 }
