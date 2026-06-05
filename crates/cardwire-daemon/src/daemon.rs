@@ -6,8 +6,9 @@ mod models;
 mod profiler;
 mod tasks;
 
-use crate::{models::DaemonManager, profiler::CardwireProfiler, tasks::watch_power_state};
+use crate::{models::DaemonManager, tasks::watch_power_state};
 use anyhow::Result;
+use env_logger::Env;
 use log::info;
 use std::{future::pending, sync::Arc};
 use tokio::task;
@@ -15,10 +16,9 @@ use zbus::connection;
 #[tokio::main]
 async fn main() -> Result<()> {
     // log
-    env_logger::Builder::from_default_env()
-        .format_target(true)
+    env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+        .format_target(false)
         .format_timestamp(None)
-        .filter_level(log::LevelFilter::Info)
         .init();
     let daemon = DaemonManager::new().await?;
     // Before we publish the API

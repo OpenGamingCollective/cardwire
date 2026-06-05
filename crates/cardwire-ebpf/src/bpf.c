@@ -115,7 +115,7 @@ struct {
 	__uint(max_entries, 16384);
 	__type(key, __u32);
 	__type(value, __u8);
-} BLOCKED_PID SEC(".maps");
+} ALLOWED_PID SEC(".maps");
 
 /*
 	mode map, mode should be stored in key 0
@@ -308,15 +308,33 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	}
 
 end:
+	// get mode
+	__u32 key = 0;
+	__u8 *mode = bpf_map_lookup_elem(&CURRENT_MODE, &key);
+	// get pid and ppid
 	__u32 pid = bpf_get_current_pid_tgid() >> 32;
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-	__u32 parent_pid = BPF_CORE_READ(task, real_parent, tgid);
-	if (blocked && (!bpf_map_lookup_elem(&BLOCKED_PID, &pid) ||
-			!bpf_map_lookup_elem(&BLOCKED_PID, &parent_pid))) {
-		return -ENOENT;
-	} else {
+	__u32 ppid = BPF_CORE_READ(task, real_parent, tgid);
+	// if map lookup fails, or we are not blocking, or it's integrated mode, allow
+	if (!mode || !blocked || *mode == 0) {
 		return 0;
 	}
+
+	// if is hybrid/manual mode, block
+	if (*mode == 1 || *mode == 2) {
+		return -ENOENT;
+	}
+
+	// if smart or enforce, check the pid list
+	if (*mode == 3 || *mode == 4 || *mode == 5) {
+		if (!bpf_map_lookup_elem(&ALLOWED_PID, &pid) &&
+		    !bpf_map_lookup_elem(&ALLOWED_PID, &ppid)) {
+			// Neither pid nor ppid is allowed, block
+			return -ENOENT;
+		}
+	}
+
+	return 0;
 }
 
 /*

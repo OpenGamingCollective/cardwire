@@ -3,34 +3,6 @@
 //! - library analysis
 use tokio::fs;
 
-pub async fn check_maps(pid: u32) -> bool {
-    let path = format!("/proc/{}/map", pid);
-    let map = match fs::read_to_string(path).await {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-    check_gamemode(&map)
-}
-
-fn check_gamemode(map: &str) -> bool {
-    map.contains("gamemode")
-}
-
-/// Check cmdline for common string like SteamLibrary
-pub async fn check_cmdline(pid: u32) -> bool {
-    let path = format!("/proc/{}/cmdline", pid);
-    let cmdline = match fs::read_to_string(path).await {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-    check_steam(&cmdline)
-}
-fn check_steam(cmdline: &str) -> bool {
-    cmdline.contains("SteamLibrary/steamapps/common/")
-        || cmdline.contains("SteamLaunch")
-        || cmdline.contains(r"S:\common")
-        || cmdline.contains(r"c:\windows\system32\steam.exe")
-}
 pub async fn check_environ(pid: u32) -> bool {
     let path = format!("/proc/{}/environ", pid);
     let Ok(bytes) = fs::read(path).await else {
@@ -38,4 +10,13 @@ pub async fn check_environ(pid: u32) -> bool {
     };
     // Check if the byte array contains the substring
     bytes.windows(11).any(|window| window == b"SteamAppId=")
+}
+pub async fn check_gamemode(pid: u32) -> bool {
+    let path = format!("/proc/{}/maps", pid);
+    let Ok(bytes) = fs::read(path).await else {
+        return false;
+    };
+    bytes
+        .windows(18)
+        .any(|window| window == b"libgamemodeauto.so")
 }

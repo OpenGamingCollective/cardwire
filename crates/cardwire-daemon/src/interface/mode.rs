@@ -2,7 +2,7 @@
 use crate::{
     file::{CardwireGpuState, CardwireModeState}, interface::{GpuInterface, config::ConfigMemory}
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use aya::maps::HashMap as AyaHashMap;
 use cardwire_ebpf::EbpfBlocker;
 use log::{error, info, warn};
@@ -92,7 +92,6 @@ impl ModeInterface {
     async fn insert_to_map(&self, mode: Modes) -> fdo::Result<()> {
         let mut mode_map = self.mode_map.lock().await;
         let mode: u8 = Modes::parse_to_u32(mode) as u8;
-        println!("setting key 0 to {}", mode);
         mode_map
             .insert(0, mode, 0)
             .map_err(|err| fdo::Error::Failed(err.to_string()))
@@ -146,7 +145,6 @@ impl ModeInterface {
                 let gpu_state = self.gpu_state.read().await;
                 for (_, gpu) in gpu_list.iter_mut() {
                     if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && config {
-                        println!("config: {config}");
                         if gpu.device.is_default() {
                             // For safety, warn and unblock if default
                             warn!(
@@ -155,7 +153,7 @@ impl ModeInterface {
                             );
                             gpu.unblock_gpu().await?;
                         } else {
-                            println!("blocking: {} ", gpu.device.pci().pci_address());
+                            info!("blocking: {} ", gpu.device.pci().pci_address());
                             gpu.block_gpu().await?;
                         }
                     } else {

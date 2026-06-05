@@ -311,7 +311,7 @@ impl EbpfBlocker {
         Ok(ring_buf)
     }
     pub fn get_pid_map(&mut self) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u8>> {
-        let map = self.ebpf.take_map("BLOCKED_PID").unwrap();
+        let map = self.ebpf.take_map("ALLOWED_PID").unwrap();
         let map: HashMap<aya::maps::MapData, u32, u8> = HashMap::try_from(map).unwrap();
         Ok(map)
     }

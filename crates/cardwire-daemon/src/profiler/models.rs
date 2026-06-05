@@ -1,16 +1,12 @@
-use aya::maps::{
-    HashMap as AyaHashMap, Map::{self}, RingBuf
-};
+use aya::maps::{HashMap as AyaHashMap, RingBuf};
 use cardwire_ebpf::EbpfBlocker;
-use log::{info, warn};
-use std::{collections::HashMap, ffi::CStr, path::Path, ptr, sync::Arc};
+use log::{debug, warn};
+use std::{collections::HashMap, ptr, sync::Arc};
 use tokio::{
     fs, io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, mpsc}
 };
 
-use crate::{
-    file::CardwireDatabase, profiler::dynamic_analysis::{check_cmdline, check_environ}
-};
+use crate::profiler::dynamic_analysis::{check_environ, check_gamemode};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Event {
@@ -39,8 +35,6 @@ pub struct CardwireProfiler {
     close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u8>>>,
 }
-
-pub struct App {}
 
 impl CardwireProfiler {
     pub async fn build(blocker: Arc<RwLock<EbpfBlocker>>) -> anyhow::Result<CardwireProfiler> {
@@ -84,7 +78,7 @@ impl CardwireProfiler {
                         if guard.ready().is_readable() {
                             while let Some(item) = guard.get_inner_mut().next() {
                                 if item.len() < std::mem::size_of::<Event>() {
-                                    warn!("Skipping malformed exec event. Size: {}", item.len());
+                                    debug!("Skipping malformed exec event. Size: {}", item.len());
                                     continue;
                                 }
                                 let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Event) };
@@ -98,7 +92,7 @@ impl CardwireProfiler {
                         if guard.ready().is_readable() {
                             while let Some(item) = guard.get_inner_mut().next() {
                                 if item.len() < std::mem::size_of::<Close>() {
-                                    warn!("Skipping malformed close event. Size: {}", item.len());
+                                    debug!("Skipping malformed close event. Size: {}", item.len());
                                     continue;
                                 }
                                 let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Close) };
@@ -116,12 +110,11 @@ impl CardwireProfiler {
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-                log::info!("Running Garbage Collector...");
+                debug!("Running Garbage Collector...");
                 let keys: Vec<u32> = {
                     let map = gc_map.read().await;
                     map.keys().flatten().collect()
                 };
-                log::info!("Got map lock yay");
                 let mut dead_pids: Vec<u32> = Vec::new();
                 for pid in keys {
                     let proc_path = format!("/proc/{}", pid);
@@ -135,9 +128,9 @@ impl CardwireProfiler {
                     for pid in dead_pids {
                         let _ = map.remove(&pid);
                     }
-                    log::info!("Garbage Collector removed {} pids", dead_pids_len);
+                    debug!("Garbage Collector removed {} pids", dead_pids_len);
                 } else {
-                    log::info!("Garbage Collector found 0 ghost pids");
+                    debug!("Garbage Collector found 0 ghost pids");
                 }
             }
         });
@@ -151,17 +144,12 @@ impl CardwireProfiler {
                         continue;
                     }
                     //tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-                    let process_path = format!("/proc/{}/comm", event.pid);
-                    let comm = match fs::read_to_string(&process_path).await {
-                        Ok(c) => c.trim().to_string(),
-                        Err(_) => continue, // The process died before we could read it, skip
-                    };
                     let real_app_name = match get_real_process_name(event.pid).await {
                         Some(name) => name,
                         None => continue,
                     };
-                    if self.evaluate_app(event.pid, &comm).await {
-                        info!("ALLOW: pid: {}, name: {}", event.pid, real_app_name);
+                    if self.evaluate_app(event.pid).await {
+                        debug!("ALLOW: pid: {}, name: {}", event.pid, real_app_name);
                         // Only acquire the write lock right when we need it
                         let mut app_map = self.pid_map.write().await;
                         if let Err(e) = app_map.insert(event.pid, 1, 0) {
@@ -192,8 +180,15 @@ impl CardwireProfiler {
     */
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app
-    async fn evaluate_app(&self, pid: u32, comm: &str) -> bool {
-        check_environ(pid).await
+    async fn evaluate_app(&self, pid: u32) -> bool {
+        // experimentation
+        // TODO: Replace
+        let check = |check: bool| if check { Err(()) } else { Ok(()) };
+        let result = tokio::try_join!(async { check(check_environ(pid).await) }, async {
+            check(check_gamemode(pid).await)
+        },);
+
+        result.is_err()
     }
 }
 
@@ -220,7 +215,7 @@ async fn get_real_process_name(pid: u32) -> Option<String> {
     if binary.contains("wine") || binary.contains("proton") {
         for arg in args.iter().skip(1) {
             if arg.to_lowercase().ends_with(".exe") {
-                let file_name = arg.split(&['/', '\\'][..]).last().unwrap_or(arg);
+                let file_name = arg.split(&['/', '\\'][..]).next_back().unwrap_or(arg);
                 return Some(file_name.to_string());
             }
         }
@@ -230,12 +225,12 @@ async fn get_real_process_name(pid: u32) -> Option<String> {
     if binary.ends_with(".java") {
         for arg in args.iter().skip(1) {
             if arg.ends_with(".jar") {
-                let file_name = arg.split('/').last().unwrap_or(arg);
+                let file_name = arg.split('/').next_back().unwrap_or(arg);
                 return Some(file_name.to_string());
             }
         }
     }
     // Fallback
-    let base_name = binary.split('/').last().unwrap_or(binary);
+    let base_name = binary.split('/').next_back().unwrap_or(binary);
     Some(base_name.to_string())
 }
