@@ -1,5 +1,6 @@
 //! Used to listen to other dbus interface, mainly for auto battery switch and display detection
 
+use log::info;
 use tokio::io::{Interest, unix::AsyncFd};
 use zbus::{Connection, Result, proxy};
 
@@ -9,8 +10,7 @@ use zbus::{Connection, Result, proxy};
     default_path = "/com/github/opengamingcollective/cardwire"
 )]
 trait Cardwire {
-    #[zbus(property)]
-    fn set_mode(&self, mode: u32) -> Result<()>;
+    fn refresh_gpu(&self) -> Result<()>;
 }
 
 pub async fn monitor_pci_changes() -> zbus::Result<()> {
@@ -24,7 +24,8 @@ pub async fn monitor_pci_changes() -> zbus::Result<()> {
             for event in udev_fd.get_ref().iter() {
                 if let Some(action) = event.action() {
                     if action == "add" || action == "unbind" {
-                        println!("event: {:?}", event)
+                        info!("detected pci event, refreshing GPU interfaces");
+                        cardwire.refresh_gpu().await?;
                     }
                 }
             }
