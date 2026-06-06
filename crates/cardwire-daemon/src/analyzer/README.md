@@ -1,8 +1,8 @@
-# Cardwire Profiler
+# Cardwire Analyzer
 
-The goal of the profiler is to allow or block an app on the fly
+The goal of the analyzer is to allow or block an app on the fly
 
-The profiler will uses a database, and both dynamic and static analysis to determine if an app should be allowed or not.
+The analyzer will uses a database, and both dynamic and static analysis to determine if an app should be allowed or not.
 
 Database is for known entities, the result of the static analysis should be stored in this database
 

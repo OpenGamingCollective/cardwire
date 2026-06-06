@@ -6,7 +6,7 @@ use tokio::{
     fs, io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, mpsc}
 };
 
-use crate::profiler::{
+use crate::analyzer::{
     dynamic_analysis::{
         check_cardwire_allow, check_flatpak_environ, check_gamemode, check_gpu_env, check_llm_maps, check_steam_environ
     }, static_analysis
@@ -29,15 +29,15 @@ pub enum EventMsg {
 }
 
 #[derive(Clone)]
-pub struct CardwireProfiler {
+pub struct CardwireAnalyzer {
     exec_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u8>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
 }
 
-impl CardwireProfiler {
-    pub async fn build(blocker: Arc<RwLock<EbpfBlocker>>) -> anyhow::Result<CardwireProfiler> {
+impl CardwireAnalyzer {
+    pub async fn build(blocker: Arc<RwLock<EbpfBlocker>>) -> anyhow::Result<CardwireAnalyzer> {
         let mut blocker = blocker.write().await;
         let exec_ring = blocker.get_exec_ring()?;
         let close_ring = blocker.get_close_ring()?;
@@ -51,14 +51,14 @@ impl CardwireProfiler {
         let pid_map = Arc::new(RwLock::new(pid_map));
         let close_ring = Arc::new(Mutex::new(close_ring));
         let xdg_list = Arc::new(RwLock::new(static_analysis::get_fdo_apps().await?));
-        Ok(CardwireProfiler {
+        Ok(CardwireAnalyzer {
             exec_ring,
             close_ring,
             pid_map,
             xdg_list,
         })
     }
-    pub async fn spawn_profiler(self) -> anyhow::Result<()> {
+    pub async fn run(self) -> anyhow::Result<()> {
         // Create the channel
         let (tx, mut rx) = mpsc::channel::<EventMsg>(10_000);
 

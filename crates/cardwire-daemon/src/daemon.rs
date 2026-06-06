@@ -1,9 +1,9 @@
 //! entry point of cardwired
+mod analyzer;
 mod core;
 mod file;
 mod interface;
 mod models;
-mod profiler;
 mod tasks;
 
 use crate::{models::DaemonManager, tasks::watch_power_state};
@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
     spawn_dbus_api(object_server, &daemon).await?;
     // Now spawn background tasks
     task::spawn(battery_switch);
-    task::spawn(daemon.cardwire_profiler.spawn_profiler());
+    task::spawn(daemon.cardwire_analyzer.run());
 
     info!("Daemon started");
     pending::<()>().await;
