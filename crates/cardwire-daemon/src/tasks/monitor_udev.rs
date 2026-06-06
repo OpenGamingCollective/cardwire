@@ -22,11 +22,11 @@ pub async fn monitor_pci_changes() -> zbus::Result<()> {
         let mut guard = udev_fd.ready(Interest::READABLE).await?;
         if guard.ready().is_readable() {
             for event in udev_fd.get_ref().iter() {
-                if let Some(action) = event.action() {
-                    if action == "add" || action == "unbind" {
-                        info!("detected pci event, refreshing GPU interfaces");
-                        cardwire.refresh_gpu().await?;
-                    }
+                if let Some(action) = event.action()
+                    && (action == "add" || action == "unbind")
+                {
+                    info!("detected pci event, refreshing GPU interfaces");
+                    cardwire.refresh_gpu().await?;
                 }
             }
         }
