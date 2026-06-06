@@ -177,25 +177,6 @@ struct {
 	__type(value, __u8);
 } BLOCKED_NVIDIA_FILES SEC(".maps");
 
-/* Safely read and compare kernel qstr */
-static __always_inline int qstr_eq(struct qstr q, const char *name, __u32 len)
-{
-	if (!q.name || q.len != len) {
-		return 0;
-	}
-
-	char buf[32] = {};
-	if (len >= sizeof(buf)) {
-		return 0;
-	}
-
-	if (bpf_core_read_str(buf, sizeof(buf), q.name) < 0) {
-		return 0;
-	}
-
-	return __builtin_memcmp(buf, name, len) == 0;
-}
-
 static __always_inline int get_pci_addr(struct dentry *dentry, char *pci_addr,
 					int size)
 {
@@ -223,6 +204,47 @@ static __always_inline int get_pci_addr(struct dentry *dentry, char *pci_addr,
 	}
 
 	return 1;
+}
+static __always_inline int check_backlight_path(struct dentry *dentry)
+{
+	if (!dentry)
+		return 0;
+
+	// current dir/file
+	struct qstr q = BPF_CORE_READ(dentry, d_name);
+	char name[16] = {};
+	if (bpf_core_read_str(name, sizeof(name), q.name) < 0) {
+		return 0;
+	}
+
+	// get parent folder
+	char p_name[16] = {};
+	struct dentry *parent = BPF_CORE_READ(dentry, d_parent);
+	if (parent) {
+		const unsigned char *p_name_ptr =
+			BPF_CORE_READ(parent, d_name.name);
+		bpf_core_read_str(p_name, sizeof(p_name), p_name_ptr);
+	}
+
+	// NVIDIA
+	char *t = (__builtin_memcmp(name, "nvidia_", 7) == 0)	? name :
+		  (__builtin_memcmp(p_name, "nvidia_", 7) == 0) ? p_name :
+								  NULL;
+
+	if (t) {
+		__u32 id = 0;
+
+#pragma unroll
+		for (int i = 7; i < 10 && t[i] >= '0' && t[i] <= '9'; i++) {
+			id = id * 10 + (t[i] - '0');
+		}
+
+		if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id)) {
+			return 1;
+		}
+	}
+
+	return 0;
 }
 
 static __always_inline int is_blocked_device(struct dentry *d)
@@ -304,6 +326,11 @@ static __always_inline int is_blocked_device(struct dentry *d)
 			blocked = true;
 			goto end;
 		}
+	}
+	// backlight
+	if (check_backlight_path(d) == 1) {
+		blocked = true;
+		goto end;
 	}
 
 end:
