@@ -323,8 +323,8 @@ end:
 		return -ENOENT;
 	}
 
-	// if smart or enforce, check the pid list
-	if (*mode == 3 || *mode == 4 || *mode == 5) {
+	// if smart, check the pid list
+	if (*mode == 3) {
 		if (!bpf_map_lookup_elem(&ALLOWED_PID, &pid) &&
 		    !bpf_map_lookup_elem(&ALLOWED_PID, &ppid)) {
 			// Neither pid nor ppid is allowed, block
@@ -397,7 +397,7 @@ int trace_exec(void *ctx)
 		return 0;
 	}
 	//if mode is not smart or enforce, skip
-	if (*mode != 3 && *mode != 4 && *mode != 5) {
+	if (*mode != 3) {
 		return 0;
 	}
 	// Init the struct
@@ -424,8 +424,8 @@ int trace_process_exit(void *ctx)
 	if (!mode) {
 		return 0;
 	}
-	//if mode is not smart or enforce, skip
-	if (*mode != 3 && *mode != 4 && *mode != 5) {
+	//if mode is not smart, skip
+	if (*mode != 3) {
 		return 0;
 	}
 	struct close_t *rb_data = {};

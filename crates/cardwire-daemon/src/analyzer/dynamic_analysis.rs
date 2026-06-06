@@ -2,9 +2,7 @@
 //! - gamemoderun analysis
 //! - library analysis
 use std::collections::HashMap;
-use tokio::{
-    fs::{self, File}, io::{AsyncBufReadExt, BufReader}
-};
+use tokio::fs;
 
 /// Read the proc `environ` file to find the `SteamAppId=` string
 /// used to identify both native and proton games

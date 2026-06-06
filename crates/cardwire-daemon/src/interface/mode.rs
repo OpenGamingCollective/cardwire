@@ -16,9 +16,7 @@ pub enum Modes {
     Hybrid,
     #[default]
     Manual,
-    Enforce,
     Smart,
-    SmartLog,
 }
 
 impl fmt::Display for Modes {
@@ -27,9 +25,7 @@ impl fmt::Display for Modes {
             Modes::Integrated => write!(f, "Integrated"),
             Modes::Hybrid => write!(f, "Hybrid"),
             Modes::Manual => write!(f, "Manual"),
-            Modes::Enforce => write!(f, "Enforce"),
             Modes::Smart => write!(f, "Smart"),
-            Modes::SmartLog => write!(f, "SmartLog"),
         }
     }
 }
@@ -40,9 +36,7 @@ impl Modes {
             0 => Ok(Self::Integrated),
             1 => Ok(Self::Hybrid),
             2 => Ok(Self::Manual),
-            3 => Ok(Self::Enforce),
-            4 => Ok(Self::Smart),
-            5 => Ok(Self::SmartLog),
+            3 => Ok(Self::Smart),
             unknown => Err(Error::InvalidArgs(format!(
                 "unknown mode: {unknown} \n expected integrated|hybrid|manual|smart"
             ))),
@@ -53,9 +47,7 @@ impl Modes {
             Modes::Integrated => 0,
             Modes::Hybrid => 1,
             Modes::Manual => 2,
-            Modes::Enforce => 3,
-            Modes::Smart => 4,
-            Modes::SmartLog => 5,
+            Modes::Smart => 3,
         }
     }
 }
@@ -112,7 +104,7 @@ impl ModeInterface {
         match mode {
             // Integrated/Hybrid only works on laptop with two gpus, will refuse if the computer has
             // more than 2 gpus
-            Modes::Integrated | Modes::Hybrid | Modes::Smart | Modes::Enforce | Modes::SmartLog => {
+            Modes::Integrated | Modes::Hybrid | Modes::Smart => {
                 if gpu_list.len() != 2 {
                     error!(
                         "Couldn't set mode to {}, the mode require exactly 2 GPUs",
