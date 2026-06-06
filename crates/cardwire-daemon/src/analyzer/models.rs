@@ -8,7 +8,7 @@ use tokio::{
 
 use crate::analyzer::{
     dynamic_analysis::{
-        check_cardwire_allow, check_flatpak_environ, check_gamemode, check_gpu_env, check_llm_maps, check_steam_environ
+        check_cardwire_allow, check_flatpak_environ, check_gamemode, check_gpu_env, check_steam_environ
     }, static_analysis
 };
 #[repr(C)]
@@ -138,64 +138,44 @@ impl CardwireAnalyzer {
         while let Some(msg) = rx.recv().await {
             match msg {
                 EventMsg::Exec(event) => {
-                    let pid_map = self.pid_map.read().await;
-                    // leave if pid already in the map
-                    if pid_map.get(&event.pid, 0).is_ok() {
-                        continue;
-                    }
-                    drop(pid_map);
-                    let real_app_name = match get_real_process_name(event.pid).await {
-                        Some(name) => name,
-                        None => continue,
-                    };
-                    // If the evaluation return None, skip to the second one that checks for llm
-                    // maps
-                    if let Some(result) = self.evaluate_app(event.pid).await {
-                        if result {
+                    let self_clone = self.clone();
+                    tokio::spawn(async move {
+                        let pid_map = self_clone.pid_map.read().await;
+                        if pid_map.get(&event.pid, 0).is_ok() {
+                            return;
+                        }
+                        drop(pid_map);
+                        let real_app_name = match get_real_process_name(event.pid).await {
+                            Some(name) => name,
+                            None => return,
+                        };
+                        if let Some(result) = self_clone.evaluate_app(event.pid).await
+                            && result
+                        {
                             debug!("ALLOW: pid: {}, name: {}", event.pid, real_app_name);
-                            let mut app_map = self.pid_map.write().await;
-                            if let Err(e) = app_map.insert(event.pid, 1, 0) {
+                            let mut pid_map = self_clone.pid_map.write().await;
+                            if let Err(e) = pid_map.insert(event.pid, 1, 0) {
                                 warn!("Failed to insert into eBPF map: {}", e);
                             }
-                        }
-                        continue;
-                    }
-                    tokio::spawn(async move {});
-                    // if the daemon didn't find anything, spawn this task to check for maps, this
-                    // fixed ollama not using the dgpu
-                    let pid_map_clone = self.pid_map.clone();
-                    tokio::spawn(async move {
-                        let max_attempts = 20;
-                        let mut attempt = 0;
-                        while attempt < max_attempts {
-                            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                            if check_llm_maps(event.pid).await {
-                                debug!("ALLOW: pid: {}, name: {}", event.pid, real_app_name);
-                                let mut app_map = pid_map_clone.write().await;
-                                let _ = app_map.insert(event.pid, 1, 0);
-                                return;
-                            }
-                            let proc_path = format!("/proc/{}", event.pid);
-                            if tokio::fs::metadata(&proc_path).await.is_err() {
-                                break;
-                            }
-                            attempt += 1;
                         }
                     });
                 }
                 // On close event, remove from map, i made a garbage collector just in case a pid
                 // didn't get removed
                 EventMsg::Close(event) => {
-                    let real_app_name = match get_real_process_name(event.pid).await {
-                        Some(name) => name,
-                        None => "unknown".to_string(),
-                    };
-                    let mut pid_map = self.pid_map.write().await;
-                    // we keep java in the map, and let the garbage collector take care of it, this
-                    // fix minecraft not using the dgpu
-                    if !real_app_name.contains("java") && pid_map.remove(&event.pid).is_ok() {
-                        debug!("REMOVE: pid: {}", event.pid);
-                    }
+                    let self_clone = self.clone();
+                    tokio::spawn(async move {
+                        let real_app_name = match get_real_process_name(event.pid).await {
+                            Some(name) => name,
+                            None => "unknown".to_string(),
+                        };
+                        let mut pid_map = self_clone.pid_map.write().await;
+                        // we keep java in the map, and let the garbage collector take care of it,
+                        // this fix minecraft not using the dgpu
+                        if !real_app_name.contains("java") && pid_map.remove(&event.pid).is_ok() {
+                            debug!("REMOVE: pid: {}", event.pid);
+                        }
+                    });
                 }
             }
         }

@@ -45,30 +45,6 @@ pub async fn check_flatpak_environ(pid: u32, xdg_list: &HashMap<String, bool>) -
     false
 }
 
-// maps has a ton of lines
-pub async fn check_llm_maps(pid: u32) -> bool {
-    let path = format!("/proc/{}/maps", pid);
-    let file = match File::open(&path).await {
-        Ok(f) => f,
-        Err(_) => return false,
-    };
-    let mut reader = BufReader::with_capacity(64 * 1024, file);
-    let mut line: Vec<u8> = Vec::with_capacity(512);
-    while let Ok(bytes_read) = reader.read_until(b'\n', &mut line).await {
-        if bytes_read == 0 {
-            break;
-        }
-
-        let is_match = line.windows(17).any(|w| w == b"libggml-vulkan.so");
-
-        if is_match {
-            return true;
-        }
-        line.clear();
-    }
-
-    false
-}
 pub async fn check_cardwire_allow(pid: u32) -> Option<bool> {
     let path = format!("/proc/{}/environ", pid);
     let Ok(bytes) = fs::read(path).await else {
