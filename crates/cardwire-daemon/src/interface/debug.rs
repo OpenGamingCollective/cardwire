@@ -1,7 +1,12 @@
-use crate::core::pci::{DbusPciDevice, PciDevice};
+use crate::{
+    core::{
+        gpu, pci::{self, DbusPciDevice, PciDevice}
+    }, tasks::watch_power_state
+};
 use cardwire_ebpf::EbpfBlocker;
+use log::info;
 use std::{collections::BTreeMap, sync::Arc};
-use tokio::sync::RwLock;
+use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
@@ -16,8 +21,11 @@ pub struct DebugInterface {
     pub config: Arc<ConfigMemory>,
     pub blocker: Arc<RwLock<EbpfBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
+    pub object_server: Option<zbus::ObjectServer>,
+    pub power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<anyhow::Result<()>>>>>,
 }
 impl DebugInterface {
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         mode_state: Arc<RwLock<CardwireModeState>>,
         gpu_state: Arc<RwLock<CardwireGpuState>>,
@@ -25,6 +33,8 @@ impl DebugInterface {
         config: Arc<ConfigMemory>,
         blocker: Arc<RwLock<EbpfBlocker>>,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
+        object_server: Option<zbus::ObjectServer>,
+        power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<anyhow::Result<()>>>>>,
     ) -> anyhow::Result<DebugInterface> {
         Ok(DebugInterface {
             mode_state,
@@ -33,13 +43,15 @@ impl DebugInterface {
             config,
             blocker,
             pci_list,
+            object_server,
+            power_tasks,
         })
     }
 }
 
 #[interface(name = "com.github.opengamingcollective.cardwire.Debug")]
 impl DebugInterface {
-    pub(crate) async fn get_pci_devices(&self) -> fdo::Result<BTreeMap<String, DbusPciDevice>> {
+    pub async fn get_pci_devices(&self) -> fdo::Result<BTreeMap<String, DbusPciDevice>> {
         let pci_list = &self.pci_list.read().await;
         let mut dbus_list: BTreeMap<String, DbusPciDevice> = BTreeMap::new();
         for (id, pci) in pci_list.iter() {
@@ -62,5 +74,69 @@ impl DebugInterface {
         }
 
         Ok(dbus_list)
+    }
+    pub async fn refresh_gpu(&self) -> fdo::Result<()> {
+        // lock the importants components
+        let mut pci_list = self.pci_list.write().await;
+        let mut gpu_interfaces = self.gpu_list.write().await;
+
+        // read a new pci list, if it's different than the current one, refresh the gpus, else do
+        // nothing
+        let new_pci_list =
+            pci::read_pci_devices().map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        if new_pci_list != *pci_list
+            && let Some(object_server) = &self.object_server
+        {
+            info!("pci list changed, refreshing the internal gpu list");
+            // Overwrite old list
+            *pci_list = new_pci_list.clone();
+            let mut power_tasks = self.power_tasks.write().await;
+
+            // get rid of the old gpu api and the old tasks
+            for (id, _) in gpu_interfaces.iter() {
+                let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+                let _ = object_server.remove::<GpuInterface, &str>(&path).await;
+                // if task is present, abort
+                if let Some(handle) = power_tasks.remove(id) {
+                    handle.abort();
+                }
+            }
+
+            // Empty the current gpu_interfaces
+            gpu_interfaces.clear();
+            // Read the new list
+            let new_gpu_list =
+                gpu::read_gpu(&pci_list).map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            for (id, device) in new_gpu_list {
+                let gpu = GpuInterface::build(
+                    device,
+                    Arc::clone(&self.blocker),
+                    Arc::clone(&self.pci_list),
+                    Arc::clone(&self.gpu_state),
+                    Arc::clone(&self.mode_state),
+                )
+                .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+                gpu_interfaces.insert(id, gpu);
+            }
+
+            // now re-populate the gpu api
+            for (id, gpu_interface) in gpu_interfaces.iter() {
+                let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+                object_server
+                    .at(path.clone(), gpu_interface.clone())
+                    .await?;
+                // spawn power state tasks
+                let handle = task::spawn(watch_power_state(
+                    gpu_interface.clone(),
+                    object_server
+                        .interface(path)
+                        .await
+                        .map_err(|err| fdo::Error::Failed(err.to_string()))?,
+                ));
+                power_tasks.insert(*id, handle);
+            }
+        }
+
+        Ok(())
     }
 }

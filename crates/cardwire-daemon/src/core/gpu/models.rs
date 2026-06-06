@@ -1,6 +1,6 @@
 use crate::core::pci::PciDevice;
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
 pub struct GpuDevice {
     name: String,
     pub pci: PciDevice,

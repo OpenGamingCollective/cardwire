@@ -37,6 +37,7 @@ pub struct DaemonManager {
     pub config_interface: ConfigInterface,
     pub debug_interface: DebugInterface,
     pub cardwire_analyzer: CardwireAnalyzer,
+    pub power_tasks: Arc<RwLock<BTreeMap<usize, tokio::task::JoinHandle<anyhow::Result<()>>>>>,
 }
 
 impl DaemonManager {
@@ -65,6 +66,8 @@ impl DaemonManager {
 
         let blocker = Arc::new(RwLock::new(EbpfBlocker::new()?));
 
+        let power_tasks = Arc::new(RwLock::new(BTreeMap::new()));
+
         let mut gpu_interfaces_map: BTreeMap<usize, GpuInterface> = BTreeMap::new();
 
         for (id, device) in gpu_list {
@@ -91,6 +94,7 @@ impl DaemonManager {
             )
             .await?,
             gpu_interfaces: Arc::clone(&gpu_interfaces),
+            power_tasks: Arc::clone(&power_tasks),
             config_interface: ConfigInterface::build(
                 Arc::clone(&user_config),
                 Arc::clone(&blocker),
@@ -102,6 +106,8 @@ impl DaemonManager {
                 Arc::clone(&user_config),
                 Arc::clone(&blocker),
                 Arc::clone(&pci_list),
+                None,
+                Arc::clone(&power_tasks),
             )?,
             cardwire_analyzer: CardwireAnalyzer::build(Arc::clone(&blocker)).await?,
         })
@@ -153,10 +159,6 @@ impl DaemonManager {
 // simple dbus to check if the daemon is alive
 impl DaemonManager {
     pub async fn status(&self) -> fdo::Result<()> {
-        Ok(())
-    }
-    pub async fn refresh_gpu(&self) -> fdo::Result<()> {
-        let _gpu_interfaces = self.gpu_interfaces.write().await;
         Ok(())
     }
 }

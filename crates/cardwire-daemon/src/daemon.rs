@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
         .format_target(false)
         .format_timestamp(None)
         .init();
-    let daemon = DaemonManager::new().await?;
+    let mut daemon = DaemonManager::new().await?;
     // Before we publish the API
     daemon.pre_daemon_tasks().await?;
 
@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
         .await?;
 
     let object_server: &zbus::ObjectServer = conn.object_server();
-    spawn_dbus_api(object_server, &daemon).await?;
+    spawn_dbus_api(object_server, &mut daemon).await?;
     // Now spawn background tasks
     task::spawn(battery_switch);
     task::spawn(daemon.cardwire_analyzer.run());
@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
 
 async fn spawn_dbus_api(
     object_server: &zbus::ObjectServer,
-    daemon: &DaemonManager,
+    daemon: &mut DaemonManager,
 ) -> anyhow::Result<()> {
     let path = "/com/github/opengamingcollective/cardwire";
 
@@ -65,23 +65,28 @@ async fn spawn_dbus_api(
     object_server
         .at(path, daemon.config_interface.clone())
         .await?;
-    // cardwire.Debug
-    object_server
-        .at(path, daemon.debug_interface.clone())
-        .await?;
     // cardwire.Gpu
+    let mut power_tasks = daemon.power_tasks.write().await;
     for (id, gpu_interface) in gpu_interfaces.iter() {
         let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
         object_server
             .at(path.clone(), gpu_interface.clone())
             .await?;
         // spawn power state watcher
-        task::spawn(watch_power_state(
+        let handle = task::spawn(watch_power_state(
             gpu_interface.clone(),
             object_server.interface(path).await?,
         ));
+        power_tasks.insert(*id, handle);
     }
+    drop(power_tasks);
     // drop gpu list to prevent deadlock
     drop(gpu_interfaces);
+    // give the server to the debug interface
+    daemon.debug_interface.object_server = Some(object_server.to_owned());
+    // cardwire.Debug
+    object_server
+        .at(path, daemon.debug_interface.clone())
+        .await?;
     Ok(())
 }

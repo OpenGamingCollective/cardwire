@@ -1,4 +1,4 @@
-#[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
 pub struct PciDevice {
     pci_address: String,
     iommu_group: Option<usize>,
@@ -85,6 +85,7 @@ pub struct DbusPciDevice {
     pub child_pci: String,
 }
 
+#[allow(dead_code)]
 pub struct IommuGroup {
     pub id: usize,
     pub devices: Vec<String>,
