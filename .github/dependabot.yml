@@ -8,10 +8,10 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
     # Nix
   - package-ecosystem: "nix"
     directory: "/"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
