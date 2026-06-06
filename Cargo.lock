@@ -333,17 +333,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cardwire-core"
-version = "0.9.0"
-dependencies = [
- "cardwire-ebpf",
- "log",
- "serde",
- "thiserror 2.0.18",
- "zbus",
-]
-
-[[package]]
 name = "cardwire-daemon"
 version = "0.9.0"
 dependencies = [
