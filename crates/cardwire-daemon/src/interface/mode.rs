@@ -3,18 +3,20 @@ use crate::{
     file::{CardwireGpuState, CardwireModeState}, interface::{GpuInterface, config::ConfigMemory}
 };
 use anyhow::Result;
+use aya::maps::HashMap as AyaHashMap;
+use cardwire_ebpf::EbpfBlocker;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt, sync::Arc};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use zbus::{fdo, fdo::Error, interface};
-
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default)]
 pub enum Modes {
     Integrated,
     Hybrid,
     #[default]
     Manual,
+    Smart,
 }
 
 impl fmt::Display for Modes {
@@ -23,6 +25,7 @@ impl fmt::Display for Modes {
             Modes::Integrated => write!(f, "Integrated"),
             Modes::Hybrid => write!(f, "Hybrid"),
             Modes::Manual => write!(f, "Manual"),
+            Modes::Smart => write!(f, "Smart"),
         }
     }
 }
@@ -33,9 +36,18 @@ impl Modes {
             0 => Ok(Self::Integrated),
             1 => Ok(Self::Hybrid),
             2 => Ok(Self::Manual),
+            3 => Ok(Self::Smart),
             unknown => Err(Error::InvalidArgs(format!(
-                "unknown mode: {unknown} \n expected integrated|hybrid|manual"
+                "unknown mode: {unknown} \n expected integrated|hybrid|manual|smart"
             ))),
+        }
+    }
+    pub fn parse_to_u32(input: Modes) -> u32 {
+        match input {
+            Modes::Integrated => 0,
+            Modes::Hybrid => 1,
+            Modes::Manual => 2,
+            Modes::Smart => 3,
         }
     }
 }
@@ -47,21 +59,34 @@ pub struct ModeInterface {
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config: Arc<ConfigMemory>,
+    mode_map: Arc<Mutex<AyaHashMap<aya::maps::MapData, u8, u8>>>,
 }
 
 impl ModeInterface {
-    pub fn build(
+    pub async fn build(
         mode_state: Arc<RwLock<CardwireModeState>>,
         gpu_state: Arc<RwLock<CardwireGpuState>>,
         gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
         config: Arc<ConfigMemory>,
+        blocker: Arc<RwLock<EbpfBlocker>>,
     ) -> Result<ModeInterface> {
+        let mut blocker = blocker.write().await;
+        let mode_map: aya::maps::HashMap<aya::maps::MapData, u8, u8> = blocker.get_mode_map()?;
+        let mode_map = Arc::new(Mutex::new(mode_map));
         Ok(ModeInterface {
             mode_state,
             gpu_state,
             gpu_list,
             config,
+            mode_map,
         })
+    }
+    async fn insert_to_map(&self, mode: Modes) -> fdo::Result<()> {
+        let mut mode_map = self.mode_map.lock().await;
+        let mode: u8 = Modes::parse_to_u32(mode) as u8;
+        mode_map
+            .insert(0, mode, 0)
+            .map_err(|err| fdo::Error::Failed(err.to_string()))
     }
 }
 
@@ -79,7 +104,7 @@ impl ModeInterface {
         match mode {
             // Integrated/Hybrid only works on laptop with two gpus, will refuse if the computer has
             // more than 2 gpus
-            Modes::Integrated | Modes::Hybrid => {
+            Modes::Integrated | Modes::Hybrid | Modes::Smart => {
                 if gpu_list.len() != 2 {
                     error!(
                         "Couldn't set mode to {}, the mode require exactly 2 GPUs",
@@ -93,7 +118,7 @@ impl ModeInterface {
                 // Loop to find the non default gpu and block it,
                 for gpu in gpu_list.values_mut() {
                     if !gpu.device.is_default() {
-                        if mode == Modes::Integrated {
+                        if mode == Modes::Integrated || mode == Modes::Smart {
                             gpu.block_gpu().await?;
                         } else {
                             gpu.unblock_gpu().await?;
@@ -112,7 +137,6 @@ impl ModeInterface {
                 let gpu_state = self.gpu_state.read().await;
                 for (_, gpu) in gpu_list.iter_mut() {
                     if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && config {
-                        println!("config: {config}");
                         if gpu.device.is_default() {
                             // For safety, warn and unblock if default
                             warn!(
@@ -121,7 +145,7 @@ impl ModeInterface {
                             );
                             gpu.unblock_gpu().await?;
                         } else {
-                            println!("blocking: {} ", gpu.device.pci().pci_address());
+                            info!("blocking: {} ", gpu.device.pci().pci_address());
                             gpu.block_gpu().await?;
                         }
                     } else {
@@ -130,6 +154,7 @@ impl ModeInterface {
                 }
             }
         }
+        self.insert_to_map(mode).await?;
         if let Err(e) = current_mode.save_state(mode).await {
             warn!("mode couldn't be saved to config: {e}");
         }
@@ -139,10 +164,6 @@ impl ModeInterface {
     #[zbus(property)]
     pub(crate) async fn mode(&self) -> fdo::Result<u32> {
         let current_mode = self.mode_state.read().await;
-        match current_mode.mode() {
-            Modes::Integrated => Ok(0),
-            Modes::Hybrid => Ok(1),
-            Modes::Manual => Ok(2),
-        }
+        Ok(Modes::parse_to_u32(current_mode.mode()))
     }
 }

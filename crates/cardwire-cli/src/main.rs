@@ -27,6 +27,7 @@ async fn main() -> anyhow::Result<()> {
                 CliMode::Integrated => 0,
                 CliMode::Hybrid => 1,
                 CliMode::Manual => 2,
+                CliMode::Smart => 3,
             };
 
             match client.set_mode(&mode_u32).await {
@@ -41,10 +42,12 @@ async fn main() -> anyhow::Result<()> {
                         0 => CliMode::Integrated,
                         1 => CliMode::Hybrid,
                         2 => CliMode::Manual,
+                        3 => CliMode::Smart,
                         // shouldn't happen
                         _ => CliMode::Manual,
                     };
-                    println!("Current Mode: {}", response)
+                    println!("Current Mode: {}", response);
+                    println!("Available Mode: integrated, hybrid, manual, smart");
                 }
                 Err(e) => handle_error(e),
             };

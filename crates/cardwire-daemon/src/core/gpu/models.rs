@@ -1,4 +1,4 @@
-use crate::pci::PciDevice;
+use crate::core::pci::PciDevice;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type)]
 pub struct GpuDevice {

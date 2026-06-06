@@ -6,6 +6,7 @@ pub enum CliMode {
     Integrated,
     Hybrid,
     Manual,
+    Smart,
 }
 impl fmt::Display for CliMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -13,6 +14,7 @@ impl fmt::Display for CliMode {
             CliMode::Integrated => write!(f, "Integrated"),
             CliMode::Hybrid => write!(f, "Hybrid"),
             CliMode::Manual => write!(f, "Manual"),
+            CliMode::Smart => write!(f, "Smart"),
         }
     }
 }

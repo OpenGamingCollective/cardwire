@@ -3,6 +3,7 @@
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
+#include <stdbool.h>
 
 char __license[] SEC("license") = "GPL";
 
@@ -60,7 +61,73 @@ struct file {
 	struct path f_path;
 } __attribute__((preserve_access_index));
 
+struct event_t {
+	__u32 pid;
+};
+
+struct close_t {
+	__u32 pid;
+};
+
+struct report_t {
+	__u32 pid;
+	char comm[32];
+};
+
+struct trace_event_raw_sys_exit {
+	__u64 unused_common_fields;
+	long id;
+	long ret;
+} __attribute__((preserve_access_index));
+
+struct task_struct {
+	int tgid;
+	struct task_struct *real_parent;
+	int exit_code;
+} __attribute__((preserve_access_index));
 // EBPF maps
+// This one is to report the events to cardwire
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} EXEC_EVENTS SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} CLOSE_EVENTS SEC(".maps");
+
+// This one is to report the app block to cardwire
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} REPORT SEC(".maps");
+
+// List of blocked comm
+// Used for smart mode
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 16384);
+	__type(key, __u32);
+	__type(value, __u8);
+} ALLOWED_PID SEC(".maps");
+
+/*
+	mode map, mode should be stored in key 0
+	possible values:
+	integrated = 0
+	hybrid = 1
+	manual = 2
+	enforce = 3
+	smart = 4
+*/
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 1);
+	__type(key, __u8);
+	__type(value, __u8);
+} CURRENT_MODE SEC(".maps");
+
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 1024);
@@ -163,14 +230,16 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	if (!d) {
 		return 0;
 	}
-
+	// if it's cardwired, exit
 	char comm[16] = {};
 	bpf_get_current_comm(comm, sizeof(comm));
 	if (__builtin_memcmp(comm, "cardwired", 9) == 0) {
 		return 0;
 	}
+	bool blocked = false;
 
 	struct inode *inode = BPF_CORE_READ(d, d_inode);
+	// Match card/render/nvidia minor
 	if (inode) {
 		__u16 i_mode = BPF_CORE_READ(inode, i_mode);
 		if ((i_mode & 00170000) == 00020000) {
@@ -180,17 +249,20 @@ static __always_inline int is_blocked_device(struct dentry *d)
 			if (major == 226) {
 				__u32 id = minor;
 				if (bpf_map_lookup_elem(&BLOCKED_CARDID, &id)) {
-					return -ENOENT;
+					blocked = true;
+					goto end;
 				}
 				if (bpf_map_lookup_elem(&BLOCKED_RENDERID,
 							&id)) {
-					return -ENOENT;
+					blocked = true;
+					goto end;
 				}
 			} else if (major == 195) {
 				__u32 id = minor;
 				if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID,
 							&id)) {
-					return -ENOENT;
+					blocked = true;
+					goto end;
 				}
 			}
 		}
@@ -198,11 +270,11 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	struct qstr q = BPF_CORE_READ(d, d_name);
 	// ignore long files
 	if (!q.name || q.len > 30) {
-		return 0;
+		goto end;
 	}
 	char buf[32] = {};
 	if (bpf_core_read_str(buf, sizeof(buf), q.name) < 0) {
-		return 0;
+		goto end;
 	}
 	// Blocks specific NVIDIA files, it's dangerous and will only work if one nvidia gpu is blocked
 	__u32 block_nvidia_key = 0;
@@ -211,7 +283,8 @@ static __always_inline int is_blocked_device(struct dentry *d)
 			__u32 id0 = 0, id1 = 1;
 			if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id0) &&
 			    !bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id1)) {
-				return -ENOENT;
+				blocked = true;
+				goto end;
 			}
 		}
 	}
@@ -219,11 +292,42 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	if (bpf_map_lookup_elem(&BLOCKED_PCI_FILES, buf)) {
 		char pci_addr[16] = {};
 		if (get_pci_addr(d, pci_addr, sizeof(pci_addr)) != 0) {
-			return 0;
+			goto end;
 		}
 		pci_addr[12] = '\0';
 
 		if (bpf_map_lookup_elem(&BLOCKED_PCI, pci_addr)) {
+			blocked = true;
+			goto end;
+		}
+	}
+
+end:
+	if (!blocked) {
+		return 0;
+	}
+	// get mode
+	__u32 key = 0;
+	__u8 *mode = bpf_map_lookup_elem(&CURRENT_MODE, &key);
+	// get pid and ppid
+	__u32 pid = bpf_get_current_pid_tgid() >> 32;
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	__u32 ppid = BPF_CORE_READ(task, real_parent, tgid);
+	// if map lookup fails, or we are not blocking, or it's hybrid mode, allow
+	if (!mode || *mode == 1) {
+		return 0;
+	}
+
+	// if is hybrid/manual mode, block
+	if (*mode == 0 || *mode == 2) {
+		return -ENOENT;
+	}
+
+	// if smart, check the pid list
+	if (*mode == 3) {
+		if (!bpf_map_lookup_elem(&ALLOWED_PID, &pid) &&
+		    !bpf_map_lookup_elem(&ALLOWED_PID, &ppid)) {
+			// Neither pid nor ppid is allowed, block
 			return -ENOENT;
 		}
 	}
@@ -258,6 +362,8 @@ int BPF_PROG(inode_permission, struct inode *inode, int mask)
 	}
 
 	unsigned long offset;
+
+	// This is for kernel compatibility
 	if (bpf_core_field_exists(((struct dentry___old *)0)->d_u.d_alias)) {
 		offset =
 			bpf_core_field_offset(struct dentry___old, d_u.d_alias);
@@ -276,4 +382,59 @@ int BPF_PROG(inode_getattr, const struct path *path)
 {
 	struct dentry *d = BPF_CORE_READ(path, dentry);
 	return is_blocked_device(d);
+}
+
+/*
+	To analyze the app before it's launch if the mode is smart or enforce, send event_t to cardwire
+*/
+SEC("tracepoint/sched/sched_process_exec")
+int trace_exec(void *ctx)
+{
+	// get current cardwired mode, key should always be 0
+	__u32 key = 0;
+	__u8 *mode = bpf_map_lookup_elem(&CURRENT_MODE, &key);
+	if (!mode) {
+		return 0;
+	}
+	//if mode is not smart or enforce, skip
+	if (*mode != 3) {
+		return 0;
+	}
+	// Init the struct
+	struct event_t *rb_data = {};
+	rb_data = bpf_ringbuf_reserve(&EXEC_EVENTS, sizeof(struct event_t), 0);
+	// Check if present
+	if (!rb_data) {
+		return 0;
+	}
+
+	// Read PID
+	rb_data->pid = bpf_get_current_pid_tgid() >> 32;
+
+	bpf_ringbuf_submit(rb_data, 0);
+	return 0;
+}
+
+SEC("tracepoint/sched/sched_process_exit")
+int trace_process_exit(void *ctx)
+{
+	// get current cardwired mode, key should always be 0
+	__u32 key = 0;
+	__u8 *mode = bpf_map_lookup_elem(&CURRENT_MODE, &key);
+	if (!mode) {
+		return 0;
+	}
+	//if mode is not smart, skip
+	if (*mode != 3) {
+		return 0;
+	}
+	struct close_t *rb_data = {};
+	rb_data = bpf_ringbuf_reserve(&CLOSE_EVENTS, sizeof(struct close_t), 0);
+	if (!rb_data) {
+		return 0;
+	}
+	rb_data->pid = bpf_get_current_pid_tgid() >> 32;
+
+	bpf_ringbuf_submit(rb_data, 0);
+	return 0;
 }

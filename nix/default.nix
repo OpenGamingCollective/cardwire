@@ -38,7 +38,7 @@ in
     };
     # Point to the correct hwdata location
     postPatch = ''
-      substituteInPlace crates/cardwire-core/src/pci/pci_device.rs \
+      substituteInPlace crates/cardwire-daemon/src/core/pci/pci_device.rs \
       --replace "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
     '';
     # Copy dbus conf, systemd service and make shell completion

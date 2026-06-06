@@ -1,6 +1,5 @@
-use cardwire_core::{
-    gpu::GpuBlocker, pci::{DbusPciDevice, PciDevice}
-};
+use crate::core::pci::{DbusPciDevice, PciDevice};
+use cardwire_ebpf::EbpfBlocker;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
@@ -15,7 +14,7 @@ pub struct DebugInterface {
     pub gpu_state: Arc<RwLock<CardwireGpuState>>,
     pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config: Arc<ConfigMemory>,
-    pub blocker: Arc<RwLock<GpuBlocker>>,
+    pub blocker: Arc<RwLock<EbpfBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
 }
 impl DebugInterface {
@@ -24,7 +23,7 @@ impl DebugInterface {
         gpu_state: Arc<RwLock<CardwireGpuState>>,
         gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
         config: Arc<ConfigMemory>,
-        blocker: Arc<RwLock<GpuBlocker>>,
+        blocker: Arc<RwLock<EbpfBlocker>>,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     ) -> anyhow::Result<DebugInterface> {
         Ok(DebugInterface {

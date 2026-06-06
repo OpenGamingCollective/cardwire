@@ -1,0 +1,58 @@
+//! Functions for static analysis, contains:
+//! - FDO desktop entries analysis
+use freedesktop_desktop_entry::{DesktopEntry, get_languages_from_env};
+use std::{collections::HashMap, fs, path::PathBuf};
+use xdg::BaseDirectories;
+
+/// Return a list of fdo apps present in the system
+pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, bool>> {
+    let mut app_directories: Vec<PathBuf> = Vec::new();
+    // get from ENV
+    let xdg_dir = BaseDirectories::new();
+    let system_dirs = xdg_dir.get_data_dirs();
+    for dir in system_dirs {
+        let path = dir.join("applications");
+        if path.exists() && path.is_dir() {
+            app_directories.push(path);
+        }
+    }
+    if let Ok(home_entries) = fs::read_dir("/home") {
+        for entry in home_entries.flatten() {
+            if let Ok(file_type) = entry.file_type()
+                && file_type.is_dir()
+            {
+                let mut user_app_dir = entry.path();
+                user_app_dir.push(".local/share/applications");
+
+                if user_app_dir.exists() && user_app_dir.is_dir() {
+                    app_directories.push(user_app_dir);
+                }
+
+                let mut user_flatpak_dir = entry.path();
+                user_flatpak_dir.push(".local/share/flatpak/exports/share/applications");
+                if user_flatpak_dir.exists() && user_flatpak_dir.is_dir() {
+                    app_directories.push(user_flatpak_dir);
+                }
+            }
+        }
+    }
+    let mut app_list: HashMap<String, bool> = HashMap::new();
+    let locales = get_languages_from_env();
+    for app_directory in app_directories {
+        for app in app_directory.read_dir()? {
+            let app = app?;
+            let path = app.path();
+            if let Some(ext) = path.extension()
+                && ext == "desktop"
+            {
+                let app_fdo = DesktopEntry::from_path(path, Some(&locales)).unwrap();
+                if app_fdo.prefers_non_default_gpu()
+                    && let Some(flatpak_id) = app_fdo.flatpak()
+                {
+                    app_list.insert(flatpak_id.to_string(), true);
+                }
+            }
+        }
+    }
+    Ok(app_list)
+}

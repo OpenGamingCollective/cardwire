@@ -6,7 +6,7 @@ fn main() {
     let source_path = "src/bpf.c";
     let status = Command::new("clang")
         .args([
-            "-O3",
+            "-O2",
             "-g",
             "-target",
             "bpf",

@@ -1,13 +1,13 @@
 //! where the struct and impl are declared
 use crate::{
-    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
+    analyzer::CardwireAnalyzer, core::{
+        gpu::{self, check_default_drm_class}, pci
+    }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
     }
 };
 use anyhow::{Context, Result};
-use cardwire_core::{
-    gpu::{self, GpuBlocker, check_default_drm_class}, pci
-};
+use cardwire_ebpf::{BlockKind, EbpfBlocker};
 use log::warn;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -36,6 +36,7 @@ pub struct DaemonManager {
     pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config_interface: ConfigInterface,
     pub debug_interface: DebugInterface,
+    pub cardwire_analyzer: CardwireAnalyzer,
 }
 
 impl DaemonManager {
@@ -62,7 +63,7 @@ impl DaemonManager {
         let pci_list: Arc<RwLock<BTreeMap<String, pci::PciDevice>>> =
             Arc::new(RwLock::new(pci_devices));
 
-        let blocker = Arc::new(RwLock::new(GpuBlocker::new()?));
+        let blocker = Arc::new(RwLock::new(EbpfBlocker::new()?));
 
         let mut gpu_interfaces_map: BTreeMap<usize, GpuInterface> = BTreeMap::new();
 
@@ -86,7 +87,9 @@ impl DaemonManager {
                 Arc::clone(&gpu_state),
                 Arc::clone(&gpu_interfaces),
                 Arc::clone(&user_config),
-            )?,
+                Arc::clone(&blocker),
+            )
+            .await?,
             gpu_interfaces: Arc::clone(&gpu_interfaces),
             config_interface: ConfigInterface::build(
                 Arc::clone(&user_config),
@@ -100,6 +103,7 @@ impl DaemonManager {
                 Arc::clone(&blocker),
                 Arc::clone(&pci_list),
             )?,
+            cardwire_analyzer: CardwireAnalyzer::build(Arc::clone(&blocker)).await?,
         })
     }
 
@@ -114,38 +118,32 @@ impl DaemonManager {
         let mode = self.debug_interface.mode_state.read().await;
         let mut blocker = self.debug_interface.blocker.write().await;
         let mut state = self.debug_interface.gpu_state.write().await;
-        blocker.set_nvidia_setting(config)?;
+        blocker.block_kind(&config.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)?;
 
         for file in BLOCKED_PCI_FILES {
-            blocker.set_file_block(file)?;
+            blocker.block_kind(file, BlockKind::File)?;
         }
         let default: bool = state.is_default_state();
         // if there is an nvidia device, block nvidia file once
         for (_, gpu) in gpus_list.iter() {
             if gpu.device.nvidia() {
                 for file in BLOCKED_NVIDIA_FILES {
-                    blocker.set_nvidia_file_block(file)?;
+                    blocker.block_kind(file, BlockKind::NvidiaFile)?;
                 }
                 break;
             }
         }
         if default {
             for (_, gpu) in gpus_list.iter() {
-                let blocked = cardwire_core::gpu::is_gpu_blocked(&blocker, &gpu.device)?;
-                state.save_state(&gpu.device, blocked).await?;
+                state.save_state(&gpu.device, false).await?;
             }
         }
         // Dropping the locks prevent set_mode being stuck
         drop(blocker);
         drop(gpus_list);
         drop(state);
-        let mode_to_apply = mode.mode();
+        let mode_to_apply = Modes::parse_to_u32(mode.mode());
         drop(mode);
-        let mode_to_apply: u32 = match mode_to_apply {
-            Modes::Integrated => 0,
-            Modes::Hybrid => 1,
-            Modes::Manual => 2,
-        };
         self.mode_interface.set_mode(mode_to_apply).await?;
         Ok(())
     }

@@ -5,20 +5,30 @@ use std::{
 };
 
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::Modes
+    core::{
+        gpu::{DbusGpuDevice, GpuDevice}, pci::PciDevice
+    }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
-use cardwire_core::{
-    gpu::{DbusGpuDevice, GpuBlocker, GpuDevice, block_gpu, is_gpu_blocked}, pci::PciDevice
-};
+use cardwire_ebpf::{BlockKind, EbpfBlocker};
 use log::{info, warn};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface, object_server::SignalEmitter};
+
+pub trait FdoResultExt<T> {
+    fn into_fdo(self) -> fdo::Result<T>;
+}
+
+impl<T, E: std::fmt::Display> FdoResultExt<T> for Result<T, E> {
+    fn into_fdo(self) -> fdo::Result<T> {
+        self.map_err(|e| fdo::Error::Failed(e.to_string()))
+    }
+}
 
 // Represent a single gpu
 #[derive(Clone)]
 pub struct GpuInterface {
     pub device: GpuDevice,
-    blocker: Arc<RwLock<GpuBlocker>>,
+    blocker: Arc<RwLock<EbpfBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     mode_state: Arc<RwLock<CardwireModeState>>,
@@ -27,7 +37,7 @@ pub struct GpuInterface {
 impl GpuInterface {
     pub fn build(
         device: GpuDevice,
-        blocker: Arc<RwLock<GpuBlocker>>,
+        blocker: Arc<RwLock<EbpfBlocker>>,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
         gpu_state: Arc<RwLock<CardwireGpuState>>,
         mode_state: Arc<RwLock<CardwireModeState>>,
@@ -47,14 +57,48 @@ impl GpuInterface {
     pub async fn block_gpu(&mut self) -> fdo::Result<()> {
         let mut blocker = self.blocker.write().await;
         let pci_list = self.pci_list.read().await;
-        block_gpu(&mut blocker, &self.device, true, &pci_list)
-            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        let blocked = is_gpu_blocked(&blocker, &self.device)
-            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        if !blocked {
-            return Err(fdo::Error::Failed(
-                "gpu is supposed to be blocked, bpf says it's not".to_string(),
-            ));
+        // First block the card id
+        blocker
+            .block_kind(&self.device.card().to_string(), BlockKind::Card)
+            .into_fdo()?;
+        // block the render id
+        blocker
+            .block_kind(&self.device.render().to_string(), BlockKind::Render)
+            .into_fdo()?;
+        // block the pci
+        blocker
+            .block_kind(self.device.pci.pci_address(), BlockKind::Pci)
+            .into_fdo()?;
+        // Also block the audio card
+        if self.device.pci.pci_address().ends_with(".0") {
+            let gpu_audio_adress = self.device.pci.pci_address().replace(".0", ".1");
+            blocker
+                .block_kind(&gpu_audio_adress, BlockKind::Pci)
+                .into_fdo()?;
+        }
+        // Check if gpu has a parent pci
+        // first pci to block
+        let mut current_parent = self.device.pci.parent_pci().clone();
+
+        while let Some(parent_pci) = current_parent {
+            if let Some(pci_device) = pci_list.get(&parent_pci) {
+                blocker
+                    .block_kind(pci_device.pci_address(), BlockKind::Pci)
+                    .into_fdo()?;
+                current_parent = pci_device.parent_pci().clone();
+            } else {
+                warn!("expected parent pci {} not found in pci_list", parent_pci);
+                break;
+            }
+        }
+        // the last one, block nvidia
+        if self.device.nvidia() {
+            blocker
+                .block_kind(
+                    &self.device.nvidia_minor().unwrap().to_string(),
+                    BlockKind::Nvidia,
+                )
+                .into_fdo()?;
         }
         Ok(())
     }
@@ -62,22 +106,71 @@ impl GpuInterface {
     pub async fn unblock_gpu(&mut self) -> fdo::Result<()> {
         let mut blocker = self.blocker.write().await;
         let pci_list = self.pci_list.read().await;
+        // First unblock the card id
+        blocker
+            .unblock_kind(&self.device.card().to_string(), BlockKind::Card)
+            .into_fdo()?;
+        // unblock the render id
+        blocker
+            .unblock_kind(&self.device.render().to_string(), BlockKind::Render)
+            .into_fdo()?;
+        // unblock the pci
+        blocker
+            .unblock_kind(self.device.pci.pci_address(), BlockKind::Pci)
+            .into_fdo()?;
+        // Also unblock the audio card
+        if self.device.pci.pci_address().ends_with(".0") {
+            let gpu_audio_adress = self.device.pci.pci_address().replace(".0", ".1");
+            blocker
+                .unblock_kind(&gpu_audio_adress, BlockKind::Pci)
+                .into_fdo()?;
+        }
+        // Check if gpu has a parent pci
+        // first pci to unblock
+        let mut current_parent = self.device.pci.parent_pci().clone();
 
-        block_gpu(&mut blocker, &self.device, false, &pci_list)
-            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        let blocked = is_gpu_blocked(&blocker, &self.device)
-            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        if blocked {
-            return Err(fdo::Error::Failed(
-                "gpu is supposed to be unblocked, bpf says it's not".to_string(),
-            ));
+        while let Some(parent_pci) = current_parent {
+            if let Some(pci_device) = pci_list.get(&parent_pci) {
+                blocker
+                    .unblock_kind(pci_device.pci_address(), BlockKind::Pci)
+                    .into_fdo()?;
+                current_parent = pci_device.parent_pci().clone();
+            } else {
+                warn!("expected parent pci {} not found in pci_list", parent_pci);
+                break;
+            }
+        }
+        // the last one, unblock nvidia
+        if self.device.nvidia() {
+            blocker
+                .unblock_kind(
+                    &self.device.nvidia_minor().unwrap().to_string(),
+                    BlockKind::Nvidia,
+                )
+                .into_fdo()?;
         }
         Ok(())
     }
     /// check if the gpu is blocked
     pub async fn gpu_blocked(&self) -> fdo::Result<bool> {
         let blocker = self.blocker.read().await;
-        is_gpu_blocked(&blocker, &self.device).map_err(|e| fdo::Error::Failed(e.to_string()))
+
+        Ok(blocker
+            .is_kind_blocked(self.device.pci.pci_address(), BlockKind::Pci)
+            .into_fdo()?
+            && blocker
+                .is_kind_blocked(&self.device.card().to_string(), BlockKind::Card)
+                .into_fdo()?
+            && blocker
+                .is_kind_blocked(&self.device.render().to_string(), BlockKind::Render)
+                .into_fdo()?
+            && if let Some(minor) = self.device.nvidia_minor() {
+                blocker
+                    .is_kind_blocked(&minor.to_string(), BlockKind::Nvidia)
+                    .into_fdo()?
+            } else {
+                true
+            })
     }
     /// read fd link to find which apps opened the gpu
     async fn lsof_read(&self, s: &str) -> fdo::Result<Vec<String>> {
