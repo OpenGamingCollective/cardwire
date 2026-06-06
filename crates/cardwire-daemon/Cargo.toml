@@ -24,6 +24,7 @@ tokio-stream.workspace = true
 aya.workspace = true
 xdg.workspace = true
 freedesktop-desktop-entry.workspace = true
+udev.workspace = true
 
 [[bin]]
 name = "cardwired"

@@ -52,6 +52,8 @@
             (toolchainFor system)
             (pkgs system).clang
             (pkgs system).libbpf
+            (pkgs system).udev
+            (pkgs system).pkg-config
             (pkgs system).yamlfmt
             (pkgs system).commitizen
             (pkgs system).mdbook
