@@ -1,6 +1,4 @@
-use crate::{
-    core::pci::{DbusPciDevice, PciDevice}, file::CardwireDatabase
-};
+use crate::core::pci::{DbusPciDevice, PciDevice};
 use cardwire_ebpf::EbpfBlocker;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -18,7 +16,6 @@ pub struct DebugInterface {
     pub config: Arc<ConfigMemory>,
     pub blocker: Arc<RwLock<EbpfBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
-    pub database: Arc<RwLock<CardwireDatabase>>,
 }
 impl DebugInterface {
     pub fn build(
@@ -28,7 +25,6 @@ impl DebugInterface {
         config: Arc<ConfigMemory>,
         blocker: Arc<RwLock<EbpfBlocker>>,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
-        database: Arc<RwLock<CardwireDatabase>>,
     ) -> anyhow::Result<DebugInterface> {
         Ok(DebugInterface {
             mode_state,
@@ -37,7 +33,6 @@ impl DebugInterface {
             config,
             blocker,
             pci_list,
-            database,
         })
     }
 }

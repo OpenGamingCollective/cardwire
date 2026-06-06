@@ -22,10 +22,6 @@ pub enum Error {
     #[error("Missing hwdata pci.ids file")]
     MissingHWData,
 
-    // GPU errors
-    #[error("couldn't check block state for {0}")]
-    UnknownBlockState(String),
-
     #[error("{0}")]
     Other(String),
 }
