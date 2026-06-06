@@ -63,15 +63,10 @@ struct file {
 
 struct event_t {
 	__u32 pid;
-	__u32 parent_pid;
-	char comm[32];
 };
 
 struct close_t {
 	__u32 pid;
-	__u32 parent_pid;
-	char comm[32];
-	__u32 code;
 };
 
 struct report_t {
@@ -415,10 +410,6 @@ int trace_exec(void *ctx)
 
 	// Read PID
 	rb_data->pid = bpf_get_current_pid_tgid() >> 32;
-	// Read parent PID
-	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-	rb_data->parent_pid = BPF_CORE_READ(task, real_parent, tgid);
-	bpf_get_current_comm(rb_data->comm, sizeof(rb_data->comm));
 
 	bpf_ringbuf_submit(rb_data, 0);
 	return 0;
@@ -443,14 +434,6 @@ int trace_process_exit(void *ctx)
 		return 0;
 	}
 	rb_data->pid = bpf_get_current_pid_tgid() >> 32;
-
-	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-
-	rb_data->parent_pid = BPF_CORE_READ(task, real_parent, tgid);
-
-	bpf_get_current_comm(rb_data->comm, sizeof(rb_data->comm));
-
-	rb_data->code = BPF_CORE_READ(task, exit_code);
 
 	bpf_ringbuf_submit(rb_data, 0);
 	return 0;

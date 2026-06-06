@@ -8,24 +8,19 @@ use tokio::{
 
 use crate::profiler::{
     dynamic_analysis::{
-        check_cardwire_allow, check_flatpak_environ, check_gamemode, check_llm_maps, check_steam_environ
+        check_cardwire_allow, check_flatpak_environ, check_gamemode, check_gpu_env, check_llm_maps, check_steam_environ
     }, static_analysis
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Event {
     pub pid: u32,
-    pub parent_pid: u32,
-    pub comm: [u8; 32],
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Close {
     pub pid: u32,
-    pub parent_pid: u32,
-    pub comm: [u8; 32],
-    pub exit_code: u32,
 }
 
 pub enum EventMsg {
@@ -191,8 +186,14 @@ impl CardwireProfiler {
                 // On close event, remove from map, i made a garbage collector just in case a pid
                 // didn't get removed
                 EventMsg::Close(event) => {
+                    let real_app_name = match get_real_process_name(event.pid).await {
+                        Some(name) => name,
+                        None => "unknown".to_string(),
+                    };
                     let mut pid_map = self.pid_map.write().await;
-                    if pid_map.remove(&event.pid).is_ok() {
+                    // we keep java in the map, and let the garbage collector take care of it, this
+                    // fix minecraft not using the dgpu
+                    if !real_app_name.contains("java") && pid_map.remove(&event.pid).is_ok() {
                         debug!("REMOVE: pid: {}", event.pid);
                     }
                 }
@@ -217,6 +218,7 @@ impl CardwireProfiler {
             async { check(check_steam_environ(pid).await) },
             async { check(check_gamemode(pid).await) },
             async { check(check_flatpak_environ(pid, &xdg_list).await) },
+            async { check(check_gpu_env(pid).await) },
         );
         match result.is_err() {
             true => Some(true),
@@ -254,7 +256,7 @@ async fn get_real_process_name(pid: u32) -> Option<String> {
         }
     }
 
-    // Minecraft/Java games
+    // Minecraft/Java games, return java instead of the real name to allow Close event bypass
     if binary.ends_with(".java") {
         for arg in args.iter().skip(1) {
             if arg.ends_with(".jar") {
@@ -263,7 +265,7 @@ async fn get_real_process_name(pid: u32) -> Option<String> {
             }
         }
     }
-    // Fallback
+    // Fallback, just use the binary name
     let base_name = binary.split('/').next_back().unwrap_or(binary);
     Some(base_name.to_string())
 }
