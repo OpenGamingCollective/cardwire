@@ -16,7 +16,7 @@ license = "GPL-3.0"
 
 [workspace.dependencies]
 tokio = { version = "1.52.3", features = ["full"] }
-zbus = { version = "5.15.0", features = ["tokio", "option-as-array"] }
+zbus = { version = "5.16.0", features = ["tokio", "option-as-array"] }
 clap = { version = "4.6.1", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
 log = "0.4.32"
