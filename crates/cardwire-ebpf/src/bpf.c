@@ -236,6 +236,10 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	if (__builtin_memcmp(comm, "cardwired", 9) == 0) {
 		return 0;
 	}
+	// same for udev
+	if (__builtin_memcmp(comm, "(udev-worker)", 13) == 0) {
+		return 0;
+	}
 	bool blocked = false;
 
 	struct inode *inode = BPF_CORE_READ(d, d_inode);
