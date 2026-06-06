@@ -20,14 +20,18 @@ in
       pkgs.clang
       toolchain
       pkgs.installShellFiles
+      pkgs.makeWrapper
+      pkgs.pkg-config
     ];
     buildInputs = [
       pkgs.hwdata
       pkgs.libbpf
+      pkgs.udev
     ];
     runtimeDeps = [
       pkgs.hwdata
       pkgs.upower
+      pkgs.udev
     ];
     doCheck = false;
     doInstallCheck = true;
@@ -43,9 +47,20 @@ in
     '';
     # Copy dbus conf, systemd service and make shell completion
     postInstall = ''
-         install -Dm444 ./assets/com.github.opengamingcollective.cardwire.conf \
+      install -Dm444 ./assets/com.github.opengamingcollective.cardwire.conf \
          $out/share/dbus-1/system.d/com.github.opengamingcollective.cardwire.conf
+
       installShellCompletion --cmd cardwire \
          --fish <($out/bin/cardwire completion fish)
+
+
+
+      wrapProgram $out/bin/cardwired \
+      --prefix LD_LIBRARY_PATH : ${
+        lib.makeLibraryPath [
+          pkgs.udev
+          pkgs.upower
+        ]
+      }
     '';
   }

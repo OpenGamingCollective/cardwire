@@ -6,7 +6,9 @@ mod interface;
 mod models;
 mod tasks;
 
-use crate::{models::DaemonManager, tasks::watch_power_state};
+use crate::{
+    models::DaemonManager, tasks::{monitor_pci_changes, watch_power_state}
+};
 use anyhow::Result;
 use env_logger::Env;
 use log::info;
@@ -44,7 +46,7 @@ async fn main() -> Result<()> {
     // Now spawn background tasks
     task::spawn(battery_switch);
     task::spawn(daemon.cardwire_analyzer.run());
-
+    task::spawn(monitor_pci_changes());
     info!("Daemon started");
     pending::<()>().await;
     Ok(())
