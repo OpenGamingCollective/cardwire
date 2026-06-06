@@ -1,10 +1,10 @@
 use crate::{
     core::{
-        gpu, pci::{self, DbusPciDevice, PciDevice}
+        gpu::{self, check_default_drm_class}, pci::{self, DbusPciDevice, PciDevice}
     }, tasks::watch_power_state
 };
 use cardwire_ebpf::EbpfBlocker;
-use log::info;
+use log::{info, warn};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
@@ -105,8 +105,11 @@ impl DebugInterface {
             // Empty the current gpu_interfaces
             gpu_interfaces.clear();
             // Read the new list
-            let new_gpu_list =
+            let mut new_gpu_list =
                 gpu::read_gpu(&pci_list).map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            if let Err(err) = check_default_drm_class(&mut new_gpu_list) {
+                warn!("Failed to determine default GPU: {}", err);
+            }
             for (id, device) in new_gpu_list {
                 let gpu = GpuInterface::build(
                     device,
