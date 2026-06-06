@@ -12,7 +12,6 @@ description = "Daemon for cardwire GPU management"
 cardwire-ebpf = { path = "../cardwire-ebpf" }
 tokio.workspace = true
 zbus.workspace = true
-config.workspace = true
 serde.workspace = true
 log.workspace = true
 thiserror.workspace = true
