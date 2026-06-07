@@ -188,13 +188,6 @@ async fn main() -> anyhow::Result<()> {
                     println!("Daemon is alive");
                 }
             }
-            ManagerAction::RefreshGpu => {
-                if let Err(e) = client.refresh_gpu().await {
-                    handle_error(e);
-                } else {
-                    println!("GPU list refreshed");
-                }
-            }
         },
         Commands::Debug { action } => match action {
             DebugAction::DiagnosticGpu => {
@@ -203,6 +196,13 @@ async fn main() -> anyhow::Result<()> {
                 } else {
                     // TODO: implement debug
                     println!("DiagnosticGpu not implemented yet");
+                }
+            }
+            DebugAction::RefreshGpu => {
+                if let Err(e) = client.refresh_gpu().await {
+                    handle_error(e);
+                } else {
+                    println!("GPU list refreshed");
                 }
             }
         },

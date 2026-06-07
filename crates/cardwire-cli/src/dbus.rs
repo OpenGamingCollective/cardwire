@@ -214,17 +214,6 @@ impl<'a> DaemonClient<'a> {
         proxy.call("SaveToFile", &()).await
     }
 
-    pub async fn refresh_gpu(&self) -> zbus::Result<()> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Manager",
-        )
-        .await?;
-        proxy.call("RefreshGpu", &()).await
-    }
-
     pub async fn manager_status(&self) -> zbus::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
@@ -245,5 +234,16 @@ impl<'a> DaemonClient<'a> {
         )
         .await?;
         proxy.call("DiagnosticGpu", &()).await
+    }
+
+    pub async fn refresh_gpu(&self) -> zbus::Result<()> {
+        let proxy = zbus::Proxy::new(
+            self.proxy.connection(),
+            "com.github.opengamingcollective.cardwire",
+            "/com/github/opengamingcollective/cardwire",
+            "com.github.opengamingcollective.cardwire.Debug",
+        )
+        .await?;
+        proxy.call("RefreshGpu", &()).await
     }
 }

@@ -112,14 +112,14 @@ pub enum ConfigAction {
 pub enum ManagerAction {
     #[command(about = "Check if daemon is alive")]
     Status,
-    #[command(about = "Refresh GPU list in daemon")]
-    RefreshGpu,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum DebugAction {
     #[command(about = "Run GPU diagnostics")]
     DiagnosticGpu,
+    #[command(about = "Refresh GPU list in daemon")]
+    RefreshGpu,
 }
 
 #[derive(ClapArgs, Debug)]
