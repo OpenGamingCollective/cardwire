@@ -303,7 +303,7 @@ checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
 name = "cardwire-cli"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -316,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "cardwire-daemon"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "anyhow",
  "aya",
@@ -337,7 +337,7 @@ dependencies = [
 
 [[package]]
 name = "cardwire-ebpf"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "aya",
  "thiserror 2.0.18",
