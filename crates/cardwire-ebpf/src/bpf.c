@@ -232,15 +232,18 @@ static __always_inline int check_backlight_path(struct dentry *dentry)
 								  NULL;
 
 	if (t) {
-		__u32 id = 0;
+		if (t[7] >= '0' && t[7] <= '9') {
+			__u32 id = 0;
 
 #pragma unroll
-		for (int i = 7; i < 10 && t[i] >= '0' && t[i] <= '9'; i++) {
-			id = id * 10 + (t[i] - '0');
-		}
+			for (int i = 7; i < 10 && t[i] >= '0' && t[i] <= '9';
+			     i++) {
+				id = id * 10 + (t[i] - '0');
+			}
 
-		if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id)) {
-			return 1;
+			if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id)) {
+				return 1;
+			}
 		}
 	}
 
