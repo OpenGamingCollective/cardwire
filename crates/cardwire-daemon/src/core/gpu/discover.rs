@@ -235,10 +235,12 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
         .unzip();
 
     for (id, gpu) in &mut *gpu_list {
-        if id == default.0.unwrap() {
-            gpu.set_default(Some(true));
-        } else {
-            gpu.set_default(Some(false));
+        if let Some(default_id) = default.0 {
+            if id == default_id {
+                gpu.set_default(Some(true));
+            } else {
+                gpu.set_default(Some(false));
+            }
         }
     }
 
