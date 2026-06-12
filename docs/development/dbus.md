@@ -38,6 +38,7 @@
     - `0` Integrated: Block the dGPU. Requires exactly 2 GPUs
     - `1` Hybrid: Unblock the dGPU. Requires exactly 2 GPUs
     - `2` Manual: Allow per-GPU blocking via individual GPU objects. Applies saved GPU state on mode change if `auto_apply_gpu_state` is enabled
+    - `3` Smart
 
 ### Config
 `com.github.opengamingcollective.cardwire.Config`
@@ -56,7 +57,7 @@
 
 - **`BatteryAutoSwitchMode`**
   Controls which mode the daemon automatically switches
-  - **Type:** `s`
+  - **Type:** `u`
   - **Access:** Read/Write
 
 - **`ExperimentalNvidiaBlock`**

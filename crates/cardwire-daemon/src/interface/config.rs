@@ -67,9 +67,9 @@ impl ConfigInterface {
             .load(Ordering::Relaxed))
     }
     #[zbus(property)]
-    pub async fn battery_auto_switch_mode(&self) -> fdo::Result<String> {
+    pub async fn battery_auto_switch_mode(&self) -> fdo::Result<u32> {
         let mode_lock = self.config.battery_auto_switch_mode.read().await;
-        let mode = mode_lock.to_string();
+        let mode = Modes::parse_to_u32(*mode_lock);
         Ok(mode)
     }
 
