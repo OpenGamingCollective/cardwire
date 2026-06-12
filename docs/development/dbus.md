@@ -54,6 +54,11 @@
   - **Type:** `b`
   - **Access:** Read/Write
 
+- **`BatteryAutoSwitchMode`**
+  Controls which mode the daemon automatically switches
+  - **Type:** `s`
+  - **Access:** Read/Write
+
 - **`ExperimentalNvidiaBlock`**
   Toggles the experimental blocking for NVIDIA GPU, only works if the system has exactly 1 Nvidia GPU
   - **Type:** `b`
