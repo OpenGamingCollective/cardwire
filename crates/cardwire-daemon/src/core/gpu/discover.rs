@@ -142,6 +142,10 @@ fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
 }
 /// Method from kwin
 pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io::Result<()> {
+    // skip if empty
+    if gpu_list.is_empty() {
+        return Ok(());
+    }
     let class_path = Path::new("/sys/class/drm");
     let mut drm_entries = Vec::new();
     if class_path.exists() {
