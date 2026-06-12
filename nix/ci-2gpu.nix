@@ -63,12 +63,12 @@
       machine.succeed("test -e /dev/dri/renderD129")
       t.assertIn("Mode has been set to Integrated", machine.succeed("cardwire set integrated"), "Couldn't set to integrated mode")
       machine.fail(": < /dev/dri/renderD129")
-      t.assertIn("Integrated", machine.succeed("cat /var/lib/cardwire/mode.json"), "mode.json didnt get saved")
+      t.assertIn("integrated", machine.succeed("cat /var/lib/cardwire/mode.json"), "mode.json didnt get saved")
 
     with subtest("Switchback to hybrid mode"):
       t.assertIn("Mode has been set to Hybrid", machine.succeed("cardwire set hybrid"), "Couldn't set to hybrid mode")
       machine.succeed(": < /dev/dri/renderD129")
-      t.assertIn("Hybrid", machine.succeed("cat /var/lib/cardwire/mode.json"), "mode.json didnt get saved")
+      t.assertIn("hybrid", machine.succeed("cat /var/lib/cardwire/mode.json"), "mode.json didnt get saved")
 
     with subtest("Try to block default gpu"):
       t.assertIn("Per GPU block is only available on manual mode", machine.succeed("cardwire gpu 0 --block 2>&1"), "Default gpu got blocked")

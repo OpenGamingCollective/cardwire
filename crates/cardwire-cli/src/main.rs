@@ -172,6 +172,38 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
+            ConfigAction::BatteryAutoSwitchMode { set } => {
+                if let Some(val) = set {
+                    {
+                        let mode_u32 = match val {
+                            CliMode::Integrated => 0,
+                            CliMode::Hybrid => 1,
+                            CliMode::Manual => 2,
+                            CliMode::Smart => 3,
+                        };
+
+                        match client.set_battery_auto_switch_mode(&mode_u32).await {
+                            Ok(_) => println!("Auto switch mode has been set to {}", val),
+                            Err(e) => handle_error(e.into()),
+                        };
+                    }
+                } else {
+                    match client.get_battery_auto_switch_mode().await {
+                        Ok(response) => {
+                            let response: CliMode = match response {
+                                0 => CliMode::Integrated,
+                                1 => CliMode::Hybrid,
+                                2 => CliMode::Manual,
+                                3 => CliMode::Smart,
+                                // shouldn't happen
+                                _ => CliMode::Manual,
+                            };
+                            println!("BatteryAutoSwitch: {}", response)
+                        }
+                        Err(e) => handle_error(e),
+                    }
+                }
+            }
             ConfigAction::Save => {
                 if let Err(e) = client.save_to_file().await {
                     handle_error(e);
