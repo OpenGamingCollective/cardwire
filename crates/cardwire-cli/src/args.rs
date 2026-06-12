@@ -104,6 +104,11 @@ pub enum ConfigAction {
         #[arg(help = "Value to set")]
         set: Option<bool>,
     },
+    #[command(about = "Get or set BatteryAutoSwitchMode")]
+    BatteryAutoSwitchMode {
+        #[arg(help = "Value to set")]
+        set: Option<CliMode>,
+    },
     #[command(about = "Save current configuration to file")]
     Save,
 }

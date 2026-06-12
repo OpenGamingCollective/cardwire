@@ -202,7 +202,27 @@ impl<'a> DaemonClient<'a> {
         .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
         proxy.set_property("BatteryAutoSwitch", state).await
     }
-
+    pub async fn get_battery_auto_switch_mode(&self) -> zbus::Result<u32> {
+        let proxy = zbus::Proxy::new(
+            self.proxy.connection(),
+            "com.github.opengamingcollective.cardwire",
+            "/com/github/opengamingcollective/cardwire",
+            "com.github.opengamingcollective.cardwire.Config",
+        )
+        .await?;
+        proxy.get_property("BatteryAutoSwitchMode").await
+    }
+    pub async fn set_battery_auto_switch_mode(&self, mode: &u32) -> zbus::fdo::Result<()> {
+        let proxy = zbus::Proxy::new(
+            self.proxy.connection(),
+            "com.github.opengamingcollective.cardwire",
+            "/com/github/opengamingcollective/cardwire",
+            "com.github.opengamingcollective.cardwire.Config",
+        )
+        .await
+        .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        proxy.set_property("BatteryAutoSwitchMode", mode).await
+    }
     pub async fn save_to_file(&self) -> zbus::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
