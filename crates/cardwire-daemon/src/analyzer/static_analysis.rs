@@ -44,7 +44,7 @@ pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, bool>> {
                     app_directories.push(user_flatpak_dir);
                 }
                 let nix_path_hm = format!(
-                    "/etc/profiles/per-user/{}/share.applications",
+                    "/etc/profiles/per-user/{}/share/applications/",
                     user.to_string_lossy()
                 );
                 let nix_path_hm = Path::new(&nix_path_hm);
