@@ -1,7 +1,9 @@
 //! Functions for static analysis, contains:
 //! - FDO desktop entries analysis
 use freedesktop_desktop_entry::{DesktopEntry, get_languages_from_env};
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{
+    collections::HashMap, fs, path::{Path, PathBuf}
+};
 use xdg::BaseDirectories;
 
 /// Return a list of fdo apps present in the system
@@ -24,6 +26,8 @@ pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, bool>> {
             if let Ok(file_type) = entry.file_type()
                 && file_type.is_dir()
             {
+                // get username
+                let user = entry.file_name();
                 // store the home path of the user, eg: /home/john/
                 let mut user_app_dir = entry.path();
                 // .desktop often reside in this directory
@@ -38,6 +42,14 @@ pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, bool>> {
                 user_flatpak_dir.push(".local/share/flatpak/exports/share/applications");
                 if user_flatpak_dir.exists() && user_flatpak_dir.is_dir() {
                     app_directories.push(user_flatpak_dir);
+                }
+                let nix_path_hm = format!(
+                    "/etc/profiles/per-user/{}/share.applications",
+                    user.to_string_lossy()
+                );
+                let nix_path_hm = Path::new(&nix_path_hm);
+                if nix_path_hm.exists() {
+                    app_directories.push(nix_path_hm.to_path_buf());
                 }
             }
         }
