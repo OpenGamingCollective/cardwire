@@ -27,9 +27,10 @@ async fn main() -> Result<()> {
     daemon.pre_daemon_tasks().await?;
 
     // Prepare the future before moving debug
-    let battery_switch = tasks::watch_battery_status(Arc::clone(
-        &daemon.debug_interface.config.battery_auto_switch,
-    ));
+    let battery_switch = tasks::watch_battery_status(
+        Arc::clone(&daemon.debug_interface.config.battery_auto_switch),
+        Arc::clone(&daemon.debug_interface.config.battery_auto_switch_mode),
+    );
     let conn_builder = connection::Builder::system()?;
     let conn = conn_builder
         .name("com.github.opengamingcollective.cardwire")?

@@ -31,6 +31,10 @@ in
           type = types.bool;
           default = false;
         };
+        battery_auto_switch_mode = mkOption {
+          type = types.str;
+          default = "hybrid";
+        };
       };
     };
   };

@@ -1,6 +1,8 @@
 //! helper to manage cardwired configs, include the user config .toml, and the .json states like
 //! gpu, mode or pci
-use crate::file::common::{FileKind, create_default_file};
+use crate::{
+    file::common::{FileKind, create_default_file}, interface::Modes
+};
 use anyhow::Context;
 
 use serde::{Deserialize, Serialize};
@@ -14,6 +16,7 @@ pub struct CardwireConfig {
     auto_apply_gpu_state: bool,
     experimental_nvidia_block: bool,
     battery_auto_switch: bool,
+    battery_auto_switch_mode: Modes,
 }
 impl Default for CardwireConfig {
     fn default() -> Self {
@@ -21,19 +24,23 @@ impl Default for CardwireConfig {
             auto_apply_gpu_state: true,
             experimental_nvidia_block: false,
             battery_auto_switch: false,
+            battery_auto_switch_mode: Modes::Hybrid,
         }
     }
 }
 impl CardwireConfig {
+    /// used to create a new config from given values
     pub fn new(
         auto_apply_gpu_state: bool,
         experimental_nvidia_block: bool,
         battery_auto_switch: bool,
+        battery_auto_switch_mode: Modes,
     ) -> CardwireConfig {
         CardwireConfig {
             auto_apply_gpu_state,
             experimental_nvidia_block,
             battery_auto_switch,
+            battery_auto_switch_mode,
         }
     }
     /// Read TOML config file and return it's settings as a struct
@@ -43,9 +50,11 @@ impl CardwireConfig {
     }
     /// Parse the .toml file into a CardwireConfig
     fn parse_config(config_file: &str) -> anyhow::Result<CardwireConfig> {
+        // create the config if it doesnt exist
         if !(fs::exists(config_file)?) {
             Self::create_default_config().context("Could not create default dir for config")?;
         }
+        // read the config into a string and parse it
         let config_content =
             fs::read_to_string(config_file).context("Could not read cardwire.toml")?;
         toml::from_str(&config_content).context("Failed to parse the toml config")

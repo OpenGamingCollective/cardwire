@@ -2,7 +2,7 @@ use std::sync::{
     Arc, atomic::{AtomicBool, Ordering}
 };
 
-use crate::file::CardwireConfig;
+use crate::{file::CardwireConfig, interface::Modes};
 use cardwire_ebpf::EbpfBlocker;
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
@@ -12,6 +12,7 @@ pub struct ConfigMemory {
     pub auto_apply_gpu_state: Arc<AtomicBool>,
     pub experimental_nvidia_block: Arc<AtomicBool>,
     pub battery_auto_switch: Arc<AtomicBool>,
+    pub battery_auto_switch_mode: Arc<RwLock<Modes>>,
 }
 impl ConfigMemory {
     /// build a ConfigMemory from CardwireConfig
@@ -25,6 +26,7 @@ impl ConfigMemory {
             auto_apply_gpu_state,
             experimental_nvidia_block,
             battery_auto_switch,
+            battery_auto_switch_mode: Arc::new(RwLock::new(Modes::Smart)),
         }
     }
 }
@@ -45,6 +47,7 @@ impl ConfigInterface {
 
 #[interface(name = "com.github.opengamingcollective.cardwire.Config")]
 impl ConfigInterface {
+    // getters
     #[zbus(property)]
     pub async fn auto_apply_gpu_state(&self) -> fdo::Result<bool> {
         Ok(self.config.auto_apply_gpu_state.load(Ordering::Relaxed))
@@ -64,11 +67,20 @@ impl ConfigInterface {
             .load(Ordering::Relaxed))
     }
     #[zbus(property)]
+    pub async fn battery_auto_switch_mode(&self) -> fdo::Result<String> {
+        let mode_lock = self.config.battery_auto_switch_mode.read().await;
+        let mode = mode_lock.to_string();
+        Ok(mode)
+    }
+
+    // setters
+    #[zbus(property)]
     pub async fn set_experimental_nvidia_block(&mut self, state: bool) -> fdo::Result<()> {
         self.config
             .experimental_nvidia_block
             .store(state, Ordering::Relaxed);
         let mut blocker = self.blocker.write().await;
+        // change the value in the ebpf map
         if state {
             blocker
                 .block_kind(&state.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)
@@ -90,14 +102,23 @@ impl ConfigInterface {
             .store(state, Ordering::Relaxed);
         Ok(())
     }
+    #[zbus(property)]
+    pub async fn set_battery_auto_switch_mode(&self, mode: u32) -> fdo::Result<()> {
+        let mut mode_lock = self.config.battery_auto_switch_mode.write().await;
+        let new_mode = Modes::parse(&mode)?;
+        *mode_lock = new_mode;
+        Ok(())
+    }
     /// Save the daemon's configuration to cardwire.toml
     pub async fn save_to_file(&self) -> fdo::Result<()> {
+        let mode = self.config.battery_auto_switch_mode.read().await;
         let config = CardwireConfig::new(
             self.config.auto_apply_gpu_state.load(Ordering::Relaxed),
             self.config
                 .experimental_nvidia_block
                 .load(Ordering::Relaxed),
             self.config.battery_auto_switch.load(Ordering::Relaxed),
+            *mode,
         );
         config.save_config().await?;
         Ok(())
