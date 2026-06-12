@@ -209,17 +209,10 @@ impl GpuInterface {
                         let file = file.to_string();
                         if file.contains(s) {
                             // Found the file, now get process name
-                            let status_read = fs::read_to_string(path.join("status"));
+                            let comm_read = fs::read_to_string(path.join("comm"));
                             let mut process_name: String = String::new();
-                            if let Ok(status) = status_read {
-                                process_name =
-                                    status.lines().filter(|l| l.contains("Name:")).collect();
-                                process_name = process_name
-                                    .split(":")
-                                    .last()
-                                    .unwrap_or("")
-                                    .trim()
-                                    .to_string();
+                            if let Ok(comm) = comm_read {
+                                process_name = comm.trim_ascii_end().to_string()
                             }
                             proc_found.push(process_name);
                         }
