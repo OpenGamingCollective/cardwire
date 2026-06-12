@@ -93,12 +93,11 @@ impl GpuInterface {
         }
         // the last one, block nvidia
         if self.device.nvidia() {
-            blocker
-                .block_kind(
-                    &self.device.nvidia_minor().unwrap().to_string(),
-                    BlockKind::Nvidia,
-                )
-                .into_fdo()?;
+            if let Some(minor) = self.device.nvidia_minor() {
+                blocker
+                    .block_kind(&minor.to_string(), BlockKind::Nvidia)
+                    .into_fdo()?;
+            }
         }
         Ok(())
     }
@@ -142,12 +141,11 @@ impl GpuInterface {
         }
         // the last one, unblock nvidia
         if self.device.nvidia() {
-            blocker
-                .unblock_kind(
-                    &self.device.nvidia_minor().unwrap().to_string(),
-                    BlockKind::Nvidia,
-                )
-                .into_fdo()?;
+            if let Some(minor) = self.device.nvidia_minor() {
+                blocker
+                    .unblock_kind(&minor.to_string(), BlockKind::Nvidia)
+                    .into_fdo()?;
+            }
         }
         Ok(())
     }
