@@ -308,8 +308,8 @@ impl GpuInterface {
             card: *gpu.card(),
             default: gpu.default().unwrap_or(false),
             nvidia: gpu.nvidia(),
-            nvidia_minor: if gpu.nvidia_minor().is_some() {
-                gpu.nvidia_minor().unwrap().to_string()
+            nvidia_minor: if let Some(minor) = gpu.nvidia_minor() {
+                minor.to_string()
             } else {
                 "".to_string()
             },
