@@ -2,12 +2,10 @@
 
 [Introduction](introduction.md)
 
-# Installation
+# Getting-Started
 - [Requirements](getting-started/requirements.md)
 - [Installation](getting-started/installation.md)
-
-# Usage
-- [Usage](usage.md)
+- [Usage](getting-started/usage.md)
 
 # Diagnostics
 
