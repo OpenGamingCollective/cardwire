@@ -16,12 +16,6 @@ sudo systemctl enable cardwired.service
 sudo systemctl start cardwired.service
 ```
 
-> [!NOTE]
-> cardwire-git is also available, this one is built from the dev branch, rather than a fixed release tag
-
-> [!IMPORTANT]  
-> i'm also looking for an official maintainer for both AUR, since i do not use Arch.
-
 ## Nix
 
 Using the repo's flake:
@@ -41,12 +35,13 @@ configuration.nix:
 imports = [ inputs.cardwire.nixosModules.default ];
 
 services.cardwire = {
-enable = true;
-settings = {
-    auto_apply_gpu_state = true;
-    experimental_nvidia_block = true;
-    battery_auto_switch = true;
-};
+ enable = true;
+ settings = {
+     auto_apply_gpu_state = true;
+     experimental_nvidia_block = true;
+     battery_auto_switch = true;
+     battery_auto_switch_mode = "hybrid";
+ };
 };
 ```
 
@@ -89,3 +84,8 @@ sudo make install
 
 > [!WARNING]
 > Cardwire only supports systemd-based distros. If you want to use it on a non-systemd distro, either open a PR with patches for non-systemd or get it working on your setup.
+
+## Display server support
+
+> [!CAUTION]
+> X11 is not tested and not supported. Cardwire requires Wayland to function properly.

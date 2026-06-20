@@ -25,14 +25,13 @@ The `cardwire` CLI lets you manage GPU states and system modes
 - **Integrated**: Blocks the discrete GPU
 - **Hybrid**: Unblocks the discrete GPU
 - **Manual**: Default mode for safety, allows individual GPU blocking/unblocking
+- **Smart**: Like integrated mode but uses eBPF to analyze applications at launch and selectively allow GPU access
 
-_Note: Integrated/Hybrid modes only work on host with two GPUs_
-
-_Note 2: Manual mode is not implemented_
+_Note: Integrated/Hybrid/Smart modes only work on systems with exactly two GPUs_
 
 ```bash
 # Set system mode
-cardwire set integrated / hybrid / manual
+cardwire set integrated / hybrid / manual / smart
 
 # Get current mode status
 cardwire get
@@ -54,9 +53,12 @@ The daemon reads its configuration from `/etc/cardwire/cardwire.toml`.
 auto_apply_gpu_state = true
 experimental_nvidia_block = false
 battery_auto_switch = false
+battery_auto_switch_mode = "hybrid"
 ```
 
-`experimental_nvidia_block` is an experimental feature that blocks specifics NVIDIA's files, must be used with caution
+`experimental_nvidia_block` is an experimental feature that blocks specific NVIDIA files, must be used with caution.
+
+`battery_auto_switch_mode` controls which mode cardwire switches to on AC power when `battery_auto_switch` is enabled. Can be set to `integrated`, `hybrid`, `manual`, or `smart`.
 
 ## Community projects:
 _for issues related to these projects, please report to their respective repo_
@@ -77,7 +79,9 @@ When a GPU is "blocked," the eBPF program returns `-ENOENT` for any syscall targ
 
 - **Instant App Startup:** Prevents applications (like Electron apps or GTK apps) from attempting to initialize the GPU, this eliminates the 3–4 second "hang" typically caused by waiting for a sleeping GPU to power up
 - **Power Efficiency:** By blocking access at the syscall level, the GPU is never woken from its lowest power state (D3cold), extending battery life on laptops
-- **Non-Invasive:** Unlike traditional methods that might require driver unloading, risky unbind or complex X11/Wayland setups, this approach is transparent to the rest of the system and easy to toggle
+- **Non-Invasive:** Unlike traditional methods that might require driver unloading, risky unbind or complex Wayland setups, this approach is transparent to the rest of the system and easy to toggle
+
+_Note: X11 is not supported. Cardwire requires Wayland._
 - _Also works with games_
 
 ## Notes
@@ -87,7 +91,6 @@ When a GPU is "blocked," the eBPF program returns `-ENOENT` for any syscall targ
 ## Credits
 
 - Asus-linux Discord for helping me find the ebpf method
-- Caelestia shell for the flake.nix, i used it as a reference
 
 ## License
 

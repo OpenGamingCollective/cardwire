@@ -57,4 +57,26 @@ To unblock:
 
 ``` 
 cardwire gpu 1 --unblock
+``` 
+
+## Battery Auto Switch Mode
+
+Cardwire can automatically switch GPU modes when the system switches between battery and AC power. When `battery_auto_switch` is enabled, cardwire switches to integrated mode on battery and back to a configurable mode when on AC power.
+
+The mode cardwire switches to on AC power is controlled by `battery_auto_switch_mode`. This can be set to `integrated`, `hybrid`, `manual`, or `smart`.
+
+To get the current battery auto switch mode:
+
 ```
+cardwire config battery-auto-switch-mode
+```
+
+To set the battery auto switch mode:
+
+```
+cardwire config battery-auto-switch-mode --set hybrid
+```
+
+### Smart Mode
+
+Smart mode blocks the dedicated GPU by default like integrated mode, but uses eBPF to analyze each application at launch and selectively allow GPU access for approved apps. It checks `CARDWIRE_ALLOW` env var (highest priority), Steam games (`SteamAppId=`), gamemode (`libgamemodeauto.so`), Flatpak apps with XDG `PrefersNonDefaultGpu=true`, and explicit GPU env vars (`DRI_PRIME=1`, `__NV_PRIME_RENDER_OFFLOAD=1`).

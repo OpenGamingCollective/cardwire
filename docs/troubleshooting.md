@@ -1,6 +1,6 @@
 # Troubleshooting
 
-## Name is not activable
+## Name is not activable/cli not working
 
 Is the daemon running?
 
