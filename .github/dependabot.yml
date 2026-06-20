@@ -4,14 +4,31 @@
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 version: 2
 updates:
-  - package-ecosystem: "cargo" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: "cargo"
+    directory: "/"
     schedule:
       interval: "weekly"
     target-branch: "main"
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*" 
     # Nix
   - package-ecosystem: "nix"
     directory: "/"
     schedule:
       interval: "weekly"
     target-branch: "main"
+    groups:
+      nix-dependencies:
+        patterns:
+          - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    target-branch: "main"
+    groups:
+      actions-dependencies:
+        patterns:
+          - "*"
