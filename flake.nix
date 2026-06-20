@@ -33,6 +33,7 @@
     {
       packages = forAllSystems (system: {
         default = (pkgs system).callPackage ./nix { toolchain = toolchainFor system; };
+        vm-test = self.checks.${system}.vm-ci-2gpu;
       });
       formatter = forAllSystems (
         system:
