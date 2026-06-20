@@ -54,8 +54,6 @@
             (pkgs system).libbpf
             (pkgs system).udev
             (pkgs system).pkg-config
-            (pkgs system).yamlfmt
-            (pkgs system).commitizen
             (pkgs system).mdbook
           ]
           ++ self.checks.${system}.pre-commit-check.enabledPackages;
@@ -93,8 +91,6 @@
               package = toolchainFor system;
             };
             clang-format.enable = true;
-            yamlfmt.enable = true;
-            commitizen.enable = true;
           };
         };
       });
