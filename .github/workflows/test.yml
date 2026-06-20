@@ -1,0 +1,42 @@
+name: Test
+
+on:
+  pull_request:
+
+permissions: {}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      run_tests: ${{ steps.filter.output.src }}
+    steps:
+      - name: Determine changed files
+        id: files
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const files = (await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            })).map(file => file.filename)
+
+            const needsTest = files.some(file => 
+              file.endsWith('.rs') || 
+              file.endsWith('.c') || 
+              file.includes('Cargo.toml') || 
+              file.includes('Cargo.lock')
+            );
+
+            if (needsTest) {
+              core.setOutput('run_tests', 'true');
+            }
+  vm-test:
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    if: needs.prepare.outputs.run_tests
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - run: nix build .#vm-test
