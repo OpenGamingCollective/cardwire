@@ -11,16 +11,15 @@ uname -r
 ```
 
 Built with `CONFIG_BPF_LSM` enabled
+
+On e.g. Ubuntu/Fedora:
+```bash
+grep CONFIG_BPF_LSM /boot/config-$(uname -r)
+```
+
+On other distros possibly:
 ```bash
 zcat /proc/config.gz | grep CONFIG_BPF_LSM
 ```
+
 > returns `CONFIG_BPF_LSM=y` if it's enabled
-
-Enabled in the boot cmdline
-```bash
-cat /proc/cmdline
-```
-> Must contains `lsm=bpf` (If empty/doesnt contain bpf, please read Caution)
-
-> [!CAUTION]
-> Most distros already enable bpf, only change the cmdline if cardwired doesnt launch
