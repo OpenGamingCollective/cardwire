@@ -86,4 +86,7 @@ impl CardwireConfig {
     pub fn battery_auto_switch(&self) -> bool {
         self.battery_auto_switch
     }
+    pub fn battery_auto_switch_mode(&self) -> Modes {
+        self.battery_auto_switch_mode
+    }
 }
