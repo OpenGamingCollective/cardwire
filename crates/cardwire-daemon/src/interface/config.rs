@@ -21,12 +21,14 @@ impl ConfigMemory {
         let experimental_nvidia_block =
             Arc::new(AtomicBool::new(user_config.experimental_nvidia_block()));
         let battery_auto_switch = Arc::new(AtomicBool::new(user_config.battery_auto_switch()));
+        let battery_auto_switch_mode =
+            Arc::new(RwLock::new(user_config.battery_auto_switch_mode()));
 
         ConfigMemory {
             auto_apply_gpu_state,
             experimental_nvidia_block,
             battery_auto_switch,
-            battery_auto_switch_mode: Arc::new(RwLock::new(Modes::Smart)),
+            battery_auto_switch_mode,
         }
     }
 }
