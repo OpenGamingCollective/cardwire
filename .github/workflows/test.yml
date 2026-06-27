@@ -28,6 +28,7 @@ jobs:
               file.endsWith('.rs') || 
               file.endsWith('.c') || 
               file.includes('.nix') ||
+              file.includes('flake.lock') ||
               file.includes('Cargo.toml') || 
               file.includes('Cargo.lock')
             );
