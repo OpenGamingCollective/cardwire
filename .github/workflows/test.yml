@@ -27,6 +27,7 @@ jobs:
             const needsTest = files.some(file => 
               file.endsWith('.rs') || 
               file.endsWith('.c') || 
+              file.includes('.nix') ||
               file.includes('Cargo.toml') || 
               file.includes('Cargo.lock')
             );
