@@ -7,13 +7,14 @@ use std::{
 };
 
 pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, CardwireError> {
+    // if possible use iommu since it allow child/parent pci discovery
     match is_iommu_enabled() {
         true => {
             info!("IOMMU detected, reading pci devices using iommu dir");
             read_pci_devices_using_iommu()
         }
         false => {
-            info!("IOMMU not detected, reading pci devices using sysfs dir");
+            warn!("IOMMU not detected, reading pci devices using sysfs dir");
             read_pci_devices_using_sysfs()
         }
     }
@@ -21,6 +22,7 @@ pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, CardwireError> 
 
 fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, CardwireError> {
     let iommu_groups = read_iommu_groups()?;
+    // load the hwdata in ram for faster use, if not available do not exit since it's not critical
     let pci_names = load_pci_name_db(Path::new("/usr/share/hwdata/pci.ids")).unwrap_or_else(|e| {
         warn!("Failed to load PCI name DB: {}", e);
         PciNameDb::default()
@@ -63,6 +65,8 @@ fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, Cardwir
     }
     Ok(devices_map)
 }
+
+// Only used when iommu is not enabled
 fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, CardwireError> {
     let sysfs = Path::new("/sys/bus/pci/devices");
     let pci_names = load_pci_name_db(Path::new("/usr/share/hwdata/pci.ids")).unwrap_or_else(|e| {
@@ -105,8 +109,8 @@ fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, Cardwir
             device_name,
             get_driver(name),
             get_class(name),
-            Some("truc".to_string()),
-            Some("truc".to_string()),
+            None,
+            None,
         );
         devices_map.insert(name.to_string(), device);
     }

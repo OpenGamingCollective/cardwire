@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     core::{
-        gpu::{DbusGpuDevice, GpuDevice}, pci::PciDevice
+        gpu::{DbusGpuDevice, GpuDevice, GpuVendor}, pci::PciDevice
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
 use cardwire_ebpf::{BlockKind, EbpfBlocker};
@@ -92,7 +92,7 @@ impl GpuInterface {
             }
         }
         // the last one, block nvidia
-        if self.device.nvidia()
+        if self.device.gpu_vendor() == GpuVendor::Nvidia
             && let Some(minor) = self.device.nvidia_minor()
         {
             blocker
@@ -140,7 +140,7 @@ impl GpuInterface {
             }
         }
         // the last one, unblock nvidia
-        if self.device.nvidia()
+        if self.device.gpu_vendor() == GpuVendor::Nvidia
             && let Some(minor) = self.device.nvidia_minor()
         {
             blocker
@@ -300,7 +300,7 @@ impl GpuInterface {
             name: gpu.name().to_string(),
             card: *gpu.card(),
             default: gpu.default().unwrap_or(false),
-            nvidia: gpu.nvidia(),
+            nvidia: gpu.gpu_vendor() == GpuVendor::Nvidia,
             nvidia_minor: if let Some(minor) = gpu.nvidia_minor() {
                 minor.to_string()
             } else {
