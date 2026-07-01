@@ -1,4 +1,42 @@
+use std::{fmt::Display, str::FromStr};
+
 use crate::core::pci::PciDevice;
+
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub enum PowerState {
+    D0,
+    D1,
+    D2,
+    D3Hot,
+    D3Cold,
+    #[default]
+    Unknown,
+}
+impl FromStr for PowerState {
+    type Err = std::io::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "D0" => Ok(PowerState::D0),
+            "D1" => Ok(PowerState::D1),
+            "D2" => Ok(PowerState::D2),
+            "D3Hot" => Ok(PowerState::D3Hot),
+            "D3Cold" => Ok(PowerState::D3Cold),
+            _ => Ok(PowerState::Unknown),
+        }
+    }
+}
+impl Display for PowerState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PowerState::D0 => write!(f, "D0"),
+            PowerState::D1 => write!(f, "D1"),
+            PowerState::D2 => write!(f, "D2"),
+            PowerState::D3Hot => write!(f, "D3Hot"),
+            PowerState::D3Cold => write!(f, "D3Cold"),
+            _ => write!(f, "unknown"),
+        }
+    }
+}
 
 #[derive(
     Clone,
