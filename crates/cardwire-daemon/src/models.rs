@@ -148,7 +148,7 @@ impl DaemonManager {
         drop(blocker);
         drop(gpus_list);
         drop(state);
-        let mode_to_apply = Modes::parse_to_u32(mode.mode());
+        let mode_to_apply = Modes::into(mode.mode());
         drop(mode);
         self.mode_interface.set_mode(mode_to_apply).await?;
         Ok(())

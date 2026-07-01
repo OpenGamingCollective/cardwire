@@ -71,7 +71,7 @@ impl ConfigInterface {
     #[zbus(property)]
     pub async fn battery_auto_switch_mode(&self) -> fdo::Result<u32> {
         let mode_lock = self.config.battery_auto_switch_mode.read().await;
-        let mode = Modes::parse_to_u32(*mode_lock);
+        let mode = Modes::into(*mode_lock);
         Ok(mode)
     }
 
@@ -107,7 +107,8 @@ impl ConfigInterface {
     #[zbus(property)]
     pub async fn set_battery_auto_switch_mode(&self, mode: u32) -> fdo::Result<()> {
         let mut mode_lock = self.config.battery_auto_switch_mode.write().await;
-        let new_mode = Modes::parse(&mode)?;
+        let new_mode = Modes::try_from(mode)
+            .map_err(|_| fdo::Error::InvalidArgs("unknown mode".to_string()))?;
         *mode_lock = new_mode;
         Ok(())
     }

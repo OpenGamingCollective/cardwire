@@ -17,6 +17,20 @@ pub enum GpuVendor {
     #[default]
     Other,
 }
+impl<T: AsRef<str>> From<T> for GpuVendor {
+    fn from(string: T) -> Self {
+        let vendor_id = string.as_ref();
+        // Match vendor id into the GpuVendor enum,
+        // nvidia ids found at <https://envytools.readthedocs.io/en/latest/hw/pciid.html>
+        match vendor_id {
+            "0x1002" => GpuVendor::Amd,
+            "0x10de" | "0x104a" | "0x12d2" => GpuVendor::Nvidia,
+            "0x8086" => GpuVendor::Intel,
+            // Unknown id
+            _ => GpuVendor::Other,
+        }
+    }
+}
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
 pub struct GpuDevice {

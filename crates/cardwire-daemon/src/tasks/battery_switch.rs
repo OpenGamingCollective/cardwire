@@ -52,7 +52,7 @@ pub async fn watch_battery_status(
             info!("battery event detected: {:?}", state);
             // now get the configured mode and change
             let mode = switch_mode.read().await;
-            let mode_u32 = Modes::parse_to_u32(*mode);
+            let mode_u32 = Modes::into(*mode);
             // ignore dbus api error, it might happen on system with multiple gpus trying to switch
             // to hybrid, the daemon will just refuse
             let _ = match state {
