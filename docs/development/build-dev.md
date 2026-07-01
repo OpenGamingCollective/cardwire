@@ -23,7 +23,14 @@ nix run .#nixosConfigurations.x86_64-linux.config.system.build.vm
 
 ### Manual Compilation
 
-If you don't use Nix, ensure you have `clang`, `libbpf (devel)`, hwdata and `cargo` installed (needed for eBPF compilation during the Rust build)
+If you don't use Nix, ensure you have `clang`, `libbpf (devel)`, hwdata and `cargo` installed (needed for eBPF compilation during the Rust build).
+
+Formatting requires nightly `rustfmt` (the project uses nightly-only formatting options). Install it and run with:
+
+```bash
+rustup toolchain install nightly --component rustfmt
+cargo +nightly fmt
+```
 
 ```bash
 # Build the project
