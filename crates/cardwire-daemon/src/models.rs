@@ -1,7 +1,7 @@
 //! where the struct and impl are declared
 use crate::{
     analyzer::CardwireAnalyzer, core::{
-        gpu::{self, check_default_drm_class}, pci
+        gpu::{self, GpuVendor, check_default_drm_class}, pci
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
     }
@@ -132,7 +132,7 @@ impl DaemonManager {
         let default: bool = state.is_default_state();
         // if there is an nvidia device, block nvidia file once
         for (_, gpu) in gpus_list.iter() {
-            if gpu.device.nvidia() {
+            if gpu.device.gpu_vendor() == GpuVendor::Nvidia {
                 for file in BLOCKED_NVIDIA_FILES {
                     blocker.block_kind(file, BlockKind::NvidiaFile)?;
                 }

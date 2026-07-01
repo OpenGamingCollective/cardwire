@@ -1,5 +1,23 @@
 use crate::core::pci::PciDevice;
 
+#[derive(
+    Clone,
+    serde::Serialize,
+    serde::Deserialize,
+    zbus::zvariant::Type,
+    PartialEq,
+    Copy,
+    Debug,
+    Default,
+)]
+pub enum GpuVendor {
+    Amd,
+    Nvidia,
+    Intel,
+    #[default]
+    Other,
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
 pub struct GpuDevice {
     name: String,
@@ -7,7 +25,7 @@ pub struct GpuDevice {
     render: u32,
     card: u32,
     default: Option<bool>,
-    nvidia: bool,
+    gpu_vendor: GpuVendor,
     nvidia_minor: Option<u32>,
 }
 impl GpuDevice {
@@ -34,8 +52,8 @@ impl GpuDevice {
     pub fn card(&self) -> &u32 {
         &self.card
     }
-    pub fn nvidia(&self) -> bool {
-        self.nvidia
+    pub fn gpu_vendor(&self) -> GpuVendor {
+        self.gpu_vendor
     }
     pub fn nvidia_minor(&self) -> &Option<u32> {
         &self.nvidia_minor
@@ -47,7 +65,7 @@ impl GpuDevice {
         render: u32,
         card: u32,
         default: Option<bool>,
-        nvidia: bool,
+        gpu_vendor: GpuVendor,
         nvidia_minor: Option<u32>,
     ) -> GpuDevice {
         GpuDevice {
@@ -56,7 +74,7 @@ impl GpuDevice {
             render,
             card,
             default,
-            nvidia,
+            gpu_vendor,
             nvidia_minor,
         }
     }

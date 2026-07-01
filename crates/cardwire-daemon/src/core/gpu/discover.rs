@@ -1,5 +1,7 @@
 //! Read a pci list and return a list of gpu
-use crate::core::{gpu::models::GpuDevice, pci::PciDevice};
+use crate::core::{
+    gpu::models::{GpuDevice, GpuVendor}, pci::PciDevice
+};
 use log::{info, warn};
 use std::{
     collections::{BTreeMap, HashMap}, fs, io, path::Path
@@ -9,16 +11,17 @@ pub fn read_gpu(
     pci_devices: &BTreeMap<String, PciDevice>,
 ) -> io::Result<BTreeMap<usize, GpuDevice>> {
     let mut gpus: BTreeMap<usize, GpuDevice> = BTreeMap::new();
+    // We use i as the key to have some sort of sorted list, this number will get re-assigned later
+    // when searching for the default gpu
     let mut i = 0;
+    // If class is a display class, insert into map
     for device in pci_devices.values() {
-        match device.class().as_deref() {
-            Some("0x030000") => gpus.insert(i, build_gpu(device)?),
-            Some("0x030100") => gpus.insert(i, build_gpu(device)?),
-            Some("0x030200") => gpus.insert(i, build_gpu(device)?),
-            Some("0x038000") => gpus.insert(i, build_gpu(device)?),
-            Some(_) => continue,
-            None => continue,
-        };
+        // 03 means it's a display controller, see <https://admin.pci-ids.ucw.cz/read/PD/>
+        if let Some(class) = device.class() {
+            if class.starts_with("0x03") {
+                gpus.insert(i, build_gpu(device)?);
+            }
+        }
         if gpus.contains_key(&i) {
             i += 1;
         }
@@ -26,27 +29,39 @@ pub fn read_gpu(
     Ok(gpus)
 }
 
+/// Take a pci device and build a gpu device from it
 fn build_gpu(device: &PciDevice) -> io::Result<GpuDevice> {
-    let nvidia: bool = device.vendor_id().as_deref() == Some("0x10de");
-    let nvidia_minor: Option<u32> = if nvidia {
-        nvidia_get_minor(device.pci_address())
-    } else {
-        None
+    let gpu_vendor = match device.vendor_id() {
+        Some(vendor_id) => get_gpu_vendor(vendor_id),
+        // Default to other
+        None => GpuVendor::default(),
+    };
+    // nvidia_minor is used in /dev/nvidia<i>, where i is the minor number eg: nvidia0
+    // None if not a nvidia device
+    let nvidia_minor: Option<u32> = match gpu_vendor {
+        GpuVendor::Nvidia => nvidia_get_minor(device.pci_address()),
+        _ => None,
     };
 
+    // if None use a default placeholder name
+    let device_name = device
+        .device_name()
+        .clone()
+        .unwrap_or_else(|| "Unknown Device".to_string());
+
     Ok(GpuDevice::new(
-        device
-            .device_name()
-            .clone()
-            .unwrap_or_else(|| "Unknown Device".to_string()),
+        device_name,
         device.clone(),
+        // propagate err on purpose if the drm nodes return errors, if there is no nodes we want to
+        // skip this gpu
         drm_node_path(device.pci_address(), "render")?,
         drm_node_path(device.pci_address(), "card")?,
         None,
-        nvidia,
+        gpu_vendor,
         nvidia_minor,
     ))
 }
+
 /// Try to read from sysfs first, then fallback to udev /dev/dri
 /// with a sleep at each attempt so the system has time to spawn the drm nodes
 /// May block for up to ~5s per path (10 retries × 500ms)
@@ -254,4 +269,16 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
     *gpu_list = gpus.into_iter().enumerate().collect();
 
     Ok(())
+}
+
+fn get_gpu_vendor(vendor: &str) -> GpuVendor {
+    // Match vendor id into the GpuVendor enum,
+    // nvidia ids found at <https://envytools.readthedocs.io/en/latest/hw/pciid.html>
+    match vendor {
+        "0x1002" => GpuVendor::Amd,
+        "0x10de" | "0x104a" | "0x12d2" => GpuVendor::Nvidia,
+        "0x8086" => GpuVendor::Intel,
+        // Unknown id
+        _ => GpuVendor::Other,
+    }
 }
