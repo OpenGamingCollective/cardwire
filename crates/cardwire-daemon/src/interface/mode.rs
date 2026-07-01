@@ -9,7 +9,7 @@ use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
-use zbus::{fdo, fdo::Error, interface};
+use zbus::{fdo, interface};
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Modes {
@@ -31,20 +31,24 @@ impl fmt::Display for Modes {
     }
 }
 
-impl Modes {
-    pub fn parse(input: &u32) -> zbus::fdo::Result<Modes> {
-        match input {
+/// convert a u32 into a mode
+impl TryFrom<u32> for Modes {
+    type Error = &'static str;
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
             0 => Ok(Self::Integrated),
             1 => Ok(Self::Hybrid),
             2 => Ok(Self::Manual),
             3 => Ok(Self::Smart),
-            unknown => Err(Error::InvalidArgs(format!(
-                "unknown mode: {unknown} \n expected integrated|hybrid|manual|smart"
-            ))),
+            _ => Err("unknown mode"),
         }
     }
-    pub fn parse_to_u32(input: Modes) -> u32 {
-        match input {
+}
+
+/// Convert a mode into a u32 and reverse
+impl From<Modes> for u32 {
+    fn from(value: Modes) -> Self {
+        match value {
             Modes::Integrated => 0,
             Modes::Hybrid => 1,
             Modes::Manual => 2,
@@ -84,9 +88,9 @@ impl ModeInterface {
     }
     async fn insert_to_map(&self, mode: Modes) -> fdo::Result<()> {
         let mut mode_map = self.mode_map.lock().await;
-        let mode: u8 = Modes::parse_to_u32(mode) as u8;
+        let mode: u32 = Modes::into(mode);
         mode_map
-            .insert(0, mode, 0)
+            .insert(0, mode as u8, 0)
             .map_err(|err| fdo::Error::Failed(err.to_string()))
     }
 }
@@ -99,7 +103,8 @@ impl ModeInterface {
     #[zbus(property)]
     pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
         // Valide inputs and turn into a Modes
-        let mode = Modes::parse(&mode)?;
+        let mode = Modes::try_from(mode)
+            .map_err(|_| fdo::Error::InvalidArgs("unknown mode".to_string()))?;
         let mut current_mode = self.mode_state.write().await;
         let mut gpu_list = self.gpu_list.write().await;
         match mode {
@@ -165,6 +170,6 @@ impl ModeInterface {
     #[zbus(property)]
     pub(crate) async fn mode(&self) -> fdo::Result<u32> {
         let current_mode = self.mode_state.read().await;
-        Ok(Modes::parse_to_u32(current_mode.mode()))
+        Ok(Modes::into(current_mode.mode()))
     }
 }
