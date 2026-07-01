@@ -22,12 +22,18 @@
       fenixpkgs = system: fenix.packages.${system};
       toolchainFor =
         system:
+        let
+          tc = (fenixpkgs system).toolchainOf {
+            channel = "1.95.0";
+            sha256 = "sha256-gh/xTkxKHL4eiRXzWv8KP7vfjSk61Iq48x47BEDFgfk=";
+          };
+        in
         (fenixpkgs system).combine [
-          (fenixpkgs system).stable.cargo
-          (fenixpkgs system).stable.rustc
+          tc.cargo
+          tc.rustc
           (fenixpkgs system).latest.rustfmt
-          (fenixpkgs system).stable.clippy
-          (fenixpkgs system).stable.rust-src
+          tc.clippy
+          tc.rust-src
         ];
     in
     {
