@@ -103,8 +103,7 @@ impl ModeInterface {
     #[zbus(property)]
     pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
         // Valide inputs and turn into a Modes
-        let mode = Modes::try_from(mode)
-            .map_err(|_| fdo::Error::InvalidArgs("unknown mode".to_string()))?;
+        let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
         let mut current_mode = self.mode_state.write().await;
         let mut gpu_list = self.gpu_list.write().await;
         match mode {

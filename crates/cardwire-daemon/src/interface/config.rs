@@ -107,8 +107,8 @@ impl ConfigInterface {
     #[zbus(property)]
     pub async fn set_battery_auto_switch_mode(&self, mode: u32) -> fdo::Result<()> {
         let mut mode_lock = self.config.battery_auto_switch_mode.write().await;
-        let new_mode = Modes::try_from(mode)
-            .map_err(|_| fdo::Error::InvalidArgs("unknown mode".to_string()))?;
+        let new_mode =
+            Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
         *mode_lock = new_mode;
         Ok(())
     }
