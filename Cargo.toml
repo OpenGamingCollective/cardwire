@@ -33,9 +33,12 @@ freedesktop-desktop-entry = "0.8.1"
 udev = { version = "^0.9.3", features = ["send", "sync"] }
 
 [profile.dev]
-panic = "abort"
 overflow-checks = true
 
 [profile.release]
 panic = "abort"
 overflow-checks = true
+lto = "fat"
+opt-level = 3
+strip = true
+# Before: 7.3M After: 5.0M
