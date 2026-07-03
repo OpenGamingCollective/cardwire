@@ -35,8 +35,8 @@ impl ConfigMemory {
 
 #[derive(Clone)]
 pub struct ConfigInterface {
-    pub config: Arc<ConfigMemory>,
-    pub blocker: Arc<RwLock<EbpfBlocker>>,
+    config: Arc<ConfigMemory>,
+    blocker: Arc<RwLock<EbpfBlocker>>,
 }
 impl ConfigInterface {
     pub fn build(

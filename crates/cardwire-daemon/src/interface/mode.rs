@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 use zbus::{fdo, interface};
+
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Modes {
@@ -31,7 +32,7 @@ impl fmt::Display for Modes {
     }
 }
 
-/// convert a u32 into a mode
+/// try to convert a u32 into a mode
 impl TryFrom<u32> for Modes {
     type Error = &'static str;
     fn try_from(value: u32) -> Result<Self, Self::Error> {
@@ -60,10 +61,10 @@ impl From<Modes> for u32 {
 // to change a mode, we need the config, the mode_state, the gpu_list
 #[derive(Clone)]
 pub struct ModeInterface {
-    pub mode_state: Arc<RwLock<CardwireModeState>>,
+    mode_state: Arc<RwLock<CardwireModeState>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
-    pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
-    pub config: Arc<ConfigMemory>,
+    gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
+    config: Arc<ConfigMemory>,
     mode_map: Arc<Mutex<AyaHashMap<aya::maps::MapData, u8, u8>>>,
 }
 
@@ -86,7 +87,9 @@ impl ModeInterface {
             mode_map,
         })
     }
-    async fn insert_to_map(&self, mode: Modes) -> fdo::Result<()> {
+
+    /// set the mode in the CURRENT_MODE's bpf map
+    async fn update_mode_bpf_map(&self, mode: Modes) -> fdo::Result<()> {
         let mut mode_map = self.mode_map.lock().await;
         let mode: u32 = Modes::into(mode);
         mode_map
@@ -107,18 +110,17 @@ impl ModeInterface {
         let mut current_mode = self.mode_state.write().await;
         let mut gpu_list = self.gpu_list.write().await;
         match mode {
-            // Integrated/Hybrid only works on laptop with two gpus, will refuse if the computer has
-            // more than 2 gpus
+            // Integrated/Hybrid/Smart only works on laptop with two gpus, will refuse if the
+            // computer has more than 2 gpus
             Modes::Integrated | Modes::Hybrid | Modes::Smart => {
                 if gpu_list.len() != 2 {
-                    error!(
+                    let error_message = format!(
                         "Couldn't set mode to {}, the mode require exactly 2 GPUs",
                         mode
                     );
-                    return Err(fdo::Error::NotSupported(format!(
-                        "Couldn't set mode to {}, the mode require exactly 2 GPUs",
-                        mode
-                    )));
+
+                    error!("{error_message}");
+                    return Err(fdo::Error::NotSupported("{error_message}".to_string()));
                 }
                 // Loop to find the non default gpu and block it,
                 for gpu in gpu_list.values_mut() {
@@ -131,10 +133,10 @@ impl ModeInterface {
                     };
                 }
             }
+
             // If the auto apply is false, return all gpus to unblocked
             // Else apply the gpu_state but still unblock other gpus
             Modes::Manual => {
-                //let gpu_state = self.state.gpu_state.read().await;
                 let config = self
                     .config
                     .auto_apply_gpu_state
@@ -159,7 +161,9 @@ impl ModeInterface {
                 }
             }
         }
-        self.insert_to_map(mode).await?;
+
+        // Now update the hashmap value to let the bpf know the new mode
+        self.update_mode_bpf_map(mode).await?;
         if let Err(e) = current_mode.save_state(mode).await {
             warn!("mode couldn't be saved to config: {e}");
         }

@@ -29,7 +29,7 @@ impl<T, E: std::fmt::Display> FdoResultExt<T> for Result<T, E> {
 pub struct GpuInterface {
     pub device: GpuDevice,
     blocker: Arc<RwLock<EbpfBlocker>>,
-    pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
+    pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     mode_state: Arc<RwLock<CardwireModeState>>,
 }
