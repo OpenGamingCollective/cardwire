@@ -28,3 +28,23 @@ udev.workspace = true
 [[bin]]
 name = "cardwired"
 path = "src/daemon.rs"
+
+[package.metadata.deb]
+name = "cardwire"
+maintainer = "luytan <luytan@khora.me>"
+copyright = "2026, luytan"
+section = "utils"
+priority = "optional"
+extended-description = """\
+ GPU manager for Linux using eBPF LSM hooks."""
+depends = "hwdata, dbus, systemd, upower, udev, libgcc-s1, libc6, libudev1"
+
+assets = [
+    ["target/release/cardwired", "usr/bin/", "755"],
+    ["target/release/cardwire", "usr/bin/", "755"],
+    ["../../assets/cardwired.service", "usr/lib/systemd/system/", "644"],
+    ["../../assets/99-cardwired.preset", "usr/lib/systemd/system-preset/", "644"],
+    ["../../assets/com.github.opengamingcollective.cardwire.conf", "usr/share/dbus-1/system.d/", "644"],
+]
+maintainer-scripts = "../../packages/debian/DEBIAN"
+changelog = "../../packages/debian/changelog"

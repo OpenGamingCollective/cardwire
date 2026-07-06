@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -e
+
+deb-systemd-helper daemon-reload || true
+
+deb-systemd-helper enable cardwired.service
+
+deb-systemd-helper start cardwired.service
