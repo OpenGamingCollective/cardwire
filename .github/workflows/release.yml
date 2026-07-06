@@ -108,5 +108,18 @@ jobs:
         working-directory: aur-repo
         run: |
           chown -R builder:builder .
-          su builder -c "makepkg -s"
-          ls
+          su builder -c "makepkg -s --noconfirm"
+
+      - name: Find pkg filename
+        id: pkg
+        working-directory: aur-repo
+        run: |
+          PKG_FILE=$(basename *.pkg.tar.zst)
+          echo "name=${PKG_FILE}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload pkg
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.pkg.outputs.name }}
+          path: "aur-repo/*.pkg.tar.zst"
+          if-no-files-found: error
