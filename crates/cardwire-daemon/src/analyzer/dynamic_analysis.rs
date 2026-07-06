@@ -23,7 +23,7 @@ pub async fn check_gamemode(pid: u32) -> bool {
     bytes
         .windows(18)
         .any(|window| window == b"libgamemodeauto.so")
-                }
+}
 
 /// Read the environ map to file the FLATPAK_ID and compare with .desktop apps
 pub async fn check_flatpak_environ(pid: u32, xdg_list: &HashMap<String, bool>) -> bool {
