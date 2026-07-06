@@ -52,10 +52,22 @@ jobs:
             if (needsRustQuality) {
               core.setOutput('run_rust_checks', 'true');
             }
+
+  setup-nix:
+    name: Setup Nix Cache
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    if: needs.prepare.outputs.run_nix_vm == 'true' || needs.prepare.outputs.run_c_checks == 'true' || needs.prepare.outputs.run_rust_checks == 'true'
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: determinateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - uses: determinateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
+      - run: nix develop --command true
+
   rust-lint:
     name: Rust Lint
     runs-on: ubuntu-latest
-    needs: [prepare]
+    needs: [prepare, setup-nix]
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -67,31 +79,31 @@ jobs:
   rust-format:
     name: Rust Format
     runs-on: ubuntu-latest
-    needs: [prepare]
+    needs: [prepare, setup-nix]
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - uses: determinateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
-    - uses: determinateSystems/magic-nix-cache-action@v14
+    - uses: determinateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
     - run: nix develop --command cargo fmt -- --check
 
   c-format:
     name: C Format
     runs-on: ubuntu-latest
-    needs: [prepare]
+    needs: [prepare, setup-nix]
     if: needs.prepare.outputs.run_c_checks == 'true'
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: determinateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
-      - uses: determinateSystems/magic-nix-cache-action@v14
+      - uses: determinateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
       - run: nix develop --command clang-format --dry-run --Werror -i ./crates/cardwire-ebpf/src/bpf.c
 
   vm-test:
     runs-on: ubuntu-latest
-    needs: [prepare]
-    if: needs.prepare.outputs.run_nix_vm == 'true'
+    needs: [prepare, setup-nix, rust-lint, rust-format, c-format]
+    if: ${{ !failure() && !cancelled() && needs.prepare.outputs.run_nix_vm == 'true' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: determinateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
-      - uses: determinateSystems/magic-nix-cache-action@v14
+      - uses: determinateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
       - run: nix build .#vm-test
