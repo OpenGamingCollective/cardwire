@@ -48,9 +48,9 @@ zcat /proc/config.gz | grep CONFIG_LSM=
 
 > Outputs e.g. `lsm=landlock,yama,apparmor,bpf` or `CONFIG_LSM="landlock,lockdown,yama,integrity,apparmor,bpf"`
 
-> If it contains 'bpf', bpf is already enabled and usable in your system, go to [installation](installation.md)
+> If it contains 'bpf', bpf is already enabled and usable in your system, go to [installation](getting-started/installation.md)
 
-## Enabling BPF LSM (with GRUB)
+#### Enabling BPF LSM (with GRUB)
 
 > [!CAUTION]
 > bpf should already be enabled by default on these distros: Arch, CachyOS, Bazzite, Fedora, NixOS, Debian
@@ -75,3 +75,15 @@ Apply and reboot:
 ```bash
 sudo reboot
 ```
+
+## System
+
+### Non-systemd distros
+
+> [!WARNING]
+> Cardwire only supports systemd-based distros. If you want to use it on a non-systemd distro, either open a PR with patches for non-systemd or get it working on your setup.
+
+### Display server support
+
+> [!CAUTION]
+> X11 is not tested and not supported. Cardwire only supports Wayland.
