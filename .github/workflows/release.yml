@@ -101,4 +101,9 @@ jobs:
           git add PKGBUILD
           git add .SRCINFO
           git commit -m "chore: update cardwire to v${VERSION}"
-          git push
+          git log
+      - name: Build tar zst
+        working-directory: aur-repo
+        run: |
+          makepkg -s
+          ls
