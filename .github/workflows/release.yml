@@ -62,7 +62,7 @@ jobs:
       # ssh
       - name: Install dependencies
         run: |
-          pacman -Sy openssh git --noconfirm
+          pacman -Sy openssh git base-devel --noconfirm
       - name: Setup ssh
         run: |
           mkdir -p /root/.ssh
