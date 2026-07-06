@@ -37,8 +37,6 @@ jobs:
           cargo build --release --locked
           cargo deb --no-build
 
-      - name: Build cardwire
-        run: cargo build --release --locked
       - name: Upload deb
         uses: actions/upload-artifact@v7
         with:
