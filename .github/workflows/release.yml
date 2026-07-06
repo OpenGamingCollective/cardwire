@@ -62,7 +62,7 @@ jobs:
       # ssh
       - name: Install dependencies
         run: |
-          pacman -Sy openssh git base-devel --noconfirm
+          pacman -Sy openssh git base-devel pacman-contrib --noconfirm
       - name: Setup ssh
         run: |
           mkdir -p /root/.ssh
@@ -81,9 +81,6 @@ jobs:
       - name: Copy new PKGBUILD to aur repo
         run: |
           cp packages/arch-linux/cardwire-PKGBUILD aur-repo/PKGBUILD
-      - name: Setup pacman
-        run: |
-          pacman -S pacman-contrib --noconfirm
       - name: Update PKGBUILD and SRCINFO
         working-directory: aur-repo
         run: |
@@ -103,7 +100,7 @@ jobs:
           git add PKGBUILD
           git add .SRCINFO
           git commit -m "chore: update cardwire to v${VERSION}"
-          git log
+          git push
       - name: Build tar zst
         working-directory: aur-repo
         run: |
