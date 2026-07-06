@@ -1,7 +1,7 @@
 name: Release
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
   workflow_dispatch:
 permissions:
   contents: write
@@ -80,7 +80,9 @@ jobs:
           git clone ssh://aur@aur.archlinux.org/cardwire.git aur-repo
       - name: Copy new PKGBUILD to aur repo
         run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
           cp packages/arch-linux/cardwire-PKGBUILD aur-repo/PKGBUILD
+          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" aur-repo/PKGBUILD
       - name: Update PKGBUILD and SRCINFO
         working-directory: aur-repo
         run: |
@@ -120,3 +122,23 @@ jobs:
           name: ${{ steps.pkg.outputs.name }}
           path: "aur-repo/*.pkg.tar.zst"
           if-no-files-found: error
+
+  Release:
+    if: github.event_name == 'push'
+    needs: [Debian, ArchLinux]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.2
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Upload assets and publish release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          draft: true
+          files: |
+            artifacts/*.deb
+            artifacts/*.pkg.tar.zst
+          fail_on_unmatched_files: true
