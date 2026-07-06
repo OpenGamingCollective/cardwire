@@ -19,8 +19,8 @@ impl FromStr for PowerState {
             "D0" => Ok(PowerState::D0),
             "D1" => Ok(PowerState::D1),
             "D2" => Ok(PowerState::D2),
-            "D3Hot" => Ok(PowerState::D3Hot),
-            "D3Cold" => Ok(PowerState::D3Cold),
+            "D3hot" => Ok(PowerState::D3Hot),
+            "D3cold" => Ok(PowerState::D3Cold),
             _ => Ok(PowerState::Unknown),
         }
     }

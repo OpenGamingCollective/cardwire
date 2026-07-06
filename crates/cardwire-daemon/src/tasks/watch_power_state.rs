@@ -23,7 +23,7 @@ pub async fn watch_power_state(
 
     loop {
         sleep(Duration::from_millis(500)).await;
-        let new_power_state = match fs::read_to_string(&power_path) {
+        let new_power_state_str = match fs::read_to_string(&power_path) {
             Ok(state) => state,
             Err(e) => {
                 error!(
@@ -35,11 +35,11 @@ pub async fn watch_power_state(
             }
         };
         // it shouldn't return err
-        let new_power_state = PowerState::from_str(&new_power_state)?;
+        let new_power_state = PowerState::from_str(&new_power_state_str.trim())?;
 
         // Skip if unknown powerstate
         if new_power_state == PowerState::Unknown {
-            warn!("power state couldn't be read: Unknown PowerState");
+            warn!("power state couldn't be read: {}", &new_power_state_str);
             continue;
         }
         if power_state != new_power_state {
