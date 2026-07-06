@@ -1,5 +1,5 @@
 # Maintainer: Luytan <luytan@khora.me>
-# Please someone maintain this and make a better one, i do not use Arch!!!btw
+
 _pkgname=cardwire
 pkgname="${_pkgname}-git"
 pkgver=r140.ab31621
