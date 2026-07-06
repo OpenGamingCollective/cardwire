@@ -8,12 +8,10 @@ using AUR:
 yay -S cardwire
 ```
 
-then enable and start the service
+Then [enable BPF LSM](#enabling-bpf-lsm) and start the service:
 
 ```bash
-sudo systemctl enable cardwired.service
-
-sudo systemctl start cardwired.service
+sudo systemctl enable cardwired --now
 ```
 
 ## Nix
@@ -28,6 +26,8 @@ cardwire = {
     inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
+
+The NixOS module configures BPF LSM automatically — no manual kernel parameter changes needed.
 
 configuration.nix:
 
@@ -51,15 +51,82 @@ Using Terra
 
 ```bash
 sudo dnf install cardwire
+```
 
-sudo systemctl enable cardwired.service
+Then [enable BPF LSM](#enabling-bpf-lsm) and start the service:
 
-sudo systemctl start cardwired.service
+```bash
+sudo systemctl enable cardwired --now
+```
+
+## Ubuntu
+
+Install build dependencies:
+
+```bash
+sudo apt install clang libbpf-dev linux-headers-$(uname -r)
+```
+
+Install Rust (if not already installed):
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Then clone and build:
+
+```bash
+git clone https://github.com/OpenGamingCollective/cardwire.git
+make build
+sudo make install
+```
+
+Then [enable BPF LSM](#enabling-bpf-lsm) and start the service:
+
+```bash
+sudo systemctl enable cardwired --now
+```
+
+## Enabling BPF LSM (with GRUB)
+
+Check your kernel's default LSM list:
+
+On Ubuntu/Fedora:
+```bash
+grep CONFIG_LSM= /boot/config-$(uname -r)
+```
+
+On Arch and other distros:
+```bash
+zcat /proc/config.gz | grep CONFIG_LSM=
+```
+
+> Outputs e.g. `CONFIG_LSM="landlock,lockdown,yama,integrity,apparmor"`
+
+Edit `/etc/default/grub` and append `bpf` to `GRUB_CMDLINE_LINUX_DEFAULT`, keeping all existing entries:
+
+```
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash lsm=landlock,lockdown,yama,integrity,apparmor,bpf"
+```
+
+> [!IMPORTANT]
+> Do not set `lsm=bpf` alone — that drops other active security policies. Always append `bpf` to the existing list from the command above.
+
+Apply and reboot:
+
+| Distro | Command |
+|--------|---------|
+| Ubuntu | `sudo update-grub` |
+| Fedora | `sudo grub2-mkconfig -o /boot/grub2/grub.cfg` |
+| Arch   | `sudo grub-mkconfig -o /boot/grub/grub.cfg` |
+
+```bash
+sudo reboot
 ```
 
 ## Other distros
 
-For now, other distros must clone the repo and use `make` to build and install Cardwire.
+For now, other distros must clone the repo and use `make` to build and install Cardwire. You will also need to enable BPF LSM manually — see the [Enabling BPF LSM](#enabling-bpf-lsm) section above.
 
 Build dependencies:
 
@@ -77,7 +144,7 @@ sudo make install
 > [!CAUTION]
 > Makefile wasn't tested, use with caution.
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > For mainstream distros, i will be making an official install methods, like a copr for Fedora and a .deb for Debian based.
 
 ## Non-systemd distros
