@@ -33,7 +33,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.95.0
       - name: Build cardwire
         run: |
-          cargo add cargo-deb
+          cargo install cargo-deb
           cargo build --release --locked
           cargo deb --no-build
 
