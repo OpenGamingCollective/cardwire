@@ -6,13 +6,13 @@ Cardwire is a GPU manager for Linux systems with multiple GPUs. It allows users 
 
 Cardwire provides several GPU management modes:
 
-- **Integrated mode** — Uses eBPF LSM hooks to block applications from accessing dedicated GPUs. This saves power by preventing the GPU from waking up and allowing it to enter an energy-efficient sleep state (`D3Cold`).
+- **Integrated mode** -- Uses eBPF LSM hooks to block applications from accessing dedicated GPUs. This saves power by preventing the GPU from waking up and allowing it to enter an energy-efficient sleep state (`D3Cold`).
 
-- **Hybrid mode** — Removes the blocks, letting the system function normally with both integrated and dedicated GPUs available.
+- **Hybrid mode** -- Removes the blocks, letting the system function normally with both integrated and dedicated GPUs available.
 
-- **Manual mode** — Allows users to manually block or unblock individual GPUs by ID for granular control.
+- **Manual mode** -- Allows users to manually block or unblock individual GPUs by ID for granular control.
 
-- **Smart mode** — Like integrated mode it blocks the dGPU by default, but uses eBPF to analyze each application at launch and selectively allow GPU access for approved applications.
+- **Smart mode** -- Like integrated mode it blocks the dGPU by default, but uses eBPF to analyze each application at launch and selectively allow GPU access for approved applications.
 
 Switching between modes is fast and does not require reboots or logouts.
 
@@ -21,4 +21,4 @@ Switching between modes is fast and does not require reboots or logouts.
 
 ## Getting Started
 
-To get started with cardwire, please take a look at the [requirements](getting-started/requirements.md) to make sure your system is supported, then head over to [the installation instructions](getting-started/installation.md).
+To get started with cardwire, please take a look at the [requirements](getting-started/requirements.md) to make sure your system is supported and configured, then head over to [the installation instructions](getting-started/installation.md).
