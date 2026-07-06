@@ -19,9 +19,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config
+
       - name: Install gcc-multilib
         if: matrix.os == 'ubuntu-24.04'
         run: sudo apt-get install -y gcc-multilib
+
+      - name: Fix missing asm/types.h on arm64
+        if: matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          sudo ln -s /usr/include/aarch64-linux-gnu/asm /usr/include/asm
+
 
       - uses: dtolnay/rust-toolchain@1.95.0
       - name: Build
