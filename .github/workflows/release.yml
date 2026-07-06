@@ -105,5 +105,5 @@ jobs:
       - name: Build tar zst
         working-directory: aur-repo
         run: |
-          makepkg -s
+          su builder -c "makepkg -s"
           ls
