@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
     task::spawn(battery_switch);
     task::spawn(daemon.cardwire_analyzer.run());
     task::spawn(monitor_pci_changes());
-    info!("Daemon started");
+                info!("Daemon started succesfully");
     pending::<()>().await;
     Ok(())
 }
