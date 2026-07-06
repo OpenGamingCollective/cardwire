@@ -48,7 +48,7 @@ zcat /proc/config.gz | grep CONFIG_LSM=
 
 > Outputs e.g. `lsm=landlock,yama,apparmor,bpf` or `CONFIG_LSM="landlock,lockdown,yama,integrity,apparmor,bpf"`
 
-> If it contains 'bpf', bpf is already enabled and usable in your system, go to [installation](getting-started/installation.md)
+> If it contains 'bpf', bpf is already enabled and usable in your system, go to [installation](installation.md)
 
 ## Enabling BPF LSM (with GRUB)
 
