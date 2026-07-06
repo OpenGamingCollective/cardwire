@@ -1,6 +1,6 @@
 # Installation
 
-## Arch
+## Arch/CachyOS/Arch-based
 
 using AUR:
 
@@ -8,7 +8,7 @@ using AUR:
 yay -S cardwire
 ```
 
-Then [enable BPF LSM](#enabling-bpf-lsm) and start the service:
+And start the service:
 
 ```bash
 sudo systemctl enable cardwired --now
@@ -27,8 +27,6 @@ cardwire = {
 };
 ```
 
-The NixOS module configures BPF LSM automatically — no manual kernel parameter changes needed.
-
 configuration.nix:
 
 ```nix
@@ -45,7 +43,12 @@ services.cardwire = {
 };
 ```
 
-## Fedora
+## Fedora/Fedora-based
+
+Cardwire is officially distributed through Terra on Fedora systems
+
+To install Terra, follow the instructions here:
+<https://docs.terrapkg.com/usage/installing>
 
 Using Terra
 
@@ -53,11 +56,33 @@ Using Terra
 sudo dnf install cardwire
 ```
 
-Then [enable BPF LSM](#enabling-bpf-lsm) and start the service:
+And start the service:
 
 ```bash
 sudo systemctl enable cardwired --now
 ```
+
+## Bazzite/Atomic Fedora-based
+
+Cardwire is officially distributed through Terra on Fedora systems
+
+To install Terra, follow the instructions here:
+<https://docs.terrapkg.com/usage/installing>
+
+Using Terra
+
+```bash
+sudo rpm-ostree install cardwire
+```
+
+And start the service:
+
+```bash
+sudo systemctl enable cardwired --now
+```
+
+> [!NOTE]
+> Thanks to the Fyra Labs / Terra team for packaging and maintaining Cardwire on Fedora !!
 
 ## Ubuntu
 
@@ -87,43 +112,6 @@ Then [enable BPF LSM](#enabling-bpf-lsm) and start the service:
 sudo systemctl enable cardwired --now
 ```
 
-## Enabling BPF LSM (with GRUB)
-
-Check your kernel's default LSM list:
-
-On Ubuntu/Fedora:
-```bash
-grep CONFIG_LSM= /boot/config-$(uname -r)
-```
-
-On Arch and other distros:
-```bash
-zcat /proc/config.gz | grep CONFIG_LSM=
-```
-
-> Outputs e.g. `CONFIG_LSM="landlock,lockdown,yama,integrity,apparmor"`
-
-Edit `/etc/default/grub` and append `bpf` to `GRUB_CMDLINE_LINUX_DEFAULT`, keeping all existing entries:
-
-```
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash lsm=landlock,lockdown,yama,integrity,apparmor,bpf"
-```
-
-> [!IMPORTANT]
-> Do not set `lsm=bpf` alone — that drops other active security policies. Always append `bpf` to the existing list from the command above.
-
-Apply and reboot:
-
-| Distro | Command |
-|--------|---------|
-| Ubuntu | `sudo update-grub` |
-| Fedora | `sudo grub2-mkconfig -o /boot/grub2/grub.cfg` |
-| Arch   | `sudo grub-mkconfig -o /boot/grub/grub.cfg` |
-
-```bash
-sudo reboot
-```
-
 ## Other distros
 
 For now, other distros must clone the repo and use `make` to build and install Cardwire. You will also need to enable BPF LSM manually — see the [Enabling BPF LSM](#enabling-bpf-lsm) section above.
@@ -133,6 +121,7 @@ Build dependencies:
 - cargo
 - clang
 - libbpf
+- libudev-dev
 
 ```bash
 git clone https://github.com/OpenGamingCollective/cardwire.git
@@ -141,11 +130,8 @@ make build
 sudo make install
 ```
 
-> [!CAUTION]
-> Makefile wasn't tested, use with caution.
-
-> [!IMPORTANT]
-> For mainstream distros, i will be making an official install methods, like a copr for Fedora and a .deb for Debian based.
+> [!NOTE]
+> A .deb package for Debian based system is planned.
 
 ## Non-systemd distros
 
@@ -155,4 +141,4 @@ sudo make install
 ## Display server support
 
 > [!CAUTION]
-> X11 is not tested and not supported. Cardwire requires Wayland to function properly.
+> X11 is not tested and not supported. Cardwire only supports Wayland.
