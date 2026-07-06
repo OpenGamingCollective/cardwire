@@ -133,12 +133,3 @@ sudo make install
 > [!NOTE]
 > A .deb package for Debian based system is planned.
 
-## Non-systemd distros
-
-> [!WARNING]
-> Cardwire only supports systemd-based distros. If you want to use it on a non-systemd distro, either open a PR with patches for non-systemd or get it working on your setup.
-
-## Display server support
-
-> [!CAUTION]
-> X11 is not tested and not supported. Cardwire only supports Wayland.
