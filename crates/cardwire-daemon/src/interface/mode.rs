@@ -118,9 +118,8 @@ impl ModeInterface {
                         "Couldn't set mode to {}, the mode require exactly 2 GPUs",
                         mode
                     );
-
-                    error!("{error_message}");
-                    return Err(fdo::Error::NotSupported("{error_message}".to_string()));
+                    error!("{}", error_message);
+                    return Err(fdo::Error::NotSupported(error_message.to_string()));
                 }
                 // Loop to find the non default gpu and block it,
                 for gpu in gpu_list.values_mut() {

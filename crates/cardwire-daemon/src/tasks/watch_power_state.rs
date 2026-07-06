@@ -35,7 +35,7 @@ pub async fn watch_power_state(
             }
         };
         // it shouldn't return err
-        let new_power_state = PowerState::from_str(&new_power_state_str.trim())?;
+        let new_power_state = PowerState::from_str(new_power_state_str.trim())?;
 
         // Skip if unknown powerstate
         if new_power_state == PowerState::Unknown {
