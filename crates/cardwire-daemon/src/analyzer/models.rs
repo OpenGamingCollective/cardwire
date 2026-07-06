@@ -1,9 +1,9 @@
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
 use cardwire_ebpf::EbpfBlocker;
-use log::{debug, warn};
-use std::{collections::HashMap, ptr, sync::Arc};
+use log::{debug, info, warn};
+use std::{collections::HashMap, fs, ptr, sync::Arc};
 use tokio::{
-    fs, io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, mpsc}
+    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, mpsc}, time::Instant
 };
 
 use crate::analyzer::{
@@ -140,19 +140,25 @@ impl CardwireAnalyzer {
                 EventMsg::Exec(event) => {
                     let self_clone = self.clone();
                     tokio::spawn(async move {
+                        let time = Instant::now();
                         let pid_map = self_clone.pid_map.read().await;
                         if pid_map.get(&event.pid, 0).is_ok() {
                             return;
                         }
                         drop(pid_map);
-                        let real_app_name = match get_real_process_name(event.pid).await {
+                        let real_app_name = match get_real_process_name(event.pid) {
                             Some(name) => name,
                             None => return,
                         };
                         if let Some(result) = self_clone.evaluate_app(event.pid).await
                             && result
                         {
-                            debug!("ALLOW: pid: {}, name: {}", event.pid, real_app_name);
+                            info!(
+                                "ALLOW: pid: {} process: {} in {}us",
+                                event.pid,
+                                &real_app_name,
+                                time.elapsed().as_micros()
+                            );
                             let mut pid_map = self_clone.pid_map.write().await;
                             if let Err(e) = pid_map.insert(event.pid, 1, 0) {
                                 warn!("Failed to insert into eBPF map: {}", e);
@@ -165,7 +171,7 @@ impl CardwireAnalyzer {
                 EventMsg::Close(event) => {
                     let self_clone = self.clone();
                     tokio::spawn(async move {
-                        let real_app_name = match get_real_process_name(event.pid).await {
+                        let real_app_name = match get_real_process_name(event.pid) {
                             Some(name) => name,
                             None => "unknown".to_string(),
                         };
@@ -185,31 +191,33 @@ impl CardwireAnalyzer {
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app
     async fn evaluate_app(&self, pid: u32) -> Option<bool> {
+        let path = format!("/proc/{}/environ", pid);
+        let time = Instant::now();
+        let environ = match fs::read(path) {
+            Ok(content) => content,
+            Err(_) => return None,
+        };
+        let time = time.elapsed().as_micros();
         // First check CARDWIRE_ALLOW, if  None continue
-        if let Some(allow) = check_cardwire_allow(pid).await {
+        if let Some(allow) = check_cardwire_allow(&environ) {
             return Some(allow);
         }
-
         let xdg_list = self.xdg_list.read().await;
-        // experimentation
-        // TODO: Replace
-        let check = |check: bool| if check { Err(()) } else { Ok(()) };
-        let result = tokio::try_join!(
-            async { check(check_steam_environ(pid).await) },
-            async { check(check_gamemode(pid).await) },
-            async { check(check_flatpak_environ(pid, &xdg_list).await) },
-            async { check(check_gpu_env(pid).await) },
-        );
-        match result.is_err() {
-            true => Some(true),
-            false => None,
+
+        let result = check_flatpak_environ(&environ, &xdg_list)
+            || check_gamemode(&environ)
+            || check_steam_environ(&environ)
+            || check_gpu_env(&environ);
+        if result {
+            info!("time to read environ for pid {}: {}", pid, time);
         }
+        Some(result)
     }
 }
 
-async fn get_real_process_name(pid: u32) -> Option<String> {
+fn get_real_process_name(pid: u32) -> Option<String> {
     let cmdline_path = format!("/proc/{}/cmdline", pid);
-    let cmdline_bytes = match fs::read(&cmdline_path).await {
+    let cmdline_bytes = match fs::read(&cmdline_path) {
         Ok(b) => b,
         Err(_) => return None, // process died
     };

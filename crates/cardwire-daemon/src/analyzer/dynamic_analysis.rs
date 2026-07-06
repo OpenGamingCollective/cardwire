@@ -2,37 +2,24 @@
 //! - gamemoderun analysis
 //! - library analysis
 use std::collections::HashMap;
-use tokio::fs;
 
 /// Read the proc `environ` file to find the `SteamAppId=` string
 /// used to identify both native and proton games
-pub async fn check_steam_environ(pid: u32) -> bool {
-    let path = format!("/proc/{}/environ", pid);
-    let Ok(bytes) = fs::read(path).await else {
-        return false;
-    };
-    bytes.windows(11).any(|window| window == b"SteamAppId=")
+pub fn check_steam_environ(environ: &[u8]) -> bool {
+    environ.windows(11).any(|window| window == b"SteamAppId=")
 }
 
 /// Read the proc `maps` file to find the gamemodeauto.so
-pub async fn check_gamemode(pid: u32) -> bool {
-    let path = format!("/proc/{}/maps", pid);
-    let Ok(bytes) = fs::read(path).await else {
-        return false;
-    };
-    bytes
+pub fn check_gamemode(environ: &[u8]) -> bool {
+    environ
         .windows(18)
         .any(|window| window == b"libgamemodeauto.so")
 }
 
 /// Read the environ map to file the FLATPAK_ID and compare with .desktop apps
-pub async fn check_flatpak_environ(pid: u32, xdg_list: &HashMap<String, bool>) -> bool {
-    let path = format!("/proc/{}/environ", pid);
-    let Ok(bytes) = fs::read(path).await else {
-        return false;
-    };
+pub fn check_flatpak_environ(environ: &[u8], xdg_list: &HashMap<String, bool>) -> bool {
     // Check if the byte array contains the substring
-    for var in bytes.split(|&b| b == 0) {
+    for var in environ.split(|&b| b == 0) {
         if var.starts_with(b"FLATPAK_ID=")
             && let Ok(str) = std::str::from_utf8(&var[11..])
             && xdg_list.contains_key(str)
@@ -43,13 +30,8 @@ pub async fn check_flatpak_environ(pid: u32, xdg_list: &HashMap<String, bool>) -
     false
 }
 
-pub async fn check_cardwire_allow(pid: u32) -> Option<bool> {
-    let path = format!("/proc/{}/environ", pid);
-    let Ok(bytes) = fs::read(path).await else {
-        return None;
-    };
-
-    for var in bytes.split(|&b| b == 0) {
+pub fn check_cardwire_allow(environ: &[u8]) -> Option<bool> {
+    for var in environ.split(|&b| b == 0) {
         if var.starts_with(b"CARDWIRE_ALLOW=") {
             if var.get(15) == Some(&b'1') {
                 return Some(true); // CARDWIRE_ALLOW=1
@@ -61,13 +43,8 @@ pub async fn check_cardwire_allow(pid: u32) -> Option<bool> {
     // Not present
     None
 }
-pub async fn check_gpu_env(pid: u32) -> bool {
-    let path = format!("/proc/{}/environ", pid);
-    let Ok(bytes) = fs::read(path).await else {
-        return false;
-    };
-
-    for var in bytes.split(|&b| b == 0) {
+pub fn check_gpu_env(environ: &[u8]) -> bool {
+    for var in environ.split(|&b| b == 0) {
         if var.starts_with(b"DRI_PRIME==") {
             if var.get(11) == Some(&b'1') {
                 return true; // DRI_PRIME=1
