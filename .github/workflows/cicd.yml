@@ -57,6 +57,10 @@ jobs:
     name: Rust Lint
     runs-on: ubuntu-latest
     needs: [prepare]
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: write
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -66,17 +70,18 @@ jobs:
         with:
           toolchain: 1.95.0
           components: clippy
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-      - uses: giraffate/clippy-action@13b9d32482f25d29ead141b79e7e04e7900281e0 # v1.0.1
+      - uses: auguwu/clippy-action@9817d076b82df0194935be9db6154c56ac07b317 # 1.5.0
         with:
-          reporter: 'github-pr-review'
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          clippy_flags: --locked --all-targets --all-features -- -D warnings
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --locked --all-targets --all-features -- -D warnings
 
   rust-format:
     name: Rust Format
     runs-on: ubuntu-latest
     needs: [prepare]
+    permissions:
+      contents: read
+      pull-requests: write
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -84,8 +89,12 @@ jobs:
         with:
           toolchain: nightly
           components: rustfmt
-      - name: Check formatting
-        run: cargo +nightly fmt -- --check
+      - name: Format code
+        run: cargo +nightly fmt
+      - name: Suggest formatting changes
+        uses: reviewdog/action-suggester@2558ba17e65a9039e73764a73009fc05fef28a46 # v1.24.3
+        with:
+          tool_name: rustfmt
 
   c-format:
     name: C Format
