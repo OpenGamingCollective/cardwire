@@ -37,7 +37,15 @@ jobs:
           cargo build --release --locked
           cargo deb --no-build
 
+      - name: Find deb filename
+        id: deb
+        run: |
+          DEB_FILE=$(basename target/debian/*.deb)
+          echo "name=${DEB_FILE}" >> "$GITHUB_OUTPUT"
+
       - name: Upload deb
         uses: actions/upload-artifact@v7
         with:
+          name: ${{ steps.deb.outputs.name }}
           path: "target/debian/*.deb"
+          if-no-files-found: error
