@@ -1,0 +1,270 @@
+static __always_inline int get_pci_addr(struct dentry *dentry, char *pci_addr,
+					int size)
+{
+	struct dentry *parent;
+	const unsigned char *parent_name;
+	int ret;
+
+	if (!dentry)
+		return 1;
+
+	parent = BPF_CORE_READ(dentry, d_parent);
+	if (!parent)
+		return 1;
+
+	parent_name = BPF_CORE_READ(parent, d_name.name);
+	ret = bpf_core_read_str(pci_addr, size, parent_name);
+
+	// PCI address string is 12 chars + 1 null byte
+	if (ret < 13)
+		return 1;
+
+	// Check for PCI address format (eg: 0000:00:00.0)
+	if (pci_addr[4] == ':' && pci_addr[7] == ':' && pci_addr[10] == '.') {
+		return 0;
+	}
+
+	return 1;
+}
+static __always_inline int check_backlight_path(struct dentry *dentry)
+{
+	if (!dentry)
+		return 0;
+
+	// current dir/file
+	struct qstr q = BPF_CORE_READ(dentry, d_name);
+	char name[16] = {};
+	if (bpf_core_read_str(name, sizeof(name), q.name) < 0) {
+		return 0;
+	}
+
+	// get parent folder
+	char p_name[16] = {};
+	struct dentry *parent = BPF_CORE_READ(dentry, d_parent);
+	if (parent) {
+		const unsigned char *p_name_ptr =
+			BPF_CORE_READ(parent, d_name.name);
+		bpf_core_read_str(p_name, sizeof(p_name), p_name_ptr);
+	}
+
+	// NVIDIA
+	char *t = (__builtin_memcmp(name, "nvidia_", 7) == 0)	? name :
+		  (__builtin_memcmp(p_name, "nvidia_", 7) == 0) ? p_name :
+								  NULL;
+
+	if (t) {
+		if (t[7] >= '0' && t[7] <= '9') {
+			__u32 id = 0;
+
+#pragma unroll
+			for (int i = 7; i < 10 && t[i] >= '0' && t[i] <= '9';
+			     i++) {
+				id = id * 10 + (t[i] - '0');
+			}
+
+			if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id)) {
+				return 1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static __always_inline int is_blocked_device(struct dentry *d)
+{
+	if (!d) {
+		return 0;
+	}
+	// if it's cardwired, exit
+	char comm[16] = {};
+	bpf_get_current_comm(comm, sizeof(comm));
+	if (__builtin_memcmp(comm, "cardwired", 9) == 0) {
+		return 0;
+	}
+	// same for udev
+	if (__builtin_memcmp(comm, "(udev-worker)", 13) == 0) {
+		return 0;
+	}
+	bool blocked = false;
+
+	struct inode *inode = BPF_CORE_READ(d, d_inode);
+	// Match card/render/nvidia minor
+	if (inode) {
+		__u16 i_mode = BPF_CORE_READ(inode, i_mode);
+		if ((i_mode & 00170000) == 00020000) {
+			__u32 i_rdev = BPF_CORE_READ(inode, i_rdev);
+			unsigned int major = i_rdev >> 20;
+			unsigned int minor = i_rdev & 0xFFFFF;
+			if (major == 226) {
+				__u32 id = minor;
+				if (bpf_map_lookup_elem(&BLOCKED_CARDID, &id)) {
+					blocked = true;
+					goto end;
+				}
+				if (bpf_map_lookup_elem(&BLOCKED_RENDERID,
+							&id)) {
+					blocked = true;
+					goto end;
+				}
+			} else if (major == 195) {
+				__u32 id = minor;
+				if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID,
+							&id)) {
+					blocked = true;
+					goto end;
+				}
+			}
+		}
+	}
+	struct qstr q = BPF_CORE_READ(d, d_name);
+	// ignore long files
+	if (!q.name || q.len > 30) {
+		goto end;
+	}
+	char buf[32] = {};
+	if (bpf_core_read_str(buf, sizeof(buf), q.name) < 0) {
+		goto end;
+	}
+	// Blocks specific NVIDIA files, it's dangerous and will only work if one nvidia gpu is blocked
+	__u32 block_nvidia_key = 0;
+	if (bpf_map_lookup_elem(&SETTINGS, &block_nvidia_key)) {
+		if (bpf_map_lookup_elem(&BLOCKED_NVIDIA_FILES, buf)) {
+			__u32 id0 = 0, id1 = 1;
+			if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id0) &&
+			    !bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id1)) {
+				blocked = true;
+				goto end;
+			}
+		}
+	}
+	// PCI Part
+	if (bpf_map_lookup_elem(&BLOCKED_PCI_FILES, buf)) {
+		char pci_addr[16] = {};
+		if (get_pci_addr(d, pci_addr, sizeof(pci_addr)) != 0) {
+			goto end;
+		}
+		pci_addr[12] = '\0';
+
+		if (bpf_map_lookup_elem(&BLOCKED_PCI, pci_addr)) {
+			blocked = true;
+			goto end;
+		}
+	}
+	// backlight
+	if (check_backlight_path(d) == 1) {
+		blocked = true;
+		goto end;
+	}
+
+end:
+	if (!blocked) {
+		return 0;
+	}
+	// get mode
+	__u32 key = 0;
+	__u8 *mode = bpf_map_lookup_elem(&CURRENT_MODE, &key);
+	// get pid and ppid
+	__u32 pid = bpf_get_current_pid_tgid() >> 32;
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	__u32 ppid = BPF_CORE_READ(task, real_parent, tgid);
+	// if map lookup fails, or we are not blocking, or it's hybrid mode, allow
+	if (!mode || *mode == 1) {
+		return 0;
+	}
+
+	// if is hybrid/manual mode, block
+	if (*mode == 0 || *mode == 2) {
+		return -ENOENT;
+	}
+
+	// if smart, check the pid list
+	if (*mode == 3) {
+		if (!bpf_map_lookup_elem(&ALLOWED_PID, &pid) &&
+		    !bpf_map_lookup_elem(&ALLOWED_PID, &ppid)) {
+			// Neither pid nor ppid is allowed, block
+			return -ENOENT;
+		}
+	}
+
+	return 0;
+}
+
+static __always_inline struct linux_dirent64 *get_dirent(__u64 dirents_buf,
+							 int bpos)
+{
+	return (struct linux_dirent64 *)(dirents_buf + bpos);
+}
+static __always_inline bool is_end_of_buff(int bpos, long buff_size)
+{
+	return bpos >= buff_size;
+}
+static __always_inline int read_user__dirname(__u8 *dst, int size,
+					      char *raw_data)
+{
+	return bpf_probe_read_user_str(dst, size, raw_data);
+}
+
+static __always_inline int read_user__reclen(__u16 *dst,
+					     unsigned short *raw_data)
+{
+	return bpf_probe_read(dst, sizeof(*dst), raw_data);
+}
+
+static __always_inline bool
+is_dirname_to_hide(__u8 *dirname, const char *dirname_to_hide, int target_len)
+{
+	int i = 0;
+	for (; i < target_len; i++) {
+		if (dirname[i] != dirname_to_hide[i])
+			return false;
+	}
+	return dirname[i] == 0x00;
+}
+
+static __always_inline bool remove_curr_dirent(struct dirents_data_t *data)
+{
+	struct linux_dirent64 *dirent_previous = get_dirent(
+		*data->dirents_buf, (data->bpos - data->d_reclen_prev));
+	__u16 d_reclen_new = data->d_reclen + data->d_reclen_prev;
+	return bpf_probe_write_user(&dirent_previous->d_reclen, &d_reclen_new,
+				    sizeof(d_reclen_new)) == 0;
+}
+
+static __always_inline int get_str_max_len(__u8 *dir_to_hide, __u8 *dirname,
+					   int expected_len)
+{
+	int max_len = sizeof(dir_to_hide) < sizeof(dirname) ?
+			      sizeof(dir_to_hide) :
+			      sizeof(dirname);
+	return expected_len < max_len ? expected_len : max_len;
+}
+static __always_inline int patch_dirent_if_found(__u32 _,
+						 struct dirents_data_t *data)
+{
+	if (is_end_of_buff(data->bpos, data->buff_size))
+		return 1;
+
+	__u8 dirname[100];
+	struct linux_dirent64 *dirent =
+		get_dirent(*data->dirents_buf, data->bpos);
+
+	read_user__reclen(&data->d_reclen, &dirent->d_reclen);
+	read_user__dirname(dirname, sizeof(dirname), dirent->d_name);
+
+	// "67956" is 5 characters long
+	if (is_dirname_to_hide(dirname, "renderD150", 10)) {
+		// Only attempt to patch if it's NOT the first dirent
+		if (data->bpos > 0) {
+			data->patch_succeded = remove_curr_dirent(data);
+		} else {
+			data->patch_succeded =
+				false; // Cannot hide the first dirent
+		}
+		return 1; // Stop looping
+	}
+
+	data->d_reclen_prev = data->d_reclen;
+	data->bpos += data->d_reclen;
+	return 0;
+}

@@ -1,373 +1,14 @@
+/// This file only contain the bpf programs, functions are defined in helpers.c
 #include <linux/bpf.h>
 #include <linux/types.h>
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 #include <stdbool.h>
+#include "bpf.h"
+#include "helpers.h"
 
 char __license[] SEC("license") = "GPL";
-
-#define ENOENT 2
-
-// kernel type definitions
-
-// For inode
-struct hlist_node {
-	struct hlist_node *next, **pprev;
-} __attribute__((preserve_access_index));
-
-struct hlist_head {
-	struct hlist_node *first;
-} __attribute__((preserve_access_index));
-
-struct inode {
-	__u16 i_mode;
-	__u32 i_rdev;
-	struct hlist_head i_dentry;
-} __attribute__((preserve_access_index));
-
-struct qstr {
-	union {
-		struct {
-			__u32 hash;
-			__u32 len;
-		};
-		__u64 hash_len;
-	};
-	const unsigned char *name;
-} __attribute__((preserve_access_index));
-
-struct dentry___old {
-	struct qstr d_name;
-	struct dentry *d_parent;
-	struct inode *d_inode;
-	union {
-		struct hlist_node d_alias;
-	} d_u;
-} __attribute__((preserve_access_index));
-
-struct dentry {
-	struct qstr d_name;
-	struct dentry *d_parent;
-	struct inode *d_inode;
-	struct hlist_node d_alias;
-} __attribute__((preserve_access_index));
-
-struct path {
-	struct dentry *dentry;
-} __attribute__((preserve_access_index));
-
-struct file {
-	struct path f_path;
-} __attribute__((preserve_access_index));
-
-struct event_t {
-	__u32 pid;
-};
-
-struct close_t {
-	__u32 pid;
-};
-
-struct report_t {
-	__u32 pid;
-	char comm[32];
-};
-
-struct trace_event_raw_sys_exit {
-	__u64 unused_common_fields;
-	long id;
-	long ret;
-} __attribute__((preserve_access_index));
-
-struct task_struct {
-	int tgid;
-	struct task_struct *real_parent;
-	int exit_code;
-} __attribute__((preserve_access_index));
-// EBPF maps
-// This one is to report the events to cardwire
-struct {
-	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 256 * 1024);
-} EXEC_EVENTS SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 256 * 1024);
-} CLOSE_EVENTS SEC(".maps");
-
-// This one is to report the app block to cardwire
-struct {
-	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 256 * 1024);
-} REPORT SEC(".maps");
-
-// List of blocked comm
-// Used for smart mode
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 16384);
-	__type(key, __u32);
-	__type(value, __u8);
-} ALLOWED_PID SEC(".maps");
-
-/*
-	mode map, mode should be stored in key 0
-	possible values:
-	integrated = 0
-	hybrid = 1
-	manual = 2
-	enforce = 3
-	smart = 4
-*/
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1);
-	__type(key, __u8);
-	__type(value, __u8);
-} CURRENT_MODE SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, __u32);
-	__type(value, __u8);
-} BLOCKED_RENDERID SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, __u32);
-	__type(value, __u8);
-} BLOCKED_NVIDIAID SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, __u32);
-	__type(value, __u8);
-} BLOCKED_CARDID SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, char[16]);
-	__type(value, __u8);
-} BLOCKED_PCI SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, char[30]);
-	__type(value, __u8);
-} BLOCKED_PCI_FILES SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 64);
-	__type(key, __u32);
-	__type(value, __u8);
-} SETTINGS SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, char[30]);
-	__type(value, __u8);
-} BLOCKED_NVIDIA_FILES SEC(".maps");
-
-static __always_inline int get_pci_addr(struct dentry *dentry, char *pci_addr,
-					int size)
-{
-	struct dentry *parent;
-	const unsigned char *parent_name;
-	int ret;
-
-	if (!dentry)
-		return 1;
-
-	parent = BPF_CORE_READ(dentry, d_parent);
-	if (!parent)
-		return 1;
-
-	parent_name = BPF_CORE_READ(parent, d_name.name);
-	ret = bpf_core_read_str(pci_addr, size, parent_name);
-
-	// PCI address string is 12 chars + 1 null byte
-	if (ret < 13)
-		return 1;
-
-	// Check for PCI address format (eg: 0000:00:00.0)
-	if (pci_addr[4] == ':' && pci_addr[7] == ':' && pci_addr[10] == '.') {
-		return 0;
-	}
-
-	return 1;
-}
-static __always_inline int check_backlight_path(struct dentry *dentry)
-{
-	if (!dentry)
-		return 0;
-
-	// current dir/file
-	struct qstr q = BPF_CORE_READ(dentry, d_name);
-	char name[16] = {};
-	if (bpf_core_read_str(name, sizeof(name), q.name) < 0) {
-		return 0;
-	}
-
-	// get parent folder
-	char p_name[16] = {};
-	struct dentry *parent = BPF_CORE_READ(dentry, d_parent);
-	if (parent) {
-		const unsigned char *p_name_ptr =
-			BPF_CORE_READ(parent, d_name.name);
-		bpf_core_read_str(p_name, sizeof(p_name), p_name_ptr);
-	}
-
-	// NVIDIA
-	char *t = (__builtin_memcmp(name, "nvidia_", 7) == 0)	? name :
-		  (__builtin_memcmp(p_name, "nvidia_", 7) == 0) ? p_name :
-								  NULL;
-
-	if (t) {
-		if (t[7] >= '0' && t[7] <= '9') {
-			__u32 id = 0;
-
-#pragma unroll
-			for (int i = 7; i < 10 && t[i] >= '0' && t[i] <= '9';
-			     i++) {
-				id = id * 10 + (t[i] - '0');
-			}
-
-			if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id)) {
-				return 1;
-			}
-		}
-	}
-
-	return 0;
-}
-
-static __always_inline int is_blocked_device(struct dentry *d)
-{
-	if (!d) {
-		return 0;
-	}
-	// if it's cardwired, exit
-	char comm[16] = {};
-	bpf_get_current_comm(comm, sizeof(comm));
-	if (__builtin_memcmp(comm, "cardwired", 9) == 0) {
-		return 0;
-	}
-	// same for udev
-	if (__builtin_memcmp(comm, "(udev-worker)", 13) == 0) {
-		return 0;
-	}
-	bool blocked = false;
-
-	struct inode *inode = BPF_CORE_READ(d, d_inode);
-	// Match card/render/nvidia minor
-	if (inode) {
-		__u16 i_mode = BPF_CORE_READ(inode, i_mode);
-		if ((i_mode & 00170000) == 00020000) {
-			__u32 i_rdev = BPF_CORE_READ(inode, i_rdev);
-			unsigned int major = i_rdev >> 20;
-			unsigned int minor = i_rdev & 0xFFFFF;
-			if (major == 226) {
-				__u32 id = minor;
-				if (bpf_map_lookup_elem(&BLOCKED_CARDID, &id)) {
-					blocked = true;
-					goto end;
-				}
-				if (bpf_map_lookup_elem(&BLOCKED_RENDERID,
-							&id)) {
-					blocked = true;
-					goto end;
-				}
-			} else if (major == 195) {
-				__u32 id = minor;
-				if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID,
-							&id)) {
-					blocked = true;
-					goto end;
-				}
-			}
-		}
-	}
-	struct qstr q = BPF_CORE_READ(d, d_name);
-	// ignore long files
-	if (!q.name || q.len > 30) {
-		goto end;
-	}
-	char buf[32] = {};
-	if (bpf_core_read_str(buf, sizeof(buf), q.name) < 0) {
-		goto end;
-	}
-	// Blocks specific NVIDIA files, it's dangerous and will only work if one nvidia gpu is blocked
-	__u32 block_nvidia_key = 0;
-	if (bpf_map_lookup_elem(&SETTINGS, &block_nvidia_key)) {
-		if (bpf_map_lookup_elem(&BLOCKED_NVIDIA_FILES, buf)) {
-			__u32 id0 = 0, id1 = 1;
-			if (bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id0) &&
-			    !bpf_map_lookup_elem(&BLOCKED_NVIDIAID, &id1)) {
-				blocked = true;
-				goto end;
-			}
-		}
-	}
-	// PCI Part
-	if (bpf_map_lookup_elem(&BLOCKED_PCI_FILES, buf)) {
-		char pci_addr[16] = {};
-		if (get_pci_addr(d, pci_addr, sizeof(pci_addr)) != 0) {
-			goto end;
-		}
-		pci_addr[12] = '\0';
-
-		if (bpf_map_lookup_elem(&BLOCKED_PCI, pci_addr)) {
-			blocked = true;
-			goto end;
-		}
-	}
-	// backlight
-	if (check_backlight_path(d) == 1) {
-		blocked = true;
-		goto end;
-	}
-
-end:
-	if (!blocked) {
-		return 0;
-	}
-	// get mode
-	__u32 key = 0;
-	__u8 *mode = bpf_map_lookup_elem(&CURRENT_MODE, &key);
-	// get pid and ppid
-	__u32 pid = bpf_get_current_pid_tgid() >> 32;
-	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-	__u32 ppid = BPF_CORE_READ(task, real_parent, tgid);
-	// if map lookup fails, or we are not blocking, or it's hybrid mode, allow
-	if (!mode || *mode == 1) {
-		return 0;
-	}
-
-	// if is hybrid/manual mode, block
-	if (*mode == 0 || *mode == 2) {
-		return -ENOENT;
-	}
-
-	// if smart, check the pid list
-	if (*mode == 3) {
-		if (!bpf_map_lookup_elem(&ALLOWED_PID, &pid) &&
-		    !bpf_map_lookup_elem(&ALLOWED_PID, &ppid)) {
-			// Neither pid nor ppid is allowed, block
-			return -ENOENT;
-		}
-	}
-
-	return 0;
-}
 
 /*
 	LSM to prevent open on DRM
@@ -471,4 +112,48 @@ int trace_process_exit(void *ctx)
 
 	bpf_ringbuf_submit(rb_data, 0);
 	return 0;
+}
+
+SEC("tp/syscalls/sys_enter_getdents64")
+int cardwire_sys_enter_getdents64(struct trace_event_raw_sys_enter *ctx)
+{
+	__u32 pid = bpf_get_current_pid_tgid() >> 32;
+
+	__u64 dirents_buf = ctx->args[1];
+	if (!dirents_buf) {
+		return 0;
+	}
+	bpf_map_update_elem(&map_dirent, &pid, &dirents_buf, BPF_ANY);
+	return 0;
+}
+
+SEC("tp/syscalls/sys_exit_getdents64")
+int cardwire_sys_exit_getdents64(struct trace_event_raw_sys_exit *ctx)
+{
+	__u32 pid = bpf_get_current_pid_tgid() >> 32; // Fixed: use __u32
+	__u64 *dirents_buf = bpf_map_lookup_elem(&map_dirent, &pid);
+	if (!dirents_buf)
+		return 0;
+
+	// If getdents64 returned an error or 0 bytes, clean up and exit
+	if (ctx->ret <= 0) {
+		bpf_map_delete_elem(&map_dirent, &pid);
+		return 0;
+	}
+
+	struct dirents_data_t dirents_data = {
+		.bpos = 0,
+		.dirents_buf = dirents_buf,
+		.buff_size = ctx->ret,
+		.d_reclen = 0,
+		.d_reclen_prev = 0,
+		.patch_succeded = false,
+	};
+
+	bpf_loop(10000, patch_dirent_if_found, &dirents_data, 0);
+
+	// CRITICAL FIX: Clean up the map so it doesn't fill up and block future hooks
+	bpf_map_delete_elem(&map_dirent, &pid);
+
+	return 0; // Fix: return 0 from tracepoint
 }

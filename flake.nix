@@ -59,6 +59,7 @@
             (toolchainFor system)
             (pkgs system).clang
             (pkgs system).libbpf
+            (pkgs system).bpftools
             (pkgs system).udev
             (pkgs system).pkg-config
             (pkgs system).mdbook

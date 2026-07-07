@@ -82,6 +82,34 @@ impl EbpfBlocker {
         close_program
             .attach("sched", "sched_process_exit")
             .map_err(CardwireEbpfError::aya)?;
+        // to hide files
+        let cardwire_sys_enter_getdents64: &mut TracePoint = ebpf
+            .program_mut("cardwire_sys_enter_getdents64")
+            .ok_or_else(|| CardwireEbpfError::missing_lsm("cardwire_sys_enter_getdents64"))?
+            .try_into()
+            .map_err(CardwireEbpfError::aya)?;
+
+        cardwire_sys_enter_getdents64
+            .load()
+            .map_err(CardwireEbpfError::aya)?;
+
+        cardwire_sys_enter_getdents64
+            .attach("syscalls", "sys_enter_getdents64")
+            .map_err(CardwireEbpfError::aya)?;
+        // to hide files
+        let cardwire_sys_exit_getdents64: &mut TracePoint = ebpf
+            .program_mut("cardwire_sys_exit_getdents64")
+            .ok_or_else(|| CardwireEbpfError::missing_lsm("cardwire_sys_exit_getdents64"))?
+            .try_into()
+            .map_err(CardwireEbpfError::aya)?;
+
+        cardwire_sys_exit_getdents64
+            .load()
+            .map_err(CardwireEbpfError::aya)?;
+
+        cardwire_sys_exit_getdents64
+            .attach("syscalls", "sys_exit_getdents64")
+            .map_err(CardwireEbpfError::aya)?;
         Ok(Self { ebpf })
     }
 
