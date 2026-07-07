@@ -63,7 +63,7 @@ jobs:
       checks: write
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config gcc-multilib
       - uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
@@ -85,7 +85,7 @@ jobs:
       pull-requests: write
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: dtolnay/rust-toolchain@nightly # Nightly
         with:
           toolchain: nightly
@@ -103,7 +103,7 @@ jobs:
     needs: [prepare]
     if: needs.prepare.outputs.run_c_checks == 'true'
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
       - run: clang-format --dry-run --Werror -i ./crates/cardwire-ebpf/src/bpf.c
