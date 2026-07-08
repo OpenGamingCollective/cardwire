@@ -1,3 +1,15 @@
+# Troubleshooting
+
+## Name is not activable/cli not working
+
+Is the daemon running?
+
+```bash
+systemctl status cardwired.service
+```
+
+> If it's not running, enable the daemon with `systemctl enable cardwired.service` and reboot your device.
+
 ## dGPU is detected as the default gpu
 
 ### On ROG laptop
