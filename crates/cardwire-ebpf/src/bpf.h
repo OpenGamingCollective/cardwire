@@ -16,6 +16,7 @@ struct hlist_head {
 struct inode {
 	__u16 i_mode;
 	__u32 i_rdev;
+	__u64 i_ino;
 	struct hlist_head i_dentry;
 } __attribute__((preserve_access_index));
 
@@ -56,11 +57,10 @@ struct file {
 
 struct dirents_data_t {
 	__u32 bpos;
-	__u64 *dirents_buf;
+	__u64 dirents_buf;
 	long buff_size;
 	__u16 d_reclen;
-	__u16 d_reclen_prev;
-	bool patch_succeded;
+	__u32 last_visible_bpos;
 };
 
 struct linux_dirent64 {

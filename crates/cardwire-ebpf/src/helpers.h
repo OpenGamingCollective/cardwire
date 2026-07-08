@@ -91,6 +91,10 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	struct inode *inode = BPF_CORE_READ(d, d_inode);
 	// Match card/render/nvidia minor
 	if (inode) {
+		__u64 d_ino = BPF_CORE_READ(inode, i_ino);
+		if (d_ino && d_ino == 431) {
+			bpf_printk("found this number: %d", d_ino);
+		}
 		__u16 i_mode = BPF_CORE_READ(inode, i_mode);
 		if ((i_mode & 00170000) == 00020000) {
 			__u32 i_rdev = BPF_CORE_READ(inode, i_rdev);
@@ -190,29 +194,9 @@ end:
 	return 0;
 }
 
-static __always_inline struct linux_dirent64 *get_dirent(__u64 dirents_buf,
-							 int bpos)
-{
-	return (struct linux_dirent64 *)(dirents_buf + bpos);
-}
-static __always_inline bool is_end_of_buff(int bpos, long buff_size)
-{
-	return bpos >= buff_size;
-}
-static __always_inline int read_user__dirname(__u8 *dst, int size,
-					      char *raw_data)
-{
-	return bpf_probe_read_user_str(dst, size, raw_data);
-}
-
-static __always_inline int read_user__reclen(__u16 *dst,
-					     unsigned short *raw_data)
-{
-	return bpf_probe_read(dst, sizeof(*dst), raw_data);
-}
-
-static __always_inline bool
-is_dirname_to_hide(__u8 *dirname, const char *dirname_to_hide, int target_len)
+static __always_inline bool is_dirname_to_hide(const char *dirname,
+					       const char *dirname_to_hide,
+					       int target_len)
 {
 	int i = 0;
 	for (; i < target_len; i++) {
@@ -222,49 +206,54 @@ is_dirname_to_hide(__u8 *dirname, const char *dirname_to_hide, int target_len)
 	return dirname[i] == 0x00;
 }
 
-static __always_inline bool remove_curr_dirent(struct dirents_data_t *data)
-{
-	struct linux_dirent64 *dirent_previous = get_dirent(
-		*data->dirents_buf, (data->bpos - data->d_reclen_prev));
-	__u16 d_reclen_new = data->d_reclen + data->d_reclen_prev;
-	return bpf_probe_write_user(&dirent_previous->d_reclen, &d_reclen_new,
-				    sizeof(d_reclen_new)) == 0;
-}
-
-static __always_inline int get_str_max_len(__u8 *dir_to_hide, __u8 *dirname,
-					   int expected_len)
-{
-	int max_len = sizeof(dir_to_hide) < sizeof(dirname) ?
-			      sizeof(dir_to_hide) :
-			      sizeof(dirname);
-	return expected_len < max_len ? expected_len : max_len;
-}
 static __always_inline int patch_dirent_if_found(__u32 _,
 						 struct dirents_data_t *data)
 {
-	if (is_end_of_buff(data->bpos, data->buff_size))
-		return 1;
-
-	__u8 dirname[100];
-	struct linux_dirent64 *dirent =
-		get_dirent(*data->dirents_buf, data->bpos);
-
-	read_user__reclen(&data->d_reclen, &dirent->d_reclen);
-	read_user__dirname(dirname, sizeof(dirname), dirent->d_name);
-
-	// "67956" is 5 characters long
-	if (is_dirname_to_hide(dirname, "renderD150", 10)) {
-		// Only attempt to patch if it's NOT the first dirent
-		if (data->bpos > 0) {
-			data->patch_succeded = remove_curr_dirent(data);
-		} else {
-			data->patch_succeded =
-				false; // Cannot hide the first dirent
-		}
-		return 1; // Stop looping
+	// Check if we reached the end of the buffer
+	if (data->bpos >= data->buff_size) {
+		return 1; // 1 = stop loop
 	}
 
-	data->d_reclen_prev = data->d_reclen;
+	// Get the current directory entry
+	struct linux_dirent64 *dirent =
+		(struct linux_dirent64 *)(data->dirents_buf + data->bpos);
+	__u64 d_inode = 0;
+	bpf_probe_read(&d_inode, sizeof(d_inode), &dirent->d_ino);
+	if (!d_inode)
+		return 0;
+	bpf_probe_read(&data->d_reclen, sizeof(data->d_reclen),
+		       &dirent->d_reclen);
+
+	//Read the name of this entry
+	char dirname[64] = {};
+	bpf_probe_read_user_str(dirname, sizeof(dirname), dirent->d_name);
+
+	// Check if this is a file we want to hide
+	if (d_inode == 431) {
+		if (data->last_visible_bpos != 0xFFFFFFFF) {
+			struct linux_dirent64 *visible_dirent =
+				(struct linux_dirent64
+					 *)(data->dirents_buf +
+					    data->last_visible_bpos);
+			__u16 visible_reclen;
+			bpf_printk("blocking %s with inode %d", dirname,
+				   d_inode);
+			bpf_probe_read(&visible_reclen, sizeof(visible_reclen),
+				       &visible_dirent->d_reclen);
+
+			__u16 new_reclen = visible_reclen + data->d_reclen;
+
+			// Overwrite the visible file's length so it skips over the hidden file
+			bpf_probe_write_user(&visible_dirent->d_reclen,
+					     &new_reclen, sizeof(new_reclen));
+		}
+
+		data->bpos += data->d_reclen;
+		return 0; // Continue loop
+	}
+
+	// Not a hidden file, update last_visible_bpos and advance
+	data->last_visible_bpos = data->bpos;
 	data->bpos += data->d_reclen;
-	return 0;
+	return 0; // Continue loop
 }

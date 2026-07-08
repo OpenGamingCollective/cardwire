@@ -118,11 +118,12 @@ SEC("tp/syscalls/sys_enter_getdents64")
 int cardwire_sys_enter_getdents64(struct trace_event_raw_sys_enter *ctx)
 {
 	__u32 pid = bpf_get_current_pid_tgid() >> 32;
-
+	// Get the memory address of the buffer where the list of entry will be stored
 	__u64 dirents_buf = ctx->args[1];
 	if (!dirents_buf) {
 		return 0;
 	}
+	// Save addr into map
 	bpf_map_update_elem(&map_dirent, &pid, &dirents_buf, BPF_ANY);
 	return 0;
 }
@@ -130,30 +131,30 @@ int cardwire_sys_enter_getdents64(struct trace_event_raw_sys_enter *ctx)
 SEC("tp/syscalls/sys_exit_getdents64")
 int cardwire_sys_exit_getdents64(struct trace_event_raw_sys_exit *ctx)
 {
-	__u32 pid = bpf_get_current_pid_tgid() >> 32; // Fixed: use __u32
+	__u32 pid = bpf_get_current_pid_tgid() >> 32;
 	__u64 *dirents_buf = bpf_map_lookup_elem(&map_dirent, &pid);
+
 	if (!dirents_buf)
 		return 0;
 
-	// If getdents64 returned an error or 0 bytes, clean up and exit
+	// Clean up the map immediately so it doesn't fill up
+	bpf_map_delete_elem(&map_dirent, &pid);
+
+	// If getdents64 return 0 bytes
 	if (ctx->ret <= 0) {
-		bpf_map_delete_elem(&map_dirent, &pid);
 		return 0;
 	}
 
 	struct dirents_data_t dirents_data = {
 		.bpos = 0,
-		.dirents_buf = dirents_buf,
+		.dirents_buf = *dirents_buf,
 		.buff_size = ctx->ret,
 		.d_reclen = 0,
-		.d_reclen_prev = 0,
-		.patch_succeded = false,
+		.last_visible_bpos = 0xFFFFFFFF,
 	};
 
+	// Run the loop
 	bpf_loop(10000, patch_dirent_if_found, &dirents_data, 0);
 
-	// CRITICAL FIX: Clean up the map so it doesn't fill up and block future hooks
-	bpf_map_delete_elem(&map_dirent, &pid);
-
-	return 0; // Fix: return 0 from tracepoint
+	return 0;
 }
