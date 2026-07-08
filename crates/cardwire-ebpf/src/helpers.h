@@ -48,8 +48,9 @@ static __always_inline int is_process_whitelisted()
 	bpf_get_current_comm(comm, sizeof(comm));
 	// whitelist udev for pci hotplug
 	if (__builtin_memcmp(comm, "(udev-worker)", 13) == 0) {
-		return 0;
+		return true;
 	}
+	return false;
 }
 
 /// check if the pid is in the allow list, smart mode only

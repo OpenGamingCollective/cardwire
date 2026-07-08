@@ -137,8 +137,7 @@ struct {
 	integrated = 0
 	hybrid = 1
 	manual = 2
-	enforce = 3
-	smart = 4
+	smart = 3
 */
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
