@@ -88,7 +88,7 @@ impl ModeInterface {
         })
     }
 
-    /// set the mode in the CURRENT_MODE's bpf map
+    /// set the mode in the `cardwire_mode` bpf map
     async fn update_mode_bpf_map(&self, mode: Modes) -> fdo::Result<()> {
         let mut mode_map = self.mode_map.lock().await;
         let mode: u32 = Modes::into(mode);

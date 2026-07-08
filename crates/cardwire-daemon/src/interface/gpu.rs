@@ -10,7 +10,7 @@ use crate::{
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
 use cardwire_ebpf::EbpfBlocker;
-use log::{info, warn};
+use log::{error, info, warn};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface, object_server::SignalEmitter};
 
@@ -60,11 +60,17 @@ impl GpuInterface {
         // First block the card id
         match card_to_inode(*self.device.card()) {
             Ok(inode) => blocker.block_inode(inode).into_fdo()?,
-            Err(err) => return Err(err).into_fdo(),
+            Err(err) => {
+                error!("failed to block card{}: {}", *self.device.card(), err);
+                return Err(err).into_fdo();
+            }
         };
         match render_to_inode(*self.device.render()) {
             Ok(inode) => blocker.block_inode(inode).into_fdo()?,
-            Err(err) => return Err(err).into_fdo(),
+            Err(err) => {
+                error!("failed to block render{}: {}", *self.device.render(), err);
+                return Err(err).into_fdo();
+            }
         };
         match pci_to_inode(
             self.device.pci.pci_address().to_string(),
@@ -73,10 +79,20 @@ impl GpuInterface {
         ) {
             Ok(inodes) => {
                 for inode in inodes {
-                    blocker.block_inode(inode).into_fdo()?
+                    if let Err(err) = blocker.block_inode(inode) {
+                        error!("failed to block inode(pci) {}: {}", inode, err);
+                        return Err(err).into_fdo();
+                    }
                 }
             }
-            Err(err) => return Err(err).into_fdo(),
+            Err(err) => {
+                error!(
+                    "failed to block pci {}: {}",
+                    self.device.pci.pci_address(),
+                    err
+                );
+                return Err(err).into_fdo();
+            }
         };
         // the last one, block nvidia
         //if self.device.gpu_vendor() == GpuVendor::Nvidia
@@ -131,7 +147,7 @@ impl GpuInterface {
             Ok(inode) => blocker.is_inode_blocked(inode).into_fdo()?,
             Err(err) => return Err(err).into_fdo(),
         };
-        let render = match render_to_inode(*self.device.card()) {
+        let render = match render_to_inode(*self.device.render()) {
             Ok(inode) => blocker.is_inode_blocked(inode).into_fdo()?,
             Err(err) => return Err(err).into_fdo(),
         };

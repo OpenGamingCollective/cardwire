@@ -25,7 +25,10 @@ const BLOCKED_NVIDIA_FILES: &[&str] = &[
 
 pub fn render_to_inode(render: u32) -> Result<u64> {
     let render_path = format!("/dev/dri/renderD{}", render);
-    let metadata = fs::metadata(render_path)?;
+    let metadata = fs::metadata(&render_path).map_err(|e| {
+        warn!("failed to get inode for {}: {}", render_path, e);
+        e
+    })?;
     let inode = metadata.ino();
 
     Ok(inode)
@@ -33,7 +36,10 @@ pub fn render_to_inode(render: u32) -> Result<u64> {
 
 pub fn card_to_inode(card: u32) -> Result<u64> {
     let card_path = format!("/dev/dri/card{}", card);
-    let metadata = fs::metadata(card_path)?;
+    let metadata = fs::metadata(&card_path).map_err(|e| {
+        warn!("failed to get inode for {}: {}", card_path, e);
+        e
+    })?;
     let inode = metadata.ino();
 
     Ok(inode)
@@ -94,7 +100,10 @@ pub fn pci_to_inode(
 /// Used to verify the block status of a single pci
 pub fn single_pci_to_inode(pci: &str) -> Result<u64> {
     let pci_path = format!("/sys/bus/pci/devices/{}", pci);
-    let metadata = fs::metadata(&pci_path)?;
+    let metadata = fs::metadata(&pci_path).map_err(|e| {
+        warn!("failed to get inode for {}: {}", pci_path, e);
+        e
+    })?;
     let inode = metadata.ino();
 
     Ok(inode)
@@ -102,7 +111,13 @@ pub fn single_pci_to_inode(pci: &str) -> Result<u64> {
 
 fn nvidia_to_inode(nvidia_minor: u32) -> Result<u64> {
     let nvidia_path = format!("/dev/nvidia{}", nvidia_minor);
-    let inode = File::open(nvidia_path)?.metadata()?.ino();
+    let inode = File::open(&nvidia_path)
+        .map_err(|e| {
+            warn!("failed to get inode for {}: {}", nvidia_path, e);
+            e
+        })?
+        .metadata()?
+        .ino();
 
     Ok(inode)
 }

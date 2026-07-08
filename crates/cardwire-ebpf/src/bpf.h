@@ -145,28 +145,28 @@ struct {
 	__uint(max_entries, 1);
 	__type(key, __u8);
 	__type(value, __u8);
-} CURRENT_MODE SEC(".maps");
+} cardwire_mode SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 2048);
 	__type(key, __u64);
 	__type(value, __u8);
-} BLOCKED_INODES SEC(".maps");
+} cardwire_blocked_inodes SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 64);
-	__type(key, __u32);
+	__type(key, __u8);
 	__type(value, __u8);
-} SETTINGS SEC(".maps");
+} cardwire_settings SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 1);
 	__type(key, __u8);
 	__type(value, __u32);
-} CARDWIRE_PID SEC(".maps");
+} cardwire_daemon_pid SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);

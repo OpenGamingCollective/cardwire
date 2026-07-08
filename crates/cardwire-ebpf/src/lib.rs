@@ -5,6 +5,11 @@ pub use crate::errors::{CardwireEbpfError, CardwireEbpfResult};
 use aya::{
     Btf, Ebpf, maps::{HashMap, MapError, RingBuf}, programs::{Lsm, TracePoint}
 };
+
+pub enum EbpfSettings {
+    ExperimentalNvidia,
+}
+
 pub struct EbpfBlocker {
     ebpf: Ebpf,
 }
@@ -92,8 +97,8 @@ impl EbpfBlocker {
     pub fn whitelist_cardwire_pid(&mut self, pid: u32) -> CardwireEbpfResult<()> {
         let mut inode_map: HashMap<_, u8, u32> = HashMap::try_from(
             self.ebpf
-                .map_mut("CARDWIRE_PID")
-                .ok_or_else(|| CardwireEbpfError::missing_map("CARDWIRE_PID"))?,
+                .map_mut("cardwire_daemon_pid")
+                .ok_or_else(|| CardwireEbpfError::missing_map("cardwire_daemon_pid"))?,
         )
         .map_err(CardwireEbpfError::aya)?;
         inode_map
@@ -115,11 +120,10 @@ impl EbpfBlocker {
         // Also insert hardcoded values for now
         let mut inode_map: HashMap<_, u64, u8> = HashMap::try_from(
             self.ebpf
-                .map_mut("BLOCKED_INODES")
-                .ok_or_else(|| CardwireEbpfError::missing_map("BLOCKED_INODES"))?,
+                .map_mut("cardwire_blocked_inodes")
+                .ok_or_else(|| CardwireEbpfError::missing_map("cardwire_blocked_inodes"))?,
         )
         .map_err(CardwireEbpfError::aya)?;
-        println!("adding {} to map", inode);
         inode_map
             .insert(inode, 1, 0)
             .map_err(CardwireEbpfError::aya)?;
@@ -129,27 +133,47 @@ impl EbpfBlocker {
         // Also insert hardcoded values for now
         let mut inode_map: HashMap<_, u64, u8> = HashMap::try_from(
             self.ebpf
-                .map_mut("BLOCKED_INODES")
-                .ok_or_else(|| CardwireEbpfError::missing_map("BLOCKED_INODES"))?,
+                .map_mut("cardwire_blocked_inodes")
+                .ok_or_else(|| CardwireEbpfError::missing_map("cardwire_blocked_inodes"))?,
         )
         .map_err(CardwireEbpfError::aya)?;
-        inode_map.remove(&inode).map_err(CardwireEbpfError::aya)?;
-        Ok(())
+        match inode_map.get(&inode, 0) {
+            // Ok = key found, remove
+            Ok(_) => inode_map.remove(&inode).map_err(CardwireEbpfError::aya),
+            // key not found, skip
+            Err(MapError::KeyNotFound) => Ok(()),
+            Err(err) => Err(CardwireEbpfError::aya(err)),
+        }
     }
 
     pub fn is_inode_blocked(&self, inode: u64) -> CardwireEbpfResult<bool> {
         // Also insert hardcoded values for now
         let inode_map: HashMap<_, u64, u8> = HashMap::try_from(
             self.ebpf
-                .map("BLOCKED_INODES")
-                .ok_or_else(|| CardwireEbpfError::missing_map("BLOCKED_INODES"))?,
+                .map("cardwire_blocked_inodes")
+                .ok_or_else(|| CardwireEbpfError::missing_map("cardwire_blocked_inodes"))?,
         )
         .map_err(CardwireEbpfError::aya)?;
-        return match inode_map.get(&inode, 0) {
+        match inode_map.get(&inode, 0) {
             Ok(_) => Ok(true),
             Err(MapError::KeyNotFound) => Ok(false),
             Err(err) => Err(CardwireEbpfError::aya(err)),
+        }
+    }
+
+    pub fn set_ebpf_setting(&mut self, setting: EbpfSettings, value: u8) -> CardwireEbpfResult<()> {
+        let key: u8 = match setting {
+            EbpfSettings::ExperimentalNvidia => 0,
         };
+        let mut setting_map: HashMap<_, u8, u8> = HashMap::try_from(
+            self.ebpf
+                .map_mut("cardwire_settings")
+                .ok_or_else(|| CardwireEbpfError::missing_map("cardwire_settings"))?,
+        )
+        .map_err(CardwireEbpfError::aya)?;
+        setting_map
+            .insert(&key, value, 0)
+            .map_err(CardwireEbpfError::aya)
     }
 
     pub fn get_exec_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
@@ -168,7 +192,7 @@ impl EbpfBlocker {
         Ok(map)
     }
     pub fn get_mode_map(&mut self) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u8, u8>> {
-        let map = self.ebpf.take_map("CURRENT_MODE").unwrap();
+        let map = self.ebpf.take_map("cardwire_mode").unwrap();
         let map: HashMap<aya::maps::MapData, u8, u8> = HashMap::try_from(map).unwrap();
         Ok(map)
     }
