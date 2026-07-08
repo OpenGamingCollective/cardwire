@@ -18,7 +18,7 @@ const _BLOCKED_PCI_FILES: &[&str] = &[
 ];
 
 /// Files that get blocked when the NVIDIA block is on
-const BLOCKED_NVIDIA_FILES: &[&str] = &[
+const _BLOCKED_NVIDIA_FILES: &[&str] = &[
     "libGLX_nvidia.so.0",
     "nvidia_icd.json",
     "nvidia_icd.x86_64.json",
