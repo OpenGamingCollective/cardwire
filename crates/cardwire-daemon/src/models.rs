@@ -8,7 +8,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use cardwire_ebpf::EbpfBlocker;
-use log::warn;
+use log::{error, warn};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
 use zbus::{
@@ -108,6 +108,14 @@ impl DaemonManager {
             .load(std::sync::atomic::Ordering::Relaxed);
         let mode = self.debug_interface.mode_state.read().await;
         let mut state = self.debug_interface.gpu_state.write().await;
+        let mut blocker = self.debug_interface.blocker.write().await;
+        // Whitelist cardwire pid before starting
+        let pid = std::process::id();
+        if let Err(err) = blocker.whitelist_cardwire_pid(pid) {
+            error!("failed to whitelist cardwire's pid: {}", err);
+            return Err(err.into());
+        };
+        drop(blocker);
 
         let default: bool = state.is_default_state();
         if default {
