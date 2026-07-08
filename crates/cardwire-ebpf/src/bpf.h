@@ -69,14 +69,14 @@ struct linux_dirent64 {
 	short unsigned int d_reclen;
 	unsigned char d_type;
 	char d_name[0];
-};
+} __attribute__((preserve_access_index));
 
 struct trace_event_raw_sys_enter {
 	__u64 unused_common_fields;
 	long id;
 	unsigned long args[6];
 	char __data[0];
-};
+} __attribute__((preserve_access_index));
 
 struct trace_event_raw_sys_exit {
 	__u64 unused_common_fields;
@@ -149,38 +149,10 @@ struct {
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, __u32);
+	__uint(max_entries, 2048);
+	__type(key, __u64);
 	__type(value, __u8);
-} BLOCKED_RENDERID SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, __u32);
-	__type(value, __u8);
-} BLOCKED_NVIDIAID SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, __u32);
-	__type(value, __u8);
-} BLOCKED_CARDID SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, char[16]);
-	__type(value, __u8);
-} BLOCKED_PCI SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, char[30]);
-	__type(value, __u8);
-} BLOCKED_PCI_FILES SEC(".maps");
+} BLOCKED_INODES SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -191,10 +163,10 @@ struct {
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, char[30]);
-	__type(value, __u8);
-} BLOCKED_NVIDIA_FILES SEC(".maps");
+	__uint(max_entries, 1);
+	__type(key, __u8);
+	__type(value, __u32);
+} CARDWIRE_PID SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);

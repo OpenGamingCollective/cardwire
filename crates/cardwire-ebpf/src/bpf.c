@@ -17,6 +17,10 @@ char __license[] SEC("license") = "GPL";
 SEC("lsm/file_open")
 int BPF_PROG(file_open, struct file *file)
 {
+	// If hybrid skip
+	if (is_hybrid())
+		return 0;
+
 	struct dentry *d = BPF_CORE_READ(file, f_path.dentry);
 	return is_blocked_device(d);
 }
@@ -26,6 +30,10 @@ int BPF_PROG(file_open, struct file *file)
 SEC("lsm/inode_permission")
 int BPF_PROG(inode_permission, struct inode *inode, int mask)
 {
+	// If hybrid skip
+	if (is_hybrid())
+		return 0;
+
 	char filename[16] = {};
 	const unsigned char *name_ptr = NULL;
 	/*
@@ -55,6 +63,8 @@ int BPF_PROG(inode_permission, struct inode *inode, int mask)
 SEC("lsm/inode_getattr")
 int BPF_PROG(inode_getattr, const struct path *path)
 {
+	if (is_hybrid())
+		return 0;
 	struct dentry *d = BPF_CORE_READ(path, dentry);
 	return is_blocked_device(d);
 }
@@ -65,16 +75,10 @@ int BPF_PROG(inode_getattr, const struct path *path)
 SEC("tracepoint/sched/sched_process_exec")
 int trace_exec(void *ctx)
 {
-	// get current cardwired mode, key should always be 0
-	__u32 key = 0;
-	__u8 *mode = bpf_map_lookup_elem(&CURRENT_MODE, &key);
-	if (!mode) {
+	// if mode not smart, skip
+	if (!is_smart())
 		return 0;
-	}
-	//if mode is not smart or enforce, skip
-	if (*mode != 3) {
-		return 0;
-	}
+
 	// Init the struct
 	struct event_t *rb_data = {};
 	rb_data = bpf_ringbuf_reserve(&EXEC_EVENTS, sizeof(struct event_t), 0);
@@ -93,16 +97,11 @@ int trace_exec(void *ctx)
 SEC("tracepoint/sched/sched_process_exit")
 int trace_process_exit(void *ctx)
 {
-	// get current cardwired mode, key should always be 0
-	__u32 key = 0;
-	__u8 *mode = bpf_map_lookup_elem(&CURRENT_MODE, &key);
-	if (!mode) {
+	// if mode not smart, skip
+	if (!is_smart())
 		return 0;
-	}
-	//if mode is not smart, skip
-	if (*mode != 3) {
-		return 0;
-	}
+
+	// Now create and send a close event containing the pid to the userspace
 	struct close_t *rb_data = {};
 	rb_data = bpf_ringbuf_reserve(&CLOSE_EVENTS, sizeof(struct close_t), 0);
 	if (!rb_data) {
@@ -117,6 +116,11 @@ int trace_process_exit(void *ctx)
 SEC("tp/syscalls/sys_enter_getdents64")
 int cardwire_sys_enter_getdents64(struct trace_event_raw_sys_enter *ctx)
 {
+	// If hybrid skip
+
+	if (is_hybrid())
+		return 0;
+
 	__u32 pid = bpf_get_current_pid_tgid() >> 32;
 	// Get the memory address of the buffer where the list of entry will be stored
 	__u64 dirents_buf = ctx->args[1];
@@ -131,6 +135,10 @@ int cardwire_sys_enter_getdents64(struct trace_event_raw_sys_enter *ctx)
 SEC("tp/syscalls/sys_exit_getdents64")
 int cardwire_sys_exit_getdents64(struct trace_event_raw_sys_exit *ctx)
 {
+	// If hybrid skip
+	if (is_hybrid())
+		return 0;
+
 	__u32 pid = bpf_get_current_pid_tgid() >> 32;
 	__u64 *dirents_buf = bpf_map_lookup_elem(&map_dirent, &pid);
 

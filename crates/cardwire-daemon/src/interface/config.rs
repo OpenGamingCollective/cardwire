@@ -83,15 +83,16 @@ impl ConfigInterface {
             .store(state, Ordering::Relaxed);
         let mut blocker = self.blocker.write().await;
         // change the value in the ebpf map
-        if state {
-            blocker
-                .block_kind(&state.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)
-                .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
-        } else {
-            blocker
-                .unblock_kind(&state.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)
-                .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
-        }
+        //if state {
+        //    blocker
+        //        .block_kind(&state.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)
+        //        .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
+        //} else {
+        //    blocker
+        //        .unblock_kind(&state.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)
+        //        .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
+        //}
+        Ok(())
     }
     #[zbus(property)]
     pub async fn battery_auto_switch(&self) -> fdo::Result<bool> {

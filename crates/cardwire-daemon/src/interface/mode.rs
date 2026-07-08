@@ -92,6 +92,7 @@ impl ModeInterface {
     async fn update_mode_bpf_map(&self, mode: Modes) -> fdo::Result<()> {
         let mut mode_map = self.mode_map.lock().await;
         let mode: u32 = Modes::into(mode);
+        println!("updating current mode to: {}", mode);
         mode_map
             .insert(0, mode as u8, 0)
             .map_err(|err| fdo::Error::Failed(err.to_string()))
