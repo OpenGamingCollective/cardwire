@@ -1,30 +1,81 @@
+
+static __always_inline int is_hybrid()
+{
+	// get current cardwired mode, key should always be 0
+	__u32 key = 0;
+	__u8 *mode = bpf_map_lookup_elem(&cardwire_mode, &key);
+	if (!mode) {
+		return false;
+	}
+	//if mode is hybrid, return true
+	if (*mode == 1) {
+		return true;
+	}
+	return false;
+}
+
+static __always_inline int is_smart()
+{
+	// get current cardwired mode, key should always be 0
+	__u32 key = 0;
+	__u8 *mode = bpf_map_lookup_elem(&cardwire_mode, &key);
+	if (!mode) {
+		return false;
+	}
+	//if mode is smart, true
+	if (*mode == 3) {
+		return true;
+	}
+	return false;
+}
+
+static __always_inline int is_cardwire_process(__u32 pid)
+{
+	// key 0 contain cardwire pid, if pid/ppid = cardwire's pid then allow
+	__u8 cardwire_key = 0;
+	__u32 *cardwire_pid =
+		bpf_map_lookup_elem(&cardwire_daemon_pid, &cardwire_key);
+	if (cardwire_pid && *cardwire_pid == pid) {
+		return true;
+	}
+	return false;
+}
+
+/// get if the process is whitelisted using comm name
+static __always_inline int is_process_whitelisted()
+{
+	char comm[16] = {};
+	bpf_get_current_comm(comm, sizeof(comm));
+	// whitelist udev for pci hotplug
+	if (__builtin_memcmp(comm, "(udev-worker)", 13) == 0) {
+		return 0;
+	}
+}
+
+/// check if the pid is in the allow list, smart mode only
+static __always_inline int is_pid_allowed(__u32 pid, __u32 ppid)
+{
+	return bpf_map_lookup_elem(&ALLOWED_PID, &pid) ||
+	       bpf_map_lookup_elem(&ALLOWED_PID, &ppid);
+}
+
 static __always_inline int is_blocked_device(struct dentry *d)
 {
 	if (!d) {
-		return 0;
-	}
-	// if it's cardwired, exit
-	char comm[16] = {};
-	bpf_get_current_comm(comm, sizeof(comm));
-	if (__builtin_memcmp(comm, "cardwired", 9) == 0) {
 		return 0;
 	}
 	// get pid and ppid
 	__u32 pid = bpf_get_current_pid_tgid() >> 32;
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	__u32 ppid = BPF_CORE_READ(task, real_parent, tgid);
-	// key 0 contain cardwire pid, if ppid = cardwire allow
-	__u8 cardwire_key = 0;
-	__u32 *cardwire_pid =
-		bpf_map_lookup_elem(&cardwire_daemon_pid, &cardwire_key);
-	if (cardwire_pid && *cardwire_pid == pid) {
-		return 0;
-	}
 
-	// same for udev
-	if (__builtin_memcmp(comm, "(udev-worker)", 13) == 0) {
+	// if it's cardwire skip it
+	if (is_cardwire_process(pid))
 		return 0;
-	}
+	// skip if whitelisted
+	if (is_process_whitelisted())
+		return 0;
+
 	bool blocked = false;
 
 	struct inode *inode = BPF_CORE_READ(d, d_inode);
@@ -115,34 +166,4 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 	data->last_visible_bpos = data->bpos;
 	data->bpos += data->d_reclen;
 	return 0; // Continue loop
-}
-
-static __always_inline int is_hybrid()
-{
-	// get current cardwired mode, key should always be 0
-	__u32 key = 0;
-	__u8 *mode = bpf_map_lookup_elem(&cardwire_mode, &key);
-	if (!mode) {
-		return false;
-	}
-	//if mode is hybrid, return true
-	if (*mode == 1) {
-		return true;
-	}
-	return false;
-}
-
-static __always_inline int is_smart()
-{
-	// get current cardwired mode, key should always be 0
-	__u32 key = 0;
-	__u8 *mode = bpf_map_lookup_elem(&cardwire_mode, &key);
-	if (!mode) {
-		return false;
-	}
-	//if mode is smart, true
-	if (*mode == 3) {
-		return true;
-	}
-	return false;
 }

@@ -117,11 +117,30 @@ SEC("tp/syscalls/sys_enter_getdents64")
 int cardwire_sys_enter_getdents64(struct trace_event_raw_sys_enter *ctx)
 {
 	// If hybrid skip
-
 	if (is_hybrid())
 		return 0;
 
 	__u32 pid = bpf_get_current_pid_tgid() >> 32;
+
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	__u32 ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+	// if it's cardwire skip it
+	if (is_cardwire_process(pid))
+		return 0;
+
+	// skip if whitelisted
+	if (is_process_whitelisted())
+		return 0;
+
+	// if we in smart mode and the pid is allowed, skip
+	if (is_smart()) {
+		if (is_pid_allowed(pid, ppid)) {
+			// if allowed, skip
+			return 0;
+		}
+	}
+
 	// Get the memory address of the buffer where the list of entry will be stored
 	__u64 dirents_buf = ctx->args[1];
 	if (!dirents_buf) {
@@ -140,6 +159,24 @@ int cardwire_sys_exit_getdents64(struct trace_event_raw_sys_exit *ctx)
 		return 0;
 
 	__u32 pid = bpf_get_current_pid_tgid() >> 32;
+
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	__u32 ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+	// if it's cardwire skip it
+	if (is_cardwire_process(pid))
+		return 0;
+	// skip if whitelisted
+	if (is_process_whitelisted())
+		return 0;
+	// if we in smart mode and the pid is allowed, skip
+	if (is_smart()) {
+		if (is_pid_allowed(pid, ppid)) {
+			// if allowed, skip
+			return 0;
+		}
+	}
+
 	__u64 *dirents_buf = bpf_map_lookup_elem(&map_dirent, &pid);
 
 	if (!dirents_buf)
