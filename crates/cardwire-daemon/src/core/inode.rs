@@ -64,6 +64,14 @@ pub fn pci_to_inode(
         None
     };
 
+    let get_pci_inode_no_link = |pci: &str| {
+        let pci_path = format!("/sys/bus/pci/devices/{}", pci);
+        if let Ok(metadata) = fs::symlink_metadata(&pci_path) {
+            return Some(metadata.ino());
+        }
+        None
+    };
+
     // first we push the pci inode
     match get_pci_inode(&pci) {
         Some(inode) => inodes.push(inode),
@@ -84,6 +92,39 @@ pub fn pci_to_inode(
         if let Some(pci_device) = pci_list.get(&parent_pci) {
             current_parent = pci_device.parent_pci().clone();
             match get_pci_inode(pci_device.pci_address()) {
+                Some(inode) => inodes.push(inode),
+                None => {
+                    warn!("failed to get inode for pci: {}", pci_device.pci_address());
+                    continue;
+                }
+            }
+        } else {
+            warn!("expected parent pci {} not found in pci_list", parent_pci);
+            break;
+        }
+    }
+
+    // Now do the same but without the softlink
+    // first we push the pci inode
+    match get_pci_inode_no_link(&pci) {
+        Some(inode) => inodes.push(inode),
+        None => {
+            warn!("failed to get inode for pci: {}", pci);
+        }
+    }
+    // Also push the audio card inode
+    match get_pci_inode_no_link(&pci.replace(".0", ".1")) {
+        Some(inode) => inodes.push(inode),
+        None => {
+            warn!("failed to get inode for pci: {}", &pci.replace(".0", ".1"));
+        }
+    }
+
+    let mut current_parent: Option<String> = parent_pci.clone();
+    while let Some(parent_pci) = current_parent {
+        if let Some(pci_device) = pci_list.get(&parent_pci) {
+            current_parent = pci_device.parent_pci().clone();
+            match get_pci_inode_no_link(pci_device.pci_address()) {
                 Some(inode) => inodes.push(inode),
                 None => {
                     warn!("failed to get inode for pci: {}", pci_device.pci_address());
