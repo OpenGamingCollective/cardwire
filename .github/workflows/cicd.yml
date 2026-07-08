@@ -14,6 +14,7 @@ jobs:
       run_nix_vm: ${{ steps.files.outputs.run_nix_vm }}
       run_c_checks: ${{ steps.files.outputs.run_c_checks }}
       run_rust_checks: ${{ steps.files.outputs.run_rust_checks }}
+      run_mdbook_check: ${{ steps.files.outputs.run_mdbook_check }}
     steps:
       - name: Determine changed files
         id: files
@@ -116,3 +117,22 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: determinateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
       - run: nix build .#vm-test
+  
+  mdbook-test:
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    if: needs.prepare.outputs.run_mdbook_check == 'true'
+    env:
+      MDBOOK_VERSION: 0.5.2
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install mdBook
+        run: |
+          curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf -y | sh
+          rustup update
+          cargo install --version ${MDBOOK_VERSION} mdbook
+      - name: Test Pages
+        id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Test with mdBook
+        run: mdbook test
