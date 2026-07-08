@@ -151,7 +151,7 @@ impl GpuInterface {
             Ok(inode) => blocker.is_inode_blocked(inode).into_fdo()?,
             Err(err) => return Err(err).into_fdo(),
         };
-        let pci = match single_pci_to_inode(&*self.device.pci.pci_address()) {
+        let pci = match single_pci_to_inode(self.device.pci.pci_address()) {
             Ok(inode) => blocker.is_inode_blocked(inode).into_fdo()?,
             Err(err) => return Err(err).into_fdo(),
         };

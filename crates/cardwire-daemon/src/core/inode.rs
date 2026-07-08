@@ -59,7 +59,7 @@ pub fn pci_to_inode(
         if let Ok(metadata) = fs::metadata(&pci_path) {
             return Some(metadata.ino());
         }
-        return None;
+        None
     };
 
     // first we push the pci inode

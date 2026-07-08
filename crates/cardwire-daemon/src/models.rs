@@ -1,13 +1,13 @@
 //! where the struct and impl are declared
 use crate::{
     analyzer::CardwireAnalyzer, core::{
-        gpu::{self, GpuVendor, check_default_drm_class}, pci
+        gpu::{self, check_default_drm_class}, pci
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
     }
 };
 use anyhow::{Context, Result};
-use cardwire_ebpf::EbpfBlocker;
+use cardwire_ebpf::{EbpfBlocker, EbpfSettings};
 use log::{error, warn};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -115,6 +115,8 @@ impl DaemonManager {
             error!("failed to whitelist cardwire's pid: {}", err);
             return Err(err.into());
         };
+
+        blocker.set_ebpf_setting(EbpfSettings::ExperimentalNvidia, config.into())?;
         drop(blocker);
 
         let default: bool = state.is_default_state();

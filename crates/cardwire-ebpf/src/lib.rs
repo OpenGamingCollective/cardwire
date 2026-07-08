@@ -172,7 +172,7 @@ impl EbpfBlocker {
         )
         .map_err(CardwireEbpfError::aya)?;
         setting_map
-            .insert(&key, value, 0)
+            .insert(key, value, 0)
             .map_err(CardwireEbpfError::aya)
     }
 
