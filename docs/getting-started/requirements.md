@@ -57,7 +57,7 @@ zcat /proc/config.gz | grep CONFIG_LSM=
 
 Edit `/etc/default/grub` and append `bpf` to `GRUB_CMDLINE_LINUX_DEFAULT`, keeping all existing entries:
 
-```
+```bash
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash lsm=landlock,lockdown,yama,integrity,apparmor,bpf"
 ```
 
