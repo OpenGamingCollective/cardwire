@@ -6,7 +6,9 @@ use std::{
 
 use crate::{
     core::{
-        gpu::{DbusGpuDevice, GpuDevice, GpuVendor}, inode::{card_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice
+        gpu::{DbusGpuDevice, GpuDevice, GpuVendor}, inode::{
+            card_to_inode, nvidia_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode
+        }, pci::PciDevice
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
 use cardwire_ebpf::EbpfBlocker;
@@ -95,13 +97,17 @@ impl GpuInterface {
             }
         };
         // the last one, block nvidia
-        //if self.device.gpu_vendor() == GpuVendor::Nvidia
-        //    && let Some(minor) = self.device.nvidia_minor()
-        //{
-        //    blocker
-        //        .block_kind(&minor.to_string(), BlockKind::Nvidia)
-        //        .into_fdo()?;
-        //}
+        if self.device.gpu_vendor() == GpuVendor::Nvidia
+            && let Some(minor) = self.device.nvidia_minor()
+        {
+            match nvidia_to_inode(*minor) {
+                Ok(inode) => blocker.block_inode(inode).into_fdo()?,
+                Err(err) => {
+                    error!("failed to block nvidia{}: {}", *self.device.render(), err);
+                    return Err(err).into_fdo();
+                }
+            };
+        }
         Ok(())
     }
     /// unblock the gpu
@@ -130,13 +136,17 @@ impl GpuInterface {
             Err(err) => return Err(err).into_fdo(),
         };
         // the last one, unblock nvidia
-        //if self.device.gpu_vendor() == GpuVendor::Nvidia
-        //    && let Some(minor) = self.device.nvidia_minor()
-        //{
-        //    blocker
-        //        .unblock_kind(&minor.to_string(), BlockKind::Nvidia)
-        //        .into_fdo()?;
-        //}
+        if self.device.gpu_vendor() == GpuVendor::Nvidia
+            && let Some(minor) = self.device.nvidia_minor()
+        {
+            match nvidia_to_inode(*minor) {
+                Ok(inode) => blocker.unblock_inode(inode).into_fdo()?,
+                Err(err) => {
+                    error!("failed to block nvidia{}: {}", *self.device.render(), err);
+                    return Err(err).into_fdo();
+                }
+            };
+        }
         Ok(())
     }
     /// check if the gpu is blocked
@@ -156,7 +166,20 @@ impl GpuInterface {
             Err(err) => return Err(err).into_fdo(),
         };
 
-        Ok(card && render && pci)
+        let nvidia = match self.device.nvidia_minor() {
+            // GPU is nvidia
+            Some(minor) => {
+                if let Ok(inode) = nvidia_to_inode(*minor) {
+                    blocker.is_inode_blocked(inode).into_fdo()?
+                } else {
+                    false
+                }
+            }
+            // GPU isnt nvidia, ignore but keep true
+            None => true,
+        };
+
+        Ok(card && render && pci && nvidia)
     }
     /// read fd link to find which apps opened the gpu
     async fn lsof_read(&self, s: &str) -> fdo::Result<Vec<String>> {

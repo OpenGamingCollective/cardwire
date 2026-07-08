@@ -1,6 +1,6 @@
 //! Used to get inodes for specific files
 use std::{
-    collections::BTreeMap, fs::{self, File}, os::unix::fs::MetadataExt
+    collections::BTreeMap, fs::{self}, os::unix::fs::MetadataExt
 };
 
 use anyhow::Result;
@@ -8,13 +8,15 @@ use log::warn;
 
 use crate::core::pci::PciDevice;
 
-const BLOCKED_PCI_FILES: &[&str] = &[
+// shouldn't be necessary anymore
+const _BLOCKED_PCI_FILES: &[&str] = &[
     "config",
     "current_link_speed",
     "max_link_speed",
     "max_link_width",
     "current_link_width",
 ];
+
 /// Files that get blocked when the NVIDIA block is on
 const BLOCKED_NVIDIA_FILES: &[&str] = &[
     "libGLX_nvidia.so.0",
@@ -109,15 +111,13 @@ pub fn single_pci_to_inode(pci: &str) -> Result<u64> {
     Ok(inode)
 }
 
-fn nvidia_to_inode(nvidia_minor: u32) -> Result<u64> {
+pub fn nvidia_to_inode(nvidia_minor: u32) -> Result<u64> {
     let nvidia_path = format!("/dev/nvidia{}", nvidia_minor);
-    let inode = File::open(&nvidia_path)
-        .map_err(|e| {
-            warn!("failed to get inode for {}: {}", nvidia_path, e);
-            e
-        })?
-        .metadata()?
-        .ino();
+    let metadata = fs::metadata(&nvidia_path).map_err(|e| {
+        warn!("failed to get inode for {}: {}", nvidia_path, e);
+        e
+    })?;
+    let inode = metadata.ino();
 
     Ok(inode)
 }
