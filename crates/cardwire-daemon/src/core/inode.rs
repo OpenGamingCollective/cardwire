@@ -147,10 +147,8 @@ pub fn exp_nvidia_inodes() -> Result<Vec<u64>> {
             })
             .unwrap_or(false);
 
-        if has_nvidia {
-            if let Ok(metadata) = fs::metadata(path) {
-                inodes.push(metadata.ino());
-            }
+        if has_nvidia && let Ok(metadata) = fs::metadata(path) {
+            inodes.push(metadata.ino());
         }
     }
 
