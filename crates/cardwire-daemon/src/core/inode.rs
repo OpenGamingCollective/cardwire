@@ -55,82 +55,31 @@ pub fn pci_to_inode(
 ) -> Result<Vec<u64>> {
     let mut inodes: Vec<u64> = Vec::new();
 
-    // quick function return Some(inode) if successfull or return None is fail
-    let get_pci_inode = |pci: &str| {
+    // quick function that push the inodes into the vec
+    let push_pci_inode = |pci: &str, inodes: &mut Vec<u64>| {
+        // First get the link ino
         let pci_path = format!("/sys/bus/pci/devices/{}", pci);
         if let Ok(metadata) = fs::metadata(&pci_path) {
-            return Some(metadata.ino());
+            inodes.push(metadata.ino());
         }
-        None
-    };
 
-    let get_pci_inode_no_link = |pci: &str| {
+        // Now without following link
         let pci_path = format!("/sys/bus/pci/devices/{}", pci);
         if let Ok(metadata) = fs::symlink_metadata(&pci_path) {
-            return Some(metadata.ino());
+            inodes.push(metadata.ino());
         }
-        None
     };
 
     // first we push the pci inode
-    match get_pci_inode(&pci) {
-        Some(inode) => inodes.push(inode),
-        None => {
-            warn!("failed to get inode for pci: {}", pci);
-        }
-    }
+    push_pci_inode(&pci, &mut inodes);
     // Also push the audio card inode
-    match get_pci_inode(&pci.replace(".0", ".1")) {
-        Some(inode) => inodes.push(inode),
-        None => {
-            warn!("failed to get inode for pci: {}", &pci.replace(".0", ".1"));
-        }
-    }
+    push_pci_inode(&pci.replace(".0", ".1"), &mut inodes);
 
     let mut current_parent: Option<String> = parent_pci.clone();
     while let Some(parent_pci) = current_parent {
         if let Some(pci_device) = pci_list.get(&parent_pci) {
             current_parent = pci_device.parent_pci().clone();
-            match get_pci_inode(pci_device.pci_address()) {
-                Some(inode) => inodes.push(inode),
-                None => {
-                    warn!("failed to get inode for pci: {}", pci_device.pci_address());
-                    continue;
-                }
-            }
-        } else {
-            warn!("expected parent pci {} not found in pci_list", parent_pci);
-            break;
-        }
-    }
-
-    // Now do the same but without the softlink
-    // first we push the pci inode
-    match get_pci_inode_no_link(&pci) {
-        Some(inode) => inodes.push(inode),
-        None => {
-            warn!("failed to get inode for pci: {}", pci);
-        }
-    }
-    // Also push the audio card inode
-    match get_pci_inode_no_link(&pci.replace(".0", ".1")) {
-        Some(inode) => inodes.push(inode),
-        None => {
-            warn!("failed to get inode for pci: {}", &pci.replace(".0", ".1"));
-        }
-    }
-
-    let mut current_parent: Option<String> = parent_pci.clone();
-    while let Some(parent_pci) = current_parent {
-        if let Some(pci_device) = pci_list.get(&parent_pci) {
-            current_parent = pci_device.parent_pci().clone();
-            match get_pci_inode_no_link(pci_device.pci_address()) {
-                Some(inode) => inodes.push(inode),
-                None => {
-                    warn!("failed to get inode for pci: {}", pci_device.pci_address());
-                    continue;
-                }
-            }
+            push_pci_inode(pci_device.pci_address(), &mut inodes);
         } else {
             warn!("expected parent pci {} not found in pci_list", parent_pci);
             break;
