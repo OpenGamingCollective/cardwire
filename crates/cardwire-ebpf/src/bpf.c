@@ -179,10 +179,12 @@ int cardwire_sys_exit_getdents64(struct trace_event_raw_sys_exit *ctx)
 		}
 	}
 
-	__u64 *dirents_buf = bpf_map_lookup_elem(&cw_dirent, &pid);
+	__u64 *dirents_buf_ptr = bpf_map_lookup_elem(&cw_dirent, &pid);
 
-	if (!dirents_buf)
+	if (!dirents_buf_ptr)
 		return 0;
+
+	__u64 dirents_buf = *dirents_buf_ptr;
 
 	// Clean up the map immediately so it doesn't fill up
 	bpf_map_delete_elem(&cw_dirent, &pid);
@@ -194,7 +196,7 @@ int cardwire_sys_exit_getdents64(struct trace_event_raw_sys_exit *ctx)
 
 	struct dirents_data_t dirents_data = {
 		.bpos = 0,
-		.dirents_buf = *dirents_buf,
+		.dirents_buf = dirents_buf,
 		.buff_size = ctx->ret,
 		.d_reclen = 0,
 		.last_visible_bpos = 0xFFFFFFFF,

