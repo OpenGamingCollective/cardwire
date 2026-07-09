@@ -14,26 +14,11 @@ struct hlist_head {
 } __attribute__((preserve_access_index));
 
 struct inode {
-	__u16 i_mode;
-	__u32 i_rdev;
 	__u64 i_ino;
 	struct hlist_head i_dentry;
 } __attribute__((preserve_access_index));
 
-struct qstr {
-	union {
-		struct {
-			__u32 hash;
-			__u32 len;
-		};
-		__u64 hash_len;
-	};
-	const unsigned char *name;
-} __attribute__((preserve_access_index));
-
 struct dentry___old {
-	struct qstr d_name;
-	struct dentry *d_parent;
 	struct inode *d_inode;
 	union {
 		struct hlist_node d_alias;
@@ -41,8 +26,6 @@ struct dentry___old {
 } __attribute__((preserve_access_index));
 
 struct dentry {
-	struct qstr d_name;
-	struct dentry *d_parent;
 	struct inode *d_inode;
 	struct hlist_node d_alias;
 } __attribute__((preserve_access_index));
