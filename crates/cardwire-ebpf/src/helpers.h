@@ -3,7 +3,7 @@ static __always_inline int is_hybrid()
 {
 	// get current cardwired mode, key should always be 0
 	__u32 key = 0;
-	__u8 *mode = bpf_map_lookup_elem(&cardwire_mode, &key);
+	__u8 *mode = bpf_map_lookup_elem(&cw_mode, &key);
 	if (!mode) {
 		return false;
 	}
@@ -18,7 +18,7 @@ static __always_inline int is_smart()
 {
 	// get current cardwired mode, key should always be 0
 	__u32 key = 0;
-	__u8 *mode = bpf_map_lookup_elem(&cardwire_mode, &key);
+	__u8 *mode = bpf_map_lookup_elem(&cw_mode, &key);
 	if (!mode) {
 		return false;
 	}
@@ -34,7 +34,7 @@ static __always_inline int is_cardwire_process(__u32 pid)
 	// key 0 contain cardwire pid, if pid/ppid = cardwire's pid then allow
 	__u8 cardwire_key = 0;
 	__u32 *cardwire_pid =
-		bpf_map_lookup_elem(&cardwire_daemon_pid, &cardwire_key);
+		bpf_map_lookup_elem(&cw_daemon_pid, &cardwire_key);
 	if (cardwire_pid && *cardwire_pid == pid) {
 		return true;
 	}
@@ -56,8 +56,18 @@ static __always_inline int is_process_whitelisted()
 /// check if the pid is in the allow list, smart mode only
 static __always_inline int is_pid_allowed(__u32 pid, __u32 ppid)
 {
-	return bpf_map_lookup_elem(&ALLOWED_PID, &pid) ||
-	       bpf_map_lookup_elem(&ALLOWED_PID, &ppid);
+	return bpf_map_lookup_elem(&cw_allowed_pid, &pid) ||
+	       bpf_map_lookup_elem(&cw_allowed_pid, &ppid);
+}
+
+/// check if experimental nvidia blocking is enabled
+static __always_inline int is_nvidia_enabled()
+{
+	__u8 key = 0;
+	__u8 *value = bpf_map_lookup_elem(&cw_settings, &key);
+	if (!value)
+		return false;
+	return *value;
 }
 
 static __always_inline int is_blocked_device(struct dentry *d)
@@ -83,20 +93,26 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	// Match card/render/nvidia minor
 	if (inode) {
 		__u64 d_ino = BPF_CORE_READ(inode, i_ino);
-		if (d_ino &&
-		    bpf_map_lookup_elem(&cardwire_blocked_inodes, &d_ino)) {
-			blocked = true;
-			goto end;
+		if (d_ino) {
+			// if it's a blocked inode, go to end
+			if (bpf_map_lookup_elem(&cw_blocked_ino, &d_ino)) {
+				blocked = true;
+				goto end;
+			}
+			if (is_nvidia_enabled() &&
+			    bpf_map_lookup_elem(&cw_exp_blk_ino, &d_ino)) {
+				blocked = true;
+				goto end;
+			}
 		}
 	}
-
 end:
 	if (!blocked) {
 		return 0;
 	}
 	// get mode
 	__u32 key = 0;
-	__u8 *mode = bpf_map_lookup_elem(&cardwire_mode, &key);
+	__u8 *mode = bpf_map_lookup_elem(&cw_mode, &key);
 	// if map lookup fails, or we are not blocking, or it's hybrid mode, allow
 	if (!mode || *mode == 1) {
 		return 0;
@@ -109,8 +125,8 @@ end:
 
 	// if smart, check the pid list
 	if (*mode == 3) {
-		if (!bpf_map_lookup_elem(&ALLOWED_PID, &pid) &&
-		    !bpf_map_lookup_elem(&ALLOWED_PID, &ppid)) {
+		if (!bpf_map_lookup_elem(&cw_allowed_pid, &pid) &&
+		    !bpf_map_lookup_elem(&cw_allowed_pid, &ppid)) {
 			// Neither pid nor ppid is allowed, block
 			return -ENOENT;
 		}
@@ -142,7 +158,9 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 	bpf_probe_read_user_str(dirname, sizeof(dirname), dirent->d_name);
 
 	// Check if this is a file we want to hide
-	if (bpf_map_lookup_elem(&cardwire_blocked_inodes, &d_inode)) {
+	if (bpf_map_lookup_elem(&cw_blocked_ino, &d_inode) ||
+	    (is_nvidia_enabled() &&
+	     bpf_map_lookup_elem(&cw_exp_blk_ino, &d_inode))) {
 		if (data->last_visible_bpos != 0xFFFFFFFF) {
 			struct linux_dirent64 *visible_dirent =
 				(struct linux_dirent64

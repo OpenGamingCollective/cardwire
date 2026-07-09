@@ -81,7 +81,8 @@ int trace_exec(void *ctx)
 
 	// Init the struct
 	struct event_t *rb_data = {};
-	rb_data = bpf_ringbuf_reserve(&EXEC_EVENTS, sizeof(struct event_t), 0);
+	rb_data =
+		bpf_ringbuf_reserve(&cw_exec_events, sizeof(struct event_t), 0);
 	// Check if present
 	if (!rb_data) {
 		return 0;
@@ -103,7 +104,8 @@ int trace_process_exit(void *ctx)
 
 	// Now create and send a close event containing the pid to the userspace
 	struct close_t *rb_data = {};
-	rb_data = bpf_ringbuf_reserve(&CLOSE_EVENTS, sizeof(struct close_t), 0);
+	rb_data = bpf_ringbuf_reserve(&cw_close_events, sizeof(struct close_t),
+				      0);
 	if (!rb_data) {
 		return 0;
 	}
@@ -147,7 +149,7 @@ int cardwire_sys_enter_getdents64(struct trace_event_raw_sys_enter *ctx)
 		return 0;
 	}
 	// Save addr into map
-	bpf_map_update_elem(&map_dirent, &pid, &dirents_buf, BPF_ANY);
+	bpf_map_update_elem(&cw_dirent, &pid, &dirents_buf, BPF_ANY);
 	return 0;
 }
 
@@ -177,13 +179,13 @@ int cardwire_sys_exit_getdents64(struct trace_event_raw_sys_exit *ctx)
 		}
 	}
 
-	__u64 *dirents_buf = bpf_map_lookup_elem(&map_dirent, &pid);
+	__u64 *dirents_buf = bpf_map_lookup_elem(&cw_dirent, &pid);
 
 	if (!dirents_buf)
 		return 0;
 
 	// Clean up the map immediately so it doesn't fill up
-	bpf_map_delete_elem(&map_dirent, &pid);
+	bpf_map_delete_elem(&cw_dirent, &pid);
 
 	// If getdents64 return 0 bytes
 	if (ctx->ret <= 0) {

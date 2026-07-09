@@ -7,7 +7,7 @@ use std::{
 use crate::{
     core::{
         gpu::{DbusGpuDevice, GpuDevice, GpuVendor}, inode::{
-            card_to_inode, nvidia_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode
+            backlight_to_inode, card_to_inode, nvidia_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode
         }, pci::PciDevice
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
@@ -107,6 +107,13 @@ impl GpuInterface {
                     return Err(err).into_fdo();
                 }
             };
+            match backlight_to_inode(*minor) {
+                Ok(inode) => blocker.block_inode(inode).into_fdo()?,
+                Err(err) => {
+                    error!("failed to block backlight nvidia_{}: {}", minor, err);
+                    return Err(err).into_fdo();
+                }
+            };
         }
         Ok(())
     }
@@ -146,6 +153,13 @@ impl GpuInterface {
                     return Err(err).into_fdo();
                 }
             };
+            match backlight_to_inode(*minor) {
+                Ok(inode) => blocker.unblock_inode(inode).into_fdo()?,
+                Err(err) => {
+                    error!("failed to unblock backlight nvidia_{}: {}", minor, err);
+                    return Err(err).into_fdo();
+                }
+            };
         }
         Ok(())
     }
@@ -165,7 +179,6 @@ impl GpuInterface {
             Ok(inode) => blocker.is_inode_blocked(inode).into_fdo()?,
             Err(err) => return Err(err).into_fdo(),
         };
-
         let nvidia = match self.device.nvidia_minor() {
             // GPU is nvidia
             Some(minor) => {

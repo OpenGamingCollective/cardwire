@@ -1,7 +1,7 @@
 //! where the struct and impl are declared
 use crate::{
     analyzer::CardwireAnalyzer, core::{
-        gpu::{self, check_default_drm_class}, pci
+        gpu::{self, GpuVendor, check_default_drm_class}, inode::exp_nvidia_inodes, pci
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
     }
@@ -116,7 +116,23 @@ impl DaemonManager {
             return Err(err.into());
         };
 
+        // Set nvidia setting
         blocker.set_ebpf_setting(EbpfSettings::ExperimentalNvidia, config.into())?;
+        // Push nvidia inodes, if empty/error just ignore
+        for (_, gpu) in gpus_list.iter() {
+            if gpu.device.gpu_vendor() == GpuVendor::Nvidia
+                && let Ok(inodes) = exp_nvidia_inodes()
+                && !inodes.is_empty()
+            {
+                for inode in inodes {
+                    if let Err(err) = blocker.block_exp_inode(inode) {
+                        error!("failed to block nvidia's file {}: {}", inode, err);
+                    }
+                }
+                break;
+            }
+        }
+
         drop(blocker);
 
         let default: bool = state.is_default_state();

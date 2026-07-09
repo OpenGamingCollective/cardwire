@@ -109,18 +109,18 @@ struct report_t {
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
-} EXEC_EVENTS SEC(".maps");
+} cw_exec_events SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
-} CLOSE_EVENTS SEC(".maps");
+} cw_close_events SEC(".maps");
 
 // This one is to report the app block to cardwire
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
-} REPORT SEC(".maps");
+} cw_report SEC(".maps");
 
 // List of blocked comm
 // Used for smart mode
@@ -129,7 +129,7 @@ struct {
 	__uint(max_entries, 16384);
 	__type(key, __u32);
 	__type(value, __u8);
-} ALLOWED_PID SEC(".maps");
+} cw_allowed_pid SEC(".maps");
 
 /*
 	mode map, mode should be stored in key 0
@@ -144,32 +144,44 @@ struct {
 	__uint(max_entries, 1);
 	__type(key, __u8);
 	__type(value, __u8);
-} cardwire_mode SEC(".maps");
+} cw_mode SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 2048);
 	__type(key, __u64);
 	__type(value, __u8);
-} cardwire_blocked_inodes SEC(".maps");
+} cw_blocked_ino SEC(".maps");
 
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 2048);
+	__type(key, __u64);
+	__type(value, __u8);
+} cw_exp_blk_ino SEC(".maps");
+
+/*
+	setting map, setting are stored by key
+	possible values:
+	exp_nvidia = 0
+*/
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 64);
 	__type(key, __u8);
 	__type(value, __u8);
-} cardwire_settings SEC(".maps");
+} cw_settings SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 1);
 	__type(key, __u8);
 	__type(value, __u32);
-} cardwire_daemon_pid SEC(".maps");
+} cw_daemon_pid SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 1024);
 	__type(key, __u32);
 	__type(value, __u64);
-} map_dirent SEC(".maps");
+} cw_dirent SEC(".maps");

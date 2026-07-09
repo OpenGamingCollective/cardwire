@@ -17,14 +17,6 @@ const _BLOCKED_PCI_FILES: &[&str] = &[
     "current_link_width",
 ];
 
-/// Files that get blocked when the NVIDIA block is on
-const _BLOCKED_NVIDIA_FILES: &[&str] = &[
-    "libGLX_nvidia.so.0",
-    "nvidia_icd.json",
-    "nvidia_icd.x86_64.json",
-    "nvidiactl",
-];
-
 pub fn render_to_inode(render: u32) -> Result<u64> {
     let render_path = format!("/dev/dri/renderD{}", render);
     let metadata = fs::metadata(&render_path).map_err(|e| {
@@ -110,4 +102,57 @@ pub fn nvidia_to_inode(nvidia_minor: u32) -> Result<u64> {
     let inode = metadata.ino();
 
     Ok(inode)
+}
+
+/// The only gpu vendor that need it's backlight to be blocked is nvidia
+pub fn backlight_to_inode(nvidia_minor: u32) -> Result<u64> {
+    let nvidia_path = format!("/sys/class/backlight/nvidia_{}", nvidia_minor);
+    let metadata = fs::metadata(&nvidia_path).map_err(|e| {
+        warn!("failed to get inode for {}: {}", nvidia_path, e);
+        e
+    })?;
+    let inode = metadata.ino();
+
+    Ok(inode)
+}
+
+pub fn exp_nvidia_inodes() -> Result<Vec<u64>> {
+    let mut inodes: Vec<u64> = Vec::new();
+
+    // Get nvidiactl inode
+    let nvidiactl = "/dev/nvidiactl";
+    if let Ok(metadata) = fs::metadata(nvidiactl) {
+        inodes.push(metadata.ino());
+    }
+
+    // Now try to find the vulkan file
+    // This is for normal distros
+    /// Files that get blocked when the NVIDIA block is on
+    const VULKAN_PATHS: &[&str] = &[
+        // NixOS
+        "/run/opengl-driver/share/vulkan/icd.d/",
+        "/run/opengl-driver-32/share/vulkan/icd.d/",
+        // Standard Linux
+        "/etc/vulkan/icd.d/",
+        "/usr/share/vulkan/icd.d/",
+    ];
+
+    for path in VULKAN_PATHS {
+        let has_nvidia = fs::read_dir(path)
+            .map(|entries| {
+                entries.filter_map(|e| e.ok()).any(|entry| {
+                    let name = entry.file_name();
+                    name == "nvidia_icd.json" || name == "nvidia_icd.x86_64.json"
+                })
+            })
+            .unwrap_or(false);
+
+        if has_nvidia {
+            if let Ok(metadata) = fs::metadata(path) {
+                inodes.push(metadata.ino());
+            }
+        }
+    }
+
+    Ok(inodes)
 }
