@@ -32,6 +32,8 @@
     pciutils
     fish
     tmux
+    gnugrep
+    coreutils
   ];
   services.getty.autologinUser = "john";
   virtualisation.vmVariant = {
