@@ -1,34 +1,19 @@
 //! where the struct and impl are declared
 use crate::{
     analyzer::CardwireAnalyzer, core::{
-        gpu::{self, GpuVendor, check_default_drm_class}, pci
+        gpu::{self, GpuVendor, check_default_drm_class}, inode::exp_nvidia_inodes, pci
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
     }
 };
 use anyhow::{Context, Result};
-use cardwire_ebpf::{BlockKind, EbpfBlocker};
-use log::warn;
+use cardwire_ebpf::{EbpfBlocker, EbpfSettings};
+use log::{error, warn};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
 use zbus::{
     fdo::{self}, interface
 };
-
-const BLOCKED_PCI_FILES: &[&str] = &[
-    "config",
-    "current_link_speed",
-    "max_link_speed",
-    "max_link_width",
-    "current_link_width",
-];
-/// Files that get blocked when the NVIDIA block is on
-const BLOCKED_NVIDIA_FILES: &[&str] = &[
-    "libGLX_nvidia.so.0",
-    "nvidia_icd.json",
-    "nvidia_icd.x86_64.json",
-    "nvidiactl",
-];
 
 #[derive(Clone)]
 pub struct DaemonManager {
@@ -122,30 +107,41 @@ impl DaemonManager {
             .experimental_nvidia_block
             .load(std::sync::atomic::Ordering::Relaxed);
         let mode = self.debug_interface.mode_state.read().await;
-        let mut blocker = self.debug_interface.blocker.write().await;
         let mut state = self.debug_interface.gpu_state.write().await;
-        blocker.block_kind(&config.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)?;
+        let mut blocker = self.debug_interface.blocker.write().await;
+        // Whitelist cardwire pid before starting
+        let pid = std::process::id();
+        if let Err(err) = blocker.whitelist_cardwire_pid(pid) {
+            error!("failed to whitelist cardwire's pid: {}", err);
+            return Err(err.into());
+        };
 
-        for file in BLOCKED_PCI_FILES {
-            blocker.block_kind(file, BlockKind::File)?;
-        }
-        let default: bool = state.is_default_state();
-        // if there is an nvidia device, block nvidia file once
+        // Set nvidia setting
+        blocker.set_ebpf_setting(EbpfSettings::ExperimentalNvidia, config.into())?;
+        // Push nvidia inodes, if empty/error just ignore
         for (_, gpu) in gpus_list.iter() {
-            if gpu.device.gpu_vendor() == GpuVendor::Nvidia {
-                for file in BLOCKED_NVIDIA_FILES {
-                    blocker.block_kind(file, BlockKind::NvidiaFile)?;
+            if gpu.device.gpu_vendor() == GpuVendor::Nvidia
+                && let Ok(inodes) = exp_nvidia_inodes()
+                && !inodes.is_empty()
+            {
+                for inode in inodes {
+                    if let Err(err) = blocker.block_exp_inode(inode) {
+                        error!("failed to block nvidia's file {}: {}", inode, err);
+                    }
                 }
                 break;
             }
         }
+
+        drop(blocker);
+
+        let default: bool = state.is_default_state();
         if default {
             for (_, gpu) in gpus_list.iter() {
                 state.save_state(&gpu.device, false).await?;
             }
         }
         // Dropping the locks prevent set_mode being stuck
-        drop(blocker);
         drop(gpus_list);
         drop(state);
         let mode_to_apply = Modes::into(mode.mode());

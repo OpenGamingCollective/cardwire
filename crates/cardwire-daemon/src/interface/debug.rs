@@ -10,7 +10,7 @@ use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface}
+    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface, Modes}
 };
 
 #[derive(Clone)]
@@ -90,6 +90,8 @@ impl DebugInterface {
             info!("pci list changed, refreshing the internal gpu list");
             // Overwrite old list
             *pci_list = new_pci_list.clone();
+            drop(pci_list); // drop lock to prevent deadlocks when blocking
+
             let mut power_tasks = self.power_tasks.write().await;
 
             // get rid of the old gpu api and the old tasks
@@ -106,12 +108,12 @@ impl DebugInterface {
             gpu_interfaces.clear();
             // Read the new list
             let mut new_gpu_list =
-                gpu::read_gpu(&pci_list).map_err(|err| fdo::Error::Failed(err.to_string()))?;
+                gpu::read_gpu(&new_pci_list).map_err(|err| fdo::Error::Failed(err.to_string()))?;
             if let Err(err) = check_default_drm_class(&mut new_gpu_list) {
                 warn!("Failed to determine default GPU: {}", err);
             }
             for (id, device) in new_gpu_list {
-                let gpu = GpuInterface::build(
+                let mut gpu = GpuInterface::build(
                     device,
                     Arc::clone(&self.blocker),
                     Arc::clone(&self.pci_list),
@@ -119,6 +121,36 @@ impl DebugInterface {
                     Arc::clone(&self.mode_state),
                 )
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+
+                let mode = self.mode_state.read().await.mode();
+                let config = self
+                    .config
+                    .auto_apply_gpu_state
+                    .load(std::sync::atomic::Ordering::Relaxed);
+
+                let should_block = match mode {
+                    Modes::Integrated | Modes::Smart => !gpu.device.is_default(),
+                    Modes::Hybrid => false,
+                    Modes::Manual => {
+                        let state = self.gpu_state.read().await;
+                        state.gpu_block_state(gpu.device.pci.pci_address()) && config
+                    }
+                };
+
+                if should_block {
+                    info!(
+                        "GPU {} should be blocked, re-applying block on hotplug",
+                        gpu.device.name()
+                    );
+                    if let Err(e) = gpu.block_gpu().await {
+                        warn!(
+                            "failed to automatically re-block {}: {}",
+                            gpu.device.name(),
+                            e
+                        );
+                    }
+                }
+
                 gpu_interfaces.insert(id, gpu);
             }
 

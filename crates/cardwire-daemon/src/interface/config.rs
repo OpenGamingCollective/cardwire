@@ -3,7 +3,7 @@ use std::sync::{
 };
 
 use crate::{file::CardwireConfig, interface::Modes};
-use cardwire_ebpf::EbpfBlocker;
+use cardwire_ebpf::{EbpfBlocker, EbpfSettings};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
@@ -83,15 +83,9 @@ impl ConfigInterface {
             .store(state, Ordering::Relaxed);
         let mut blocker = self.blocker.write().await;
         // change the value in the ebpf map
-        if state {
-            blocker
-                .block_kind(&state.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)
-                .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
-        } else {
-            blocker
-                .unblock_kind(&state.to_string(), cardwire_ebpf::BlockKind::NvidiaSetting)
-                .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
-        }
+        blocker
+            .set_ebpf_setting(EbpfSettings::ExperimentalNvidia, state.into())
+            .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
     }
     #[zbus(property)]
     pub async fn battery_auto_switch(&self) -> fdo::Result<bool> {
