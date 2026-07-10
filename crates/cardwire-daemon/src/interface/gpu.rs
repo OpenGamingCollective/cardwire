@@ -110,8 +110,10 @@ impl GpuInterface {
             match backlight_to_inode(*minor) {
                 Ok(inode) => blocker.block_inode(inode).into_fdo()?,
                 Err(err) => {
-                    error!("failed to block backlight nvidia_{}: {}", minor, err);
-                    return Err(err).into_fdo();
+                    error!(
+                        "(ignoring) failed to block backlight nvidia_{}: {}",
+                        minor, err
+                    );
                 }
             };
         }
@@ -156,8 +158,10 @@ impl GpuInterface {
             match backlight_to_inode(*minor) {
                 Ok(inode) => blocker.unblock_inode(inode).into_fdo()?,
                 Err(err) => {
-                    error!("failed to unblock backlight nvidia_{}: {}", minor, err);
-                    return Err(err).into_fdo();
+                    warn!(
+                        "(ignoring) failed to unblock backlight nvidia_{}: {}",
+                        minor, err
+                    );
                 }
             };
         }
