@@ -14,7 +14,7 @@ systemctl status cardwired.service
 
 ### On ROG laptop
 
-is the asus MUX enabled?
+Is the ASUS MUX enabled?
 
 ```bash
 asusctl armoury list
@@ -28,6 +28,14 @@ gpu_mux_mode:
 ```
 
 > 0 means that the MUX is enabled, the dGPU **IS** the default GPU in this case
+
+To disable it:
+
+```bash
+asusctl armoury set gpu_mux_mode 1
+```
+
+> A reboot is required for the change to take effect.
 
 ### Non ROG Laptop
 
