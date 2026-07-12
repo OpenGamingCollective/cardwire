@@ -88,7 +88,7 @@ struct report_t {
 };
 
 // EBPF maps
-// This one is to report the events to cardwire
+// This one is to report the events to cardwired smart mode
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
@@ -129,6 +129,7 @@ struct {
 	__type(value, __u8);
 } cw_mode SEC(".maps");
 
+// Used to store the blocked inos
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 2048);
@@ -136,6 +137,7 @@ struct {
 	__type(value, __u8);
 } cw_blocked_ino SEC(".maps");
 
+// This struct contains the inodes of the blocked experimental nvidia files
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 2048);
@@ -155,6 +157,7 @@ struct {
 	__type(value, __u8);
 } cw_settings SEC(".maps");
 
+// Struct that contains cardwired's pid
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 1);
@@ -168,3 +171,11 @@ struct {
 	__type(key, __u32);
 	__type(value, __u64);
 } cw_dirent SEC(".maps");
+
+// This one contain whitelist programs comm's
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 2048);
+	__type(key, char[16]);
+	__type(value, __u8);
+} cw_allowed_comm SEC(".maps");

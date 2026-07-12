@@ -15,6 +15,9 @@ use zbus::{
     fdo::{self}, interface
 };
 
+// shouldn't be necessary anymore
+const ALLOWED_PROGRAMS: &[&str] = &["(udev-worker)", "pacman", "nix", "dnf", "apt", "eza"];
+
 #[derive(Clone)]
 pub struct DaemonManager {
     pub mode_interface: ModeInterface,
@@ -131,6 +134,10 @@ impl DaemonManager {
                 }
                 break;
             }
+        }
+
+        for comm in ALLOWED_PROGRAMS {
+            blocker.allow_comm(comm)?;
         }
 
         drop(blocker);

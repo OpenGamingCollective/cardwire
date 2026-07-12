@@ -190,6 +190,28 @@ impl EbpfBlocker {
             .map_err(CardwireEbpfError::aya)
     }
 
+    pub fn allow_comm(&mut self, comm: &str) -> CardwireEbpfResult<()> {
+        // turn the comm str into a char[16]
+        let comm = {
+            let mut key = [0u8; 16];
+            let bytes = comm.as_bytes();
+            // leave one byte for terminator
+            let len = bytes.len().min(15);
+            key[..len].copy_from_slice(&bytes[..len]);
+            key[len] = 0;
+            key
+        };
+        let mut allowed_comm_map: HashMap<_, [u8; 16], u8> = HashMap::try_from(
+            self.ebpf
+                .map_mut("cw_allowed_comm")
+                .ok_or_else(|| CardwireEbpfError::missing_map("cw_allowed_comm"))?,
+        )
+        .map_err(CardwireEbpfError::aya)?;
+        allowed_comm_map
+            .insert(comm, 0, 0)
+            .map_err(CardwireEbpfError::aya)
+    }
+
     pub fn get_exec_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
         let map = self.ebpf.take_map("cw_exec_events").unwrap();
         let ring_buf: RingBuf<aya::maps::MapData> = RingBuf::try_from(map).unwrap();
