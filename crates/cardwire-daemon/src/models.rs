@@ -16,7 +16,15 @@ use zbus::{
 };
 
 // shouldn't be necessary anymore
-const ALLOWED_PROGRAMS: &[&str] = &["(udev-worker)", "pacman", "nix", "dnf", "apt"];
+const ALLOWED_PROGRAMS: &[&str] = &[
+    "(udev-worker)",
+    "pacman",
+    "nix",
+    "dnf",
+    "apt",
+    "nix-daemon",
+    "nix",
+];
 
 #[derive(Clone)]
 pub struct DaemonManager {
