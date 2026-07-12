@@ -46,8 +46,7 @@ static __always_inline int is_process_whitelisted()
 {
 	char comm[16] = {};
 	bpf_get_current_comm(comm, sizeof(comm));
-	// whitelist udev for pci hotplug
-	if (__builtin_memcmp(comm, "(udev-worker)", 13) == 0) {
+	if (bpf_map_lookup_elem(&cw_allowed_comm, &comm)) {
 		return true;
 	}
 	return false;
