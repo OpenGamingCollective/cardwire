@@ -102,14 +102,25 @@ int trace_process_exit(void *ctx)
 	if (!is_smart())
 		return 0;
 
-	// Now create and send a close event containing the pid to the userspace
+	// we get the pid_tgdi
+	__u64 pid_tgid = bpf_get_current_pid_tgid();
+	// extract the tgid
+	__u32 tgid = pid_tgid >> 32;
+	// and the pid
+	__u32 pid = pid_tgid & 0xFFFFFFFF;
+
+	// Only send close event if the main thread is exiting
+	if (pid != tgid)
+		return 0;
+
 	struct close_t *rb_data = {};
 	rb_data = bpf_ringbuf_reserve(&cw_close_events, sizeof(struct close_t),
 				      0);
+	// if struct error, exit
 	if (!rb_data) {
 		return 0;
 	}
-	rb_data->pid = bpf_get_current_pid_tgid() >> 32;
+	rb_data->pid = tgid;
 
 	bpf_ringbuf_submit(rb_data, 0);
 	return 0;
