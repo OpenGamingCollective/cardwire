@@ -8,7 +8,7 @@ use tokio::{
 
 use crate::analyzer::{
     dynamic_analysis::{
-        check_cardwire_allow, check_flatpak_environ, check_gamemode, check_gpu_env, check_steam_environ
+        check_cardwire_allow, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ
     }, static_analysis
 };
 #[repr(C)]
@@ -150,7 +150,8 @@ impl CardwireAnalyzer {
                             Some(name) => name,
                             None => return,
                         };
-                        if let Some(result) = self_clone.evaluate_app(event.pid).await
+                        if let Some(result) =
+                            self_clone.evaluate_app(event.pid, &real_app_name).await
                             && result
                         {
                             info!(
@@ -190,26 +191,39 @@ impl CardwireAnalyzer {
     }
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app
-    async fn evaluate_app(&self, pid: u32) -> Option<bool> {
+    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<bool> {
         let path = format!("/proc/{}/environ", pid);
-        let time = Instant::now();
         let environ = match fs::read(path) {
             Ok(content) => content,
             Err(_) => return None,
         };
-        let time = time.elapsed().as_micros();
         // First check CARDWIRE_ALLOW, if  None continue
         if let Some(allow) = check_cardwire_allow(&environ) {
             return Some(allow);
         }
         let xdg_list = self.xdg_list.read().await;
 
-        let result = check_flatpak_environ(&environ, &xdg_list)
-            || check_gamemode(&environ)
+        let mut result = check_fdo_app_id(comm, &xdg_list)
             || check_steam_environ(&environ)
             || check_gpu_env(&environ);
-        if result {
-            info!("time to read environ for pid {}: {}", pid, time);
+        // if no result with environ file, read cmdline
+        // The goal is to reduce unnecessary reads
+        if !result {
+            let path_cmd = format!("/proc/{}/cmdline", pid);
+            let cmdline = match fs::read_to_string(path_cmd) {
+                Ok(content) => content,
+                Err(_) => return None,
+            };
+            result = check_for_flatpak_run(&cmdline, &xdg_list);
+        }
+        // reading map is slow, should be done if every test are false
+        if !result {
+            let path_map = format!("/proc/{}/map", pid);
+            let map = match fs::read(path_map) {
+                Ok(content) => content,
+                Err(_) => return None,
+            };
+            result = check_gamemode(&map);
         }
         Some(result)
     }

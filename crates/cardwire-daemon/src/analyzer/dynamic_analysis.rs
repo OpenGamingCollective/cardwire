@@ -10,23 +10,42 @@ pub fn check_steam_environ(environ: &[u8]) -> bool {
 }
 
 /// Read the proc `maps` file to find the gamemodeauto.so
-pub fn check_gamemode(environ: &[u8]) -> bool {
-    environ
-        .windows(18)
+pub fn check_gamemode(map: &[u8]) -> bool {
+    map.windows(18)
         .any(|window| window == b"libgamemodeauto.so")
 }
 
-/// Read the environ map to file the FLATPAK_ID and compare with .desktop apps
-pub fn check_flatpak_environ(environ: &[u8], xdg_list: &HashMap<String, bool>) -> bool {
-    // Check if the byte array contains the substring
-    for var in environ.split(|&b| b == 0) {
-        if var.starts_with(b"FLATPAK_ID=")
-            && let Ok(str) = std::str::from_utf8(&var[11..])
-            && xdg_list.contains_key(str)
+/// Check if the comm is in the xdg list
+pub fn check_fdo_app_id(comm: &str, xdg_list: &HashMap<String, bool>) -> bool {
+    xdg_list.contains_key(comm)
+}
+
+pub fn check_for_flatpak_run(cmdline: &str, xdg_list: &HashMap<String, bool>) -> bool {
+    let mut args = cmdline.split('\0').filter(|s| !s.is_empty());
+
+    if let Some(arg0) = args.next() {
+        // Ensure the actual executable is flatpak or bwrap, not a wrapper like 'niri msg'
+        if !arg0.ends_with("flatpak")
+            && !arg0.ends_with(".flatpak-wrapped")
+            && !arg0.ends_with("bwrap")
         {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    // Now check if any of the arguments match our allowed app
+    for arg in args {
+        if let Some(exec) = arg.strip_prefix("--command=") {
+            if xdg_list.contains_key(exec) {
+                return true;
+            }
+        } else if xdg_list.contains_key(arg) {
             return true;
         }
     }
+
     false
 }
 

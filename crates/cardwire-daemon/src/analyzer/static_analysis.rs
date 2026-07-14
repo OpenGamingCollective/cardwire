@@ -68,14 +68,18 @@ pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, bool>> {
                 // ignore if app doesnt end with .desktop
                 if let Some(ext) = path.extension()
                     && ext == "desktop"
+                    && let Ok(app_fdo) = DesktopEntry::from_path(path, Some(&locales))
+                    && app_fdo.prefers_non_default_gpu()
+                    && let Some(name) = app_fdo.name(&locales)
                 {
-                    // for now, only keep flatpak apps that prefers a non default gpu
-                    // the reason we only keep flatpak apps is because i can match a process with
-                    // it's FLATPAK_ID env
-                    if let Ok(app_fdo) = DesktopEntry::from_path(path, Some(&locales))
-                        && app_fdo.prefers_non_default_gpu()
-                        && let Some(flatpak_id) = app_fdo.flatpak()
-                    {
+                    // Push both lowercase and normal name to the hashmap
+                    // the RPCS3 .desktop contain the name `RPCS3` but the comm is `rpcs3`, so
+                    // we need to lowercase it On the other, Ryujinx
+                    // .desktop's name is `Ryujinx` and the comm is `Ryujinx`, so we also push
+                    // the default name
+                    app_list.insert(name.to_ascii_lowercase(), true);
+                    app_list.insert(name.to_string(), true);
+                    if let Some(flatpak_id) = app_fdo.flatpak() {
                         app_list.insert(flatpak_id.to_string(), true);
                     }
                 }
