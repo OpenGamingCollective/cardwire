@@ -7,7 +7,7 @@ use std::{
 use xdg::BaseDirectories;
 
 /// Return a list of fdo apps present in the system
-pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, bool>> {
+pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, bool>, Vec<PathBuf>)> {
     let mut app_directories: Vec<PathBuf> = Vec::new();
     // get from ENV
     let xdg_dir = BaseDirectories::new();
@@ -58,7 +58,7 @@ pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, bool>> {
     let mut app_list: HashMap<String, bool> = HashMap::new();
     let locales = get_languages_from_env();
 
-    for app_directory in app_directories {
+    for app_directory in &app_directories {
         // if directory is readable proceed, else just ignore it
         if let Ok(app_directory) = app_directory.read_dir() {
             // each file is an app entry
@@ -86,5 +86,5 @@ pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, bool>> {
             }
         }
     }
-    Ok(app_list)
+    Ok((app_list, app_directories))
 }

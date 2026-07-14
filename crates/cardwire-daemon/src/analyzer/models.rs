@@ -1,7 +1,7 @@
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
 use cardwire_ebpf::EbpfBlocker;
 use log::{debug, info, warn};
-use std::{collections::HashMap, fs, ptr, sync::Arc};
+use std::{collections::HashMap, fs, path::PathBuf, ptr, sync::Arc};
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, mpsc}, time::Instant
 };
@@ -34,6 +34,7 @@ pub struct CardwireAnalyzer {
     close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u8>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
+    xdg_folders: Vec<PathBuf>,
 }
 
 impl CardwireAnalyzer {
@@ -50,12 +51,15 @@ impl CardwireAnalyzer {
         let exec_ring = Arc::new(Mutex::new(exec_ring));
         let pid_map = Arc::new(RwLock::new(pid_map));
         let close_ring = Arc::new(Mutex::new(close_ring));
-        let xdg_list = Arc::new(RwLock::new(static_analysis::get_fdo_apps().await?));
+        let xdg_result = static_analysis::get_fdo_apps().await?;
+        let xdg_list = Arc::new(RwLock::new(xdg_result.0));
+        let xdg_folders: Vec<PathBuf> = xdg_result.1;
         Ok(CardwireAnalyzer {
             exec_ring,
             close_ring,
             pid_map,
             xdg_list,
+            xdg_folders,
         })
     }
     pub async fn run(self) -> anyhow::Result<()> {
@@ -226,6 +230,13 @@ impl CardwireAnalyzer {
             result = check_gamemode(&map);
         }
         Some(result)
+    }
+
+    pub fn xdg_list(&self) -> Arc<RwLock<HashMap<String, bool>>> {
+        Arc::clone(&self.xdg_list)
+    }
+    pub fn xdg_folders(&self) -> &Vec<PathBuf> {
+        &self.xdg_folders
     }
 }
 
