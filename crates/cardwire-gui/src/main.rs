@@ -1,47 +1,60 @@
-use iced::{self, widget};
+use std::{fmt::Display, process::exit};
 
-struct Counter {
-    count: i32,
+use iced::{
+    self, Element, Task, widget::{self, Container, button, column, row, text}, window
+};
+
+#[derive(Debug)]
+struct AppState {
+    current_tab: Page,
 }
-impl Counter {
+impl AppState {
     fn new() -> Self {
-        // initialize the counter struct
-        // with count value as 0.
-        Self { count: 0 }
-    }
-
-    fn update(&mut self, message: Message) -> iced::Task<Message> {
-        // handle emitted messages
-        match message {
-            Message::IncrementCount => self.count += 1,
-            Message::DecrementCount => self.count -= 1,
+        AppState {
+            current_tab: Page::Main,
         }
-
-        iced::Task::none()
     }
-    fn view(&self) -> iced::Element<'_, Message> {
-        // create the View Logic (UI)
-        let row = widget::row![
-            widget::button("-").on_press(Message::DecrementCount),
-            widget::text!("Count: {}", self.count),
-            widget::button("+").on_press(Message::IncrementCount)
-        ]
-        .spacing(10);
 
-        widget::container(row).center(iced::Length::Fill).into()
+    fn view(&self) -> Element<'_, Message> {
+        let mut content: widget::Row<'_, Message> =
+            row![text!("Current page: {}", self.current_tab)];
+        content = content.push(self.page_bar());
+        content.into()
+    }
+
+    fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::Exit => window::latest().and_then(|id| window::close(id)),
+        }
+    }
+    fn page_bar(&self) -> widget::Column<'_, Message> {
+        let mut column: widget::Column<'_, Message> = column![];
+        let text = text!("{}", Page::Main);
+        column = column.push(button(text));
+        column
+    }
+}
+#[derive(Debug, Clone, Copy)]
+enum Page {
+    Main,
+    About,
+}
+impl Display for Page {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Page::Main => write!(f, "Main"),
+            Page::About => write!(f, "About"),
+        }
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 enum Message {
-    // Emitted when the increment ("+") button is pressed
-    IncrementCount,
-    // Emitted when decrement ("-") button is pressed
-    DecrementCount,
+    Exit,
 }
 
 fn main() -> iced::Result {
-    iced::application(Counter::new, Counter::update, Counter::view)
-        .title("Example")
+    iced::application(AppState::new, AppState::update, AppState::view)
+        .title("Cardwire")
         .run()
 }
