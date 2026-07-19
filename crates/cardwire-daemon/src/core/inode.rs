@@ -169,7 +169,6 @@ pub fn sys_drm_inodes(render: u32, card: u32) -> Result<Vec<u64>> {
             // we matched with the blocked device, get the inodes without following the link
             let inode_res = fs::symlink_metadata(entry.path());
             if let Ok(meta) = inode_res {
-                println!("adding {}", entry.file_name().to_string_lossy());
                 inodes.push(meta.ino());
             }
         }
