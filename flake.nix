@@ -63,8 +63,17 @@
             (pkgs system).udev
             (pkgs system).pkg-config
             (pkgs system).mdbook
+            (pkgs system).wayland
+            (pkgs system).libxkbcommon
           ]
           ++ self.checks.${system}.pre-commit-check.enabledPackages;
+          LD_LIBRARY_PATH = (pkgs system).lib.makeLibraryPath [
+            (pkgs system).wayland
+            (pkgs system).libxkbcommon
+            (pkgs system).vulkan-loader
+            (pkgs system).libGL
+            (pkgs system).udev
+          ];
           RUST_SRC_PATH = "${(fenixpkgs system).stable.rust-src}/lib/rustlib/src/rust/library";
           RUST_BACKTRACE = "1";
           inherit (self.checks.${system}.pre-commit-check) shellHook;

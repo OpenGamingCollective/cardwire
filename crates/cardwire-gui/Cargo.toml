@@ -1,0 +1,21 @@
+[package]
+name = "cardwire-gui"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "GUI for cardwire GPU management"
+
+[dependencies]
+tokio.workspace = true
+zbus.workspace = true
+log.workspace = true
+anyhow.workspace = true
+env_logger.workspace = true
+iced.workspace = true
+
+[[bin]]
+name = "cardwire-gui"
+path = "src/main.rs"

@@ -4,6 +4,7 @@ members = [
     "crates/cardwire-daemon",
     "crates/cardwire-cli",
     "crates/cardwire-ebpf",
+    "crates/cardwire-gui",
 ]
 
 [workspace.package]
@@ -21,7 +22,7 @@ clap = { version = "4.6.1", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
 log = "0.4.32"
 thiserror = "2.0.18"
-clap_complete = "4.6.5" 
+clap_complete = "4.6.5"
 anyhow = "1.0.102"
 env_logger = "0.11"
 toml = "1.0.3"
@@ -31,6 +32,18 @@ tokio-stream = "0.1.18"
 xdg = "3.0.0"
 freedesktop-desktop-entry = "0.8.1"
 udev = { version = "^0.9.3", features = ["send", "sync"] }
+
+# don't use default-features to remove X11
+# cardwire doesn't support X11 and will never support it unless someone maintains it
+iced = { version = "0.14.0", default-features = false, features = [
+    "crisp",
+    "linux-theme-detection",
+    "tokio",
+    "tiny-skia",
+    "wayland",
+    "web-colors",
+    "wgpu",
+] }
 
 [profile.dev]
 overflow-checks = true
