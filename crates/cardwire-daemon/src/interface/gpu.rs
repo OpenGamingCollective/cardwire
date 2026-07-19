@@ -7,7 +7,7 @@ use std::{
 use crate::{
     core::{
         gpu::{DbusGpuDevice, GpuDevice, GpuVendor}, inode::{
-            backlight_to_inode, card_to_inode, nvidia_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode
+            backlight_to_inode, card_to_inode, nvidia_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode, sys_drm_inodes
         }, pci::PciDevice
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
@@ -90,6 +90,25 @@ impl GpuInterface {
             Err(err) => {
                 error!(
                     "failed to block pci {}: {}",
+                    self.device.pci.pci_address(),
+                    err
+                );
+                return Err(err).into_fdo();
+            }
+        };
+        // Block files in /sys/class/drm
+        match sys_drm_inodes(*self.device.render(), *self.device.card()) {
+            Ok(inodes) => {
+                for inode in inodes {
+                    if let Err(err) = blocker.block_inode(inode) {
+                        error!("failed to block inode(drm) {}: {}", inode, err);
+                        return Err(err).into_fdo();
+                    }
+                }
+            }
+            Err(err) => {
+                error!(
+                    "failed to block drm {}: {}",
                     self.device.pci.pci_address(),
                     err
                 );

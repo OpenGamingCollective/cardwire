@@ -1,6 +1,6 @@
 //! Used to get inodes for specific files
 use std::{
-    collections::BTreeMap, fs::{self}, os::unix::fs::MetadataExt
+    collections::BTreeMap, fs::{self}, os::unix::fs::MetadataExt, path::Path
 };
 
 use anyhow::Result;
@@ -149,6 +149,29 @@ pub fn exp_nvidia_inodes() -> Result<Vec<u64>> {
 
         if has_nvidia && let Ok(metadata) = fs::metadata(path) {
             inodes.push(metadata.ino());
+        }
+    }
+
+    Ok(inodes)
+}
+
+pub fn sys_drm_inodes(render: u32, card: u32) -> Result<Vec<u64>> {
+    let mut inodes = Vec::new();
+    let sys_path = Path::new("/sys/class/drm");
+
+    let card = format!("card{}", card);
+    let render = format!("renderD{}", render);
+    for entry in fs::read_dir(sys_path)? {
+        let entry = entry?;
+        if let Ok(entry_name) = entry.file_name().into_string()
+            && (entry_name.contains(&card) || entry_name.contains(&render))
+        {
+            // we matched with the blocked device, get the inodes without following the link
+            let inode_res = fs::symlink_metadata(entry.path());
+            if let Ok(meta) = inode_res {
+                println!("adding {}", entry.file_name().to_string_lossy());
+                inodes.push(meta.ino());
+            }
         }
     }
 
