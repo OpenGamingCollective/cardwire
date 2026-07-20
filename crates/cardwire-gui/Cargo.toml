@@ -15,6 +15,9 @@ log.workspace = true
 anyhow.workspace = true
 env_logger.workspace = true
 iced.workspace = true
+strum.workspace = true
+serde.workspace = true
+
 
 [[bin]]
 name = "cardwire-gui"

@@ -32,7 +32,6 @@ tokio-stream = "0.1.18"
 xdg = "3.0.0"
 freedesktop-desktop-entry = "0.8.1"
 udev = { version = "^0.9.3", features = ["send", "sync"] }
-
 # don't use default-features to remove X11
 # cardwire doesn't support X11 and will never support it unless someone maintains it
 iced = { version = "0.14.0", default-features = false, features = [
@@ -44,6 +43,7 @@ iced = { version = "0.14.0", default-features = false, features = [
     "web-colors",
     "wgpu",
 ] }
+strum = { version = "0.28", features = ["derive"] }
 
 [profile.dev]
 overflow-checks = true
