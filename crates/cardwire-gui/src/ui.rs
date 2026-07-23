@@ -1,12 +1,27 @@
 use iced::{
-    Alignment, Border, Color, Element, Length::Fill, widget::{button, column, container, pick_list, row, text}
+    Alignment, Border, Color, Element, Length::Fill, widget::{button, column, container, pick_list, row, space::horizontal, text, toggler}
 };
 use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    helpers::GpuDevice, message::Message, models::{MainState, Mode, Page}
+    helpers::GpuDevice, message::Message, models::{MainState, Mode, Page, SettingState}
 };
+
+// Custom macro for box theming
+macro_rules! box_theme {
+    () => {
+        container::Style {
+            background: Some(Color::from_rgb(0.15, 0.15, 0.15).into()),
+            border: Border {
+                radius: 8.0.into(),
+                width: 1.0,
+                color: Color::from_rgb(0.25, 0.25, 0.25),
+            },
+            ..Default::default()
+        }
+    };
+}
 
 pub fn page_bar() -> Element<'static, Message> {
     let buttons = Page::iter().fold(column![].spacing(10), |col, page| {
@@ -25,7 +40,9 @@ pub fn main_page<'a>(
     gpu_list: &'a BTreeMap<usize, GpuDevice>,
 ) -> Element<'a, Message> {
     column![
-        text!("Cardwire Main Page"),
+        text("the GUI is in beta, the ugly UI is intended behavior")
+            .size(35)
+            .center(),
         mode_element(main_state.current_mode),
         gpu_cards(gpu_list)
     ]
@@ -91,15 +108,7 @@ fn gpu_cards(gpu_list: &BTreeMap<usize, GpuDevice>) -> Element<'_, Message> {
             let card = container(column![title, details].spacing(10))
                 .width(Fill)
                 .padding(20)
-                .style(|_theme| container::Style {
-                    background: Some(Color::from_rgb(0.15, 0.15, 0.15).into()),
-                    border: Border {
-                        radius: 8.0.into(),
-                        width: 1.0,
-                        color: Color::from_rgb(0.25, 0.25, 0.25),
-                    },
-                    ..Default::default()
-                });
+                .style(|_| box_theme!());
 
             col.push(card)
         });
@@ -110,7 +119,65 @@ fn gpu_cards(gpu_list: &BTreeMap<usize, GpuDevice>) -> Element<'_, Message> {
 }
 
 pub fn about_page() -> Element<'static, Message> {
-    text("Made by luytan").into()
+    container(text("Made by luytan"))
+        .style(|_| box_theme!())
+        .width(Fill)
+        .padding(10)
+        .into()
+}
+
+pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Message> {
+    let mut col = column![].spacing(10);
+    let nvidia_setting = container(
+        row![
+            text!("Nvidia Experimental Block"),
+            horizontal(),
+            toggler(setting_state.nvidia_checked).on_toggle(Message::UpdateNvidiaSetting),
+        ]
+        .padding(10),
+    )
+    .style(|_| box_theme!())
+    .width(Fill);
+    let state_setting = container(
+        row![
+            text!("Auto Apply GPU-States"),
+            horizontal(),
+            toggler(setting_state.state_checked).on_toggle(Message::UpdateStateSetting),
+        ]
+        .padding(10),
+    )
+    .style(|_| box_theme!())
+    .width(Fill);
+    let battery_setting = container(
+        row![
+            text!("Switch Mode on battery"),
+            horizontal(),
+            toggler(setting_state.battery_checked).on_toggle(Message::UpdateBatterySetting),
+        ]
+        .padding(10),
+    )
+    .style(|_| box_theme!())
+    .width(Fill);
+    let battery_mode = container(
+        row![
+            text!("Mode: "),
+            horizontal(),
+            pick_list(
+                Mode::VARIANTS,
+                setting_state.battery_mode,
+                Message::UpdateBatteryMode
+            ),
+        ]
+        .padding(10),
+    )
+    .style(|_| box_theme!())
+    .width(Fill);
+    col = col
+        .push(nvidia_setting)
+        .push(state_setting)
+        .push(battery_setting)
+        .push(battery_mode);
+    col.into()
 }
 
 pub fn error_bar(msg: &str) -> Element<'_, Message> {

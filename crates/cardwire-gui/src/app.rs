@@ -4,7 +4,7 @@ use iced::{
 use std::collections::BTreeMap;
 
 use crate::{
-    helpers::{CardwireDbus, GpuDevice}, message::Message, models::{MainState, Mode, Page}, ui::{self, error_bar}
+    helpers::{CardwireDbus, GpuDevice}, message::Message, models::{DaemonSettings, MainState, Mode, Page, SettingState}, ui::{self, daemon_setting_page, error_bar}
 };
 
 #[derive(Debug)]
@@ -14,6 +14,7 @@ pub struct AppState {
     pub zbus_conn: CardwireDbus,
     pub gpu_list: BTreeMap<usize, GpuDevice>,
     pub main_state: MainState,
+    pub setting_state: SettingState,
 }
 
 impl AppState {
@@ -24,6 +25,7 @@ impl AppState {
             zbus_conn: CardwireDbus::new(),
             gpu_list: BTreeMap::default(),
             main_state: MainState::default(),
+            setting_state: SettingState::default(),
         };
 
         let conn_gpus = initial_state.zbus_conn.clone();
@@ -107,6 +109,95 @@ impl AppState {
                     },
                 );
             }
+            Message::UpdateNvidiaSetting(setting) => {
+                let conn = self.zbus_conn.clone();
+                return Task::perform(
+                    async move {
+                        conn.set_setting(DaemonSettings::ExpNvidiaBlock, setting, None)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        Ok((DaemonSettings::ExpNvidiaBlock, Some(setting), None::<Mode>))
+                    },
+                    |res| match res {
+                        Ok(res) => Message::FetchedSetting(Ok(res)),
+                        Err(err) => Message::FetchedSetting(Err(err)),
+                    },
+                );
+            }
+            Message::UpdateStateSetting(setting) => {
+                let conn = self.zbus_conn.clone();
+                return Task::perform(
+                    async move {
+                        conn.set_setting(DaemonSettings::AutoApplyGpuState, setting, None)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        Ok((
+                            DaemonSettings::AutoApplyGpuState,
+                            Some(setting),
+                            None::<Mode>,
+                        ))
+                    },
+                    |res| match res {
+                        Ok(res) => Message::FetchedSetting(Ok(res)),
+                        Err(err) => Message::FetchedSetting(Err(err)),
+                    },
+                );
+            }
+            Message::UpdateBatterySetting(setting) => {
+                let conn = self.zbus_conn.clone();
+                return Task::perform(
+                    async move {
+                        conn.set_setting(DaemonSettings::BattAutoSwitch, setting, None)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        Ok((DaemonSettings::BattAutoSwitch, Some(setting), None::<Mode>))
+                    },
+                    |res| match res {
+                        Ok(res) => Message::FetchedSetting(Ok(res)),
+                        Err(err) => Message::FetchedSetting(Err(err)),
+                    },
+                );
+            }
+            Message::UpdateBatteryMode(setting) => {
+                let conn = self.zbus_conn.clone();
+                return Task::perform(
+                    async move {
+                        conn.set_setting(DaemonSettings::BattAutoSwitchMode, false, Some(setting))
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        Ok((DaemonSettings::BattAutoSwitchMode, None, Some(setting)))
+                    },
+                    |res| match res {
+                        Ok(res) => Message::FetchedSetting(Ok(res)),
+                        Err(err) => Message::FetchedSetting(Err(err)),
+                    },
+                );
+            }
+            Message::FetchedSetting(res) => match res {
+                Ok(val) => match val.0 {
+                    DaemonSettings::ExpNvidiaBlock => {
+                        if let Some(new_val) = val.1 {
+                            self.setting_state.nvidia_checked = new_val
+                        }
+                    }
+                    DaemonSettings::AutoApplyGpuState => {
+                        if let Some(new_val) = val.1 {
+                            self.setting_state.state_checked = new_val
+                        }
+                    }
+                    DaemonSettings::BattAutoSwitch => {
+                        if let Some(new_val) = val.1 {
+                            self.setting_state.battery_checked = new_val
+                        }
+                    }
+                    DaemonSettings::BattAutoSwitchMode => {
+                        if let Some(new_mode) = val.2 {
+                            self.setting_state.battery_mode = Some(new_mode)
+                        }
+                    }
+                },
+                Err(err) => self.error = Some(format!("error fetching Setting: {}", err)),
+            },
             Message::ClearError => self.error = None,
         }
         Task::none()
@@ -120,7 +211,7 @@ impl AppState {
         app = app.push(container(match &self.current_tab {
             Page::Main => ui::main_page(&self.main_state, &self.gpu_list),
             Page::SmartMode => text("Smart Mode TODO").into(),
-            Page::CardwireSettings => text!("TODO").into(),
+            Page::CardwireSettings => daemon_setting_page(&self.setting_state),
             Page::AccessLogs => text!("TODO").into(),
             Page::About => ui::about_page(),
         }));

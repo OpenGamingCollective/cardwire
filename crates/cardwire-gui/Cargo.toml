@@ -12,7 +12,6 @@ description = "GUI for cardwire GPU management"
 tokio.workspace = true
 zbus.workspace = true
 log.workspace = true
-anyhow.workspace = true
 env_logger.workspace = true
 iced.workspace = true
 strum.workspace = true

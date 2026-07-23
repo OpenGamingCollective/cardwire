@@ -543,7 +543,6 @@ dependencies = [
 name = "cardwire-gui"
 version = "0.10.3"
 dependencies = [
- "anyhow",
  "env_logger",
  "iced",
  "log",

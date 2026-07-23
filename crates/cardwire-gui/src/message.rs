@@ -1,5 +1,5 @@
 use crate::{
-    helpers::GpuDevice, models::{Mode, Page}
+    helpers::GpuDevice, models::{DaemonSettings, Mode, Page}
 };
 use std::collections::BTreeMap;
 
@@ -9,5 +9,10 @@ pub enum Message {
     FetchedMode(Result<Mode, String>),
     SetMode(Mode),
     AllDevicesFetched(Result<BTreeMap<usize, GpuDevice>, String>),
+    UpdateNvidiaSetting(bool),
+    UpdateStateSetting(bool),
+    UpdateBatterySetting(bool),
+    UpdateBatteryMode(Mode),
+    FetchedSetting(Result<(DaemonSettings, Option<bool>, Option<Mode>), String>),
     ClearError,
 }

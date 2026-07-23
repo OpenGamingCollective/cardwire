@@ -1,11 +1,12 @@
 use std::fmt::{self, Display};
 use strum::{EnumIter, FromRepr, VariantArray};
 
-#[derive(PartialEq, zbus::zvariant::Type, Clone, Copy, Debug, VariantArray, FromRepr)]
+#[derive(PartialEq, zbus::zvariant::Type, Clone, Copy, Debug, VariantArray, FromRepr, Default)]
 #[repr(u32)]
 pub enum Mode {
     Integrated = 0,
     Hybrid = 1,
+    #[default]
     Manual = 2,
     Smart = 3,
 }
@@ -52,4 +53,31 @@ impl Display for Page {
 #[derive(Default, Clone, Debug)]
 pub struct MainState {
     pub current_mode: Option<Mode>,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct SettingState {
+    pub nvidia_checked: bool,
+    pub state_checked: bool,
+    pub battery_checked: bool,
+    pub battery_mode: Option<Mode>,
+}
+
+#[derive(Clone, Debug)]
+pub enum DaemonSettings {
+    AutoApplyGpuState,
+    ExpNvidiaBlock,
+    BattAutoSwitch,
+    BattAutoSwitchMode,
+}
+
+impl Display for DaemonSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DaemonSettings::AutoApplyGpuState => write!(f, "AutoApplyGpuState"),
+            DaemonSettings::ExpNvidiaBlock => write!(f, "ExperimentalNvidiaBlock"),
+            DaemonSettings::BattAutoSwitch => write!(f, "BatteryAutoSwitch"),
+            DaemonSettings::BattAutoSwitchMode => write!(f, "BatteryAutoSwitchMode"),
+        }
+    }
 }
