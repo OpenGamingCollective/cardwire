@@ -16,6 +16,7 @@ env_logger.workspace = true
 iced.workspace = true
 strum.workspace = true
 serde.workspace = true
+iced_aw.workspace = true
 
 
 [[bin]]

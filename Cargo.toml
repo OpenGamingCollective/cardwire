@@ -43,6 +43,7 @@ iced = { version = "0.14.0", default-features = false, features = [
     "web-colors",
     "wgpu",
 ] }
+iced_aw = "0.14.1"
 strum = { version = "0.28", features = ["derive"] }
 
 [profile.dev]
