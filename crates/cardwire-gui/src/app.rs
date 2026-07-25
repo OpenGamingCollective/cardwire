@@ -1,6 +1,7 @@
 use iced::{
     Alignment, Element, Length::{Fill, Fixed}, Task, widget::{column, container, row, text}
 };
+use log::error;
 use std::collections::BTreeMap;
 
 use crate::{
@@ -18,36 +19,15 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new() -> (Self, Task<Message>) {
-        let initial_state = AppState {
+    pub fn new() -> Self {
+        AppState {
             current_tab: Page::default(),
             error: None,
             zbus_conn: CardwireDbus::new(),
             gpu_list: BTreeMap::default(),
             main_state: MainState::default(),
             setting_state: SettingState::default(),
-        };
-
-        let conn_gpus = initial_state.zbus_conn.clone();
-        let gpu_task =
-            Task::perform(
-                async move { conn_gpus.get_devices_list().await },
-                |res| match res {
-                    Ok(device) => Message::AllDevicesFetched(Ok(device)),
-                    Err(err) => Message::AllDevicesFetched(Err(err.to_string())),
-                },
-            );
-
-        let conn_mode = initial_state.zbus_conn.clone();
-        let mode_task = Task::perform(async move { conn_mode.get_mode().await }, |res| match res {
-            Ok(val) => match Mode::from_repr(val) {
-                Some(m) => Message::FetchedMode(Ok(m)),
-                None => Message::FetchedMode(Err(format!("Unknown mode: {}", val))),
-            },
-            Err(err) => Message::FetchedMode(Err(err.to_string())),
-        });
-
-        (initial_state, Task::batch([gpu_task, mode_task]))
+        }
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -173,6 +153,15 @@ impl AppState {
                     },
                 );
             }
+            Message::UpdateGpuPowerState(id, new_state) => {
+                // Get the gpu by key
+                if let Some(gpu) = self.gpu_list.get_mut(&id) {
+                    // Update the gpu power_state
+                    gpu.power_state = Some(new_state);
+                } else {
+                    error!("couldnt get gpu key: {}", id);
+                }
+            }
             Message::FetchedSetting(res) => match res {
                 Ok(val) => match val.0 {
                     DaemonSettings::ExpNvidiaBlock => {
@@ -198,6 +187,10 @@ impl AppState {
                 },
                 Err(err) => self.error = Some(format!("error fetching Setting: {}", err)),
             },
+            Message::ToggleMenu(index) => {
+                self.main_state.open_gpu_menu = index;
+            }
+            Message::None => {}
             Message::ClearError => self.error = None,
         }
         Task::none()

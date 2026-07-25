@@ -1,6 +1,7 @@
 use iced::{
-    Alignment, Border, Color, Element, Length::Fill, widget::{button, column, container, pick_list, row, space::horizontal, text, toggler}
+    Alignment, Border, Color, Element, Length::{Fill, FillPortion}, widget::{button, column, container, pick_list, row, space::horizontal, text, toggler}
 };
+use iced_aw::DropDown;
 use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
@@ -44,7 +45,7 @@ pub fn main_page<'a>(
             .size(35)
             .center(),
         mode_element(main_state.current_mode),
-        gpu_cards(gpu_list)
+        gpu_cards(gpu_list, main_state.open_gpu_menu)
     ]
     .spacing(20)
     .into()
@@ -60,7 +61,10 @@ fn mode_element(current_mode: Option<Mode>) -> Element<'static, Message> {
     .into()
 }
 
-fn gpu_cards(gpu_list: &BTreeMap<usize, GpuDevice>) -> Element<'_, Message> {
+fn gpu_cards(
+    gpu_list: &BTreeMap<usize, GpuDevice>,
+    open_dropdown: Option<usize>,
+) -> Element<'_, Message> {
     let cards = gpu_list
         .iter()
         .fold(column![].spacing(15), |col, (id, gpu)| {
@@ -75,8 +79,31 @@ fn gpu_cards(gpu_list: &BTreeMap<usize, GpuDevice>) -> Element<'_, Message> {
                 format!("GPU {} ({})", id, &gpu.name)
             };
 
-            let title = text(title_text).size(20).color(title_color);
+            let is_open = open_dropdown == Some(*id);
 
+            let header: iced::Element<'_, Message> = row![
+                text(title_text)
+                    .size(20)
+                    .color(title_color)
+                    .width(FillPortion(1)),
+                DropDown::new(
+                    button("...").on_press(if is_open {
+                        Message::ToggleMenu(None)
+                    } else {
+                        Message::ToggleMenu(Some(*id))
+                    }),
+                    column![
+                        button("Choice 1").on_press(Message::ToggleMenu(None)),
+                        button("Choice 2").on_press(Message::ToggleMenu(None)),
+                        button("Choice 3").on_press(Message::ToggleMenu(None)),
+                        button("Choice 4").on_press(Message::ToggleMenu(None)),
+                    ],
+                    is_open,
+                )
+                .on_dismiss(Message::ToggleMenu(None))
+                .width(FillPortion(5))
+            ]
+            .into();
             let details = column![
                 row![
                     text("Vendor: ")
@@ -100,19 +127,29 @@ fn gpu_cards(gpu_list: &BTreeMap<usize, GpuDevice>) -> Element<'_, Message> {
                     text("Blocked: ")
                         .color(Color::from_rgb(0.6, 0.6, 0.6))
                         .width(80),
-                    text(gpu.blocked)
-                ],
+                    text(gpu.blocked),
+                    horizontal(),
+                    match &gpu.power_state {
+                        Some(power_state) => {
+                            match power_state.trim() {
+                                "D0" => text!("D0").color(Color::from_rgb(1.0, 0.0, 0.0)),
+                                "D3cold" => text!("D3Cold").color(Color::from_rgb(0.0, 1.0, 0.0)),
+                                _ => text!("{}/", power_state),
+                            }
+                        }
+                        None => text("err"),
+                    }
+                ]
             ]
             .spacing(8);
 
-            let card = container(column![title, details].spacing(10))
+            let card = container(column![header, details].spacing(10))
                 .width(Fill)
                 .padding(20)
                 .style(|_| box_theme!());
 
             col.push(card)
         });
-
     column![text("Connected Devices").size(24), cards]
         .spacing(15)
         .into()

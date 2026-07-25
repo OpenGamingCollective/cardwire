@@ -550,6 +550,7 @@ dependencies = [
  "serde",
  "strum",
  "tokio",
+ "tokio-stream",
  "zbus",
 ]
 

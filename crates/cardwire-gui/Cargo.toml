@@ -10,6 +10,7 @@ description = "GUI for cardwire GPU management"
 
 [dependencies]
 tokio.workspace = true
+tokio-stream.workspace = true
 zbus.workspace = true
 log.workspace = true
 env_logger.workspace = true
@@ -17,7 +18,6 @@ iced.workspace = true
 strum.workspace = true
 serde.workspace = true
 iced_aw.workspace = true
-
 
 [[bin]]
 name = "cardwire-gui"

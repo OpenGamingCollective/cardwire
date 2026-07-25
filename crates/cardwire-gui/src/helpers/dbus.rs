@@ -6,7 +6,7 @@ use zbus::{
 
 use crate::models::{DaemonSettings, Mode};
 
-#[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug, Clone)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct GpuDevice {
     pub id: u32,
     pub name: String,
@@ -17,6 +17,7 @@ pub struct GpuDevice {
     pub blocked: bool,
     pub nvidia: bool,
     pub nvidia_minor: String,
+    pub power_state: Option<String>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug, Clone)]
@@ -91,6 +92,7 @@ impl CardwireDbus {
                         blocked,
                         nvidia: dbus_dev.nvidia,
                         nvidia_minor: dbus_dev.nvidia_minor,
+                        power_state: None,
                     };
                     map.insert(id as usize, dev);
                 }

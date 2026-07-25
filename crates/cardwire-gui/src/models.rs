@@ -53,6 +53,7 @@ impl Display for Page {
 #[derive(Default, Clone, Debug)]
 pub struct MainState {
     pub current_mode: Option<Mode>,
+    pub open_gpu_menu: Option<usize>,
 }
 
 #[derive(Default, Clone, Debug)]

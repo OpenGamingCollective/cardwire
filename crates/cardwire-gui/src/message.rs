@@ -13,6 +13,11 @@ pub enum Message {
     UpdateStateSetting(bool),
     UpdateBatterySetting(bool),
     UpdateBatteryMode(Mode),
+    UpdateGpuPowerState(usize, String),
     FetchedSetting(Result<(DaemonSettings, Option<bool>, Option<Mode>), String>),
+    ToggleMenu(Option<usize>),
     ClearError,
+    #[expect(dead_code)]
+    // Placeholder used when building a new feature
+    None,
 }
