@@ -35,29 +35,6 @@ impl AppState {
             Message::SwitchPage(page) => {
                 self.current_tab = page;
                 self.error = None;
-
-                if page == Page::Main {
-                    // We fetch the mode and the list again to prevent outdated datas
-                    let conn_mode = self.zbus_conn.clone();
-                    let mode_task =
-                        Task::perform(async move { conn_mode.get_mode().await }, |res| match res {
-                            Ok(val) => match Mode::from_repr(val) {
-                                Some(m) => Message::FetchedMode(Ok(m)),
-                                None => Message::FetchedMode(Err(format!("Unknown mode: {}", val))),
-                            },
-                            Err(err) => Message::FetchedMode(Err(err.to_string())),
-                        });
-
-                    let conn_gpus = self.zbus_conn.clone();
-                    let gpu_task =
-                        Task::perform(async move { conn_gpus.get_devices_list().await }, |res| {
-                            match res {
-                                Ok(devices) => Message::AllDevicesFetched(Ok(devices)),
-                                Err(err) => Message::AllDevicesFetched(Err(err.to_string())),
-                            }
-                        });
-                    return Task::batch([mode_task, gpu_task]);
-                }
             }
             Message::AllDevicesFetched(res) => match res {
                 Ok(map) => {
