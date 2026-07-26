@@ -200,6 +200,64 @@ impl AppState {
             Message::ToggleMenu(index) => {
                 self.main_state.open_gpu_menu = index;
             }
+            Message::SetGpuBlock(id, blocked) => {
+                let conn = self.zbus_conn.clone();
+                return Task::perform(
+                    async move {
+                        conn.set_gpu_block(id as u32, blocked)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        Ok((id, blocked))
+                    },
+                    Message::GpuBlockResult,
+                );
+            }
+            Message::GpuBlockResult(res) => match res {
+                Ok((id, blocked)) => {
+                    if let Some(gpu) = self.gpu_list.get_mut(&id) {
+                        gpu.blocked = blocked;
+                    }
+                    self.info = Some(format!(
+                        "GPU {} {}",
+                        id,
+                        if blocked { "blocked" } else { "unblocked" }
+                    ));
+                    self.error = None;
+                }
+                Err(err) => self.error = Some(format!("Block error: {}", err)),
+            },
+            Message::RequestLsof(id) => {
+                self.main_state.open_gpu_menu = None;
+                let conn = self.zbus_conn.clone();
+                return Task::perform(
+                    async move { conn.lsof(id as u32).await.map_err(|e| e.to_string()) },
+                    Message::LsofResult,
+                );
+            }
+            Message::LsofResult(res) => match res {
+                Ok(data) => {
+                    self.main_state.lsof_window = Some(data);
+                    self.error = None;
+                }
+                Err(err) => self.error = Some(format!("Lsof error: {}", err)),
+            },
+            Message::CloseLsofWindow => {
+                self.main_state.lsof_window = None;
+            }
+            Message::RefreshGpu => {
+                let conn = self.zbus_conn.clone();
+                return Task::perform(
+                    async move { conn.refresh_gpu().await.map_err(|e| e.to_string()) },
+                    Message::RefreshGpuResult,
+                );
+            }
+            Message::RefreshGpuResult(res) => match res {
+                Ok(()) => self.info = Some("GPU list refreshed".to_string()),
+                Err(err) => self.error = Some(format!("Refresh error: {}", err)),
+            },
+            Message::OpenUrl(url) => {
+                let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+            }
             Message::None => {}
             Message::ClearError => self.error = None,
             Message::ClearInfo => self.info = None,
@@ -215,6 +273,7 @@ impl AppState {
             Page::SmartMode => text("Smart Mode TODO").into(),
             Page::CardwireSettings => daemon_setting_page(&self.setting_state),
             Page::AccessLogs => text!("TODO").into(),
+            Page::Advanced => ui::advanced_page(),
             Page::About => ui::about_page(),
         }));
         let styled_main_content = main_content
@@ -230,6 +289,9 @@ impl AppState {
         }
         if let Some(info) = &self.info {
             content_stack = content_stack.push(info_bar(info));
+        }
+        if let Some(lsof_data) = &self.main_state.lsof_window {
+            content_stack = content_stack.push(ui::lsof_overlay(lsof_data, &self.gpu_list));
         }
 
         let final_app = row![

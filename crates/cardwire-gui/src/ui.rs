@@ -1,5 +1,5 @@
 use iced::{
-    Alignment, Border, Color, Element, Length::{Fill, FillPortion}, widget::{
+    Alignment, Border, Color, Element, Font, Length::{Fill, FillPortion, Fixed}, widget::{
         button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler
     }
 };
@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    helpers::GpuDevice, message::Message, models::{MainState, Mode, Page, PciDevice, SettingState}
+    helpers::GpuDevice, message::Message, models::{LsofData, MainState, Mode, Page, PciDevice, SettingState}
 };
 
 // Custom macro for box theming
@@ -24,6 +24,72 @@ macro_rules! box_theme {
             ..Default::default()
         }
     };
+}
+
+fn menu_btn_style(_theme: &iced::Theme, status: button::Status) -> button::Style {
+    match status {
+        button::Status::Hovered => button::Style {
+            background: Some(Color::from_rgb(0.25, 0.25, 0.25).into()),
+            text_color: Color::WHITE,
+            border: Border {
+                radius: 4.0.into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        _ => button::Style {
+            background: Some(Color::from_rgb(0.12, 0.12, 0.12).into()),
+            text_color: Color::from_rgb(0.9, 0.9, 0.9),
+            border: Border {
+                radius: 4.0.into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    }
+}
+
+fn trigger_btn_style(_theme: &iced::Theme, status: button::Status) -> button::Style {
+    match status {
+        button::Status::Hovered => button::Style {
+            background: Some(Color::from_rgb(0.3, 0.3, 0.3).into()),
+            text_color: Color::WHITE,
+            border: Border {
+                radius: 6.0.into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        _ => button::Style {
+            background: Some(Color::from_rgb(0.2, 0.2, 0.2).into()),
+            text_color: Color::from_rgb(0.9, 0.9, 0.9),
+            border: Border {
+                radius: 6.0.into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    }
+}
+
+fn link_btn_style(_theme: &iced::Theme, status: button::Status) -> button::Style {
+    match status {
+        button::Status::Hovered => button::Style {
+            background: Some(Color::from_rgba(1.0, 1.0, 1.0, 0.1).into()),
+            text_color: Color::from_rgb(0.6, 0.8, 1.0),
+            border: Border {
+                radius: 4.0.into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        _ => button::Style {
+            background: None,
+            text_color: Color::from_rgb(0.4, 0.6, 1.0),
+            border: Border::default(),
+            ..Default::default()
+        },
+    }
 }
 
 pub fn page_bar() -> Element<'static, Message> {
@@ -83,27 +149,66 @@ fn gpu_cards(
 
             let is_open = open_dropdown == Some(*id);
 
+            let gpu_id = *id;
+            let is_blocked = gpu.blocked;
+            let is_default = gpu.default;
+
+            // Build dropdown menu items
+            let mut dropdown_col = column![];
+            // Block/Unblock (only for non-default GPUs)
+            if !is_default {
+                if is_blocked {
+                    dropdown_col = dropdown_col.push(
+                        button("Unblock")
+                            .on_press(Message::SetGpuBlock(gpu_id, false))
+                            .width(Fill)
+                            .style(menu_btn_style),
+                    );
+                } else {
+                    dropdown_col = dropdown_col.push(
+                        button("Block")
+                            .on_press(Message::SetGpuBlock(gpu_id, true))
+                            .width(Fill)
+                            .style(menu_btn_style),
+                    );
+                }
+            }
+            // Lsof
+            dropdown_col = dropdown_col.push(
+                button("Lsof")
+                    .on_press(Message::RequestLsof(gpu_id))
+                    .width(Fill)
+                    .style(menu_btn_style),
+            );
+
+            let dropdown_content =
+                container(dropdown_col.spacing(5))
+                    .padding(8)
+                    .style(|_| container::Style {
+                        background: Some(Color::from_rgb(0.12, 0.12, 0.12).into()),
+                        border: Border {
+                            radius: 8.0.into(),
+                            width: 1.0,
+                            color: Color::from_rgb(0.25, 0.25, 0.25),
+                        },
+                        ..Default::default()
+                    });
+
             let header: iced::Element<'_, Message> = row![
-                text(title_text)
-                    .size(20)
-                    .color(title_color)
-                    .width(FillPortion(1)),
+                text(title_text).size(20).color(title_color).width(Fill),
                 DropDown::new(
-                    button("...").on_press(if is_open {
-                        Message::ToggleMenu(None)
-                    } else {
-                        Message::ToggleMenu(Some(*id))
-                    }),
-                    column![
-                        button("Choice 1").on_press(Message::ToggleMenu(None)),
-                        button("Choice 2").on_press(Message::ToggleMenu(None)),
-                        button("Choice 3").on_press(Message::ToggleMenu(None)),
-                        button("Choice 4").on_press(Message::ToggleMenu(None)),
-                    ],
+                    button("...")
+                        .on_press(if is_open {
+                            Message::ToggleMenu(None)
+                        } else {
+                            Message::ToggleMenu(Some(*id))
+                        })
+                        .style(trigger_btn_style),
+                    dropdown_content,
                     is_open,
                 )
                 .on_dismiss(Message::ToggleMenu(None))
-                .width(FillPortion(5))
+                .width(Fixed(120.0))
             ]
             .into();
             let details = column![
@@ -157,12 +262,169 @@ fn gpu_cards(
         .into()
 }
 
+pub fn lsof_overlay<'a>(
+    lsof_data: &'a LsofData,
+    gpu_list: &'a BTreeMap<usize, GpuDevice>,
+) -> Element<'a, Message> {
+    let gpu_name = gpu_list
+        .get(&lsof_data.gpu_id)
+        .map(|g| g.name.as_str())
+        .unwrap_or("Unknown");
+
+    let header = row![
+        text!("lsof — GPU {} ({})", lsof_data.gpu_id, gpu_name)
+            .size(18)
+            .color(Color::from_rgb(0.9, 0.9, 0.9))
+            .font(Font::MONOSPACE)
+            .width(Fill),
+        button("✕ Close")
+            .on_press(Message::CloseLsofWindow)
+            .padding([4, 12])
+    ]
+    .align_y(Alignment::Center);
+
+    let mut content = column![header].spacing(12);
+
+    let mut paths: Vec<&String> = lsof_data.processes.keys().collect();
+    paths.sort();
+
+    for path in paths {
+        if let Some(procs) = lsof_data.processes.get(path) {
+            let mut procs = procs.clone();
+            let path_text = row![
+                text!("❯")
+                    .color(Color::from_rgb(0.98, 0.2, 0.6)) // Magenta
+                    .font(Font::MONOSPACE)
+                    .size(16),
+                text(path)
+                    .color(Color::from_rgb(0.35, 0.8, 0.98)) // Cyan
+                    .font(Font::MONOSPACE)
+                    .size(16),
+            ]
+            .spacing(8);
+
+            let mut section = column![path_text].spacing(2);
+
+            if procs.is_empty() {
+                section = section.push(
+                    text("  (no processes)")
+                        .color(Color::from_rgb(0.5, 0.5, 0.5))
+                        .font(Font::MONOSPACE)
+                        .size(16),
+                );
+            } else {
+                procs.dedup();
+                for proc in procs {
+                    section = section.push(
+                        text!("  {}", proc)
+                            .color(Color::from_rgb(0.85, 0.85, 0.85))
+                            .font(Font::MONOSPACE)
+                            .size(16),
+                    );
+                }
+            }
+            content = content.push(section);
+        }
+    }
+
+    let terminal = container(scrollable(content))
+        .width(Fill)
+        .height(Fill)
+        .padding(20)
+        .style(|_| container::Style {
+            background: Some(Color::from_rgba(0.08, 0.08, 0.09, 0.95).into()),
+            border: Border {
+                radius: 8.0.into(),
+                width: 1.0,
+                color: Color::from_rgb(0.2, 0.2, 0.2),
+            },
+            ..Default::default()
+        });
+
+    container(container(terminal).width(Fill).height(Fill).padding(40))
+        .width(Fill)
+        .height(Fill)
+        .style(|_| container::Style {
+            background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.6).into()),
+            ..Default::default()
+        })
+        .into()
+}
+
 pub fn about_page() -> Element<'static, Message> {
-    container(text("Made by luytan"))
+    let version = env!("CARGO_PKG_VERSION");
+    let content = column![
+        text("Cardwire").size(40),
+        text!("Version {}", version)
+            .size(18)
+            .color(Color::from_rgb(0.6, 0.6, 0.6)),
+        row![
+            text("Author: ").color(Color::from_rgb(0.6, 0.6, 0.6)),
+            text("luytan")
+        ],
+        row![
+            text("License: ").color(Color::from_rgb(0.6, 0.6, 0.6)),
+            text("GPL-3.0")
+        ],
+        row![
+            text("Repository: ").color(Color::from_rgb(0.6, 0.6, 0.6)),
+            button(
+                text("github.com/OpenGamingCollective/cardwire")
+                    .color(Color::from_rgb(0.4, 0.6, 1.0))
+            )
+            .style(link_btn_style)
+            .padding(0)
+            .on_press(Message::OpenUrl(
+                "https://github.com/OpenGamingCollective/cardwire".to_string()
+            ))
+        ],
+    ]
+    .spacing(10);
+
+    container(content)
         .style(|_| box_theme!())
         .width(Fill)
-        .padding(10)
+        .padding(20)
         .into()
+}
+
+pub fn advanced_page() -> Element<'static, Message> {
+    let warning = container(
+        row![
+            text("⚠ ").size(20).color(Color::from_rgb(1.0, 0.8, 0.0)),
+            text("Warning: These actions are for advanced users.")
+                .color(Color::from_rgb(1.0, 0.8, 0.0)),
+        ]
+        .align_y(Alignment::Center)
+        .padding(10),
+    )
+    .style(|_| container::Style {
+        background: Some(Color::from_rgb(0.25, 0.2, 0.05).into()),
+        border: Border {
+            radius: 8.0.into(),
+            width: 1.0,
+            color: Color::from_rgb(0.5, 0.4, 0.1),
+        },
+        ..Default::default()
+    })
+    .width(Fill);
+
+    let refresh_section = container(
+        column![
+            text("Refresh GPU List").size(20),
+            text("Re-scan PCI devices and update the internal GPU list.")
+                .color(Color::from_rgb(0.6, 0.6, 0.6)),
+            button("Refresh GPU")
+                .on_press(Message::RefreshGpu)
+                .padding([8, 16])
+        ]
+        .spacing(10),
+    )
+    .style(|_| box_theme!())
+    .width(Fill)
+    .padding(20);
+
+    column![warning, refresh_section].spacing(15).into()
 }
 
 pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Message> {

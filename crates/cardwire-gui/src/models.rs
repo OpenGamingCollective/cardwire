@@ -1,4 +1,6 @@
-use std::fmt::{self, Display};
+use std::{
+    collections::HashMap, fmt::{self, Display}
+};
 use strum::{EnumIter, FromRepr, VariantArray};
 
 #[derive(PartialEq, zbus::zvariant::Type, Clone, Copy, Debug, VariantArray, FromRepr, Default)]
@@ -37,6 +39,7 @@ pub enum Page {
     SmartMode,
     AccessLogs,
     CardwireSettings,
+    Advanced,
     About,
 }
 impl Display for Page {
@@ -47,6 +50,7 @@ impl Display for Page {
             Page::SmartMode => write!(f, "Smart Mode"),
             Page::CardwireSettings => write!(f, "Cardwire Settings"),
             Page::AccessLogs => write!(f, "Access Logs"),
+            Page::Advanced => write!(f, "Advanced"),
             Page::About => write!(f, "About"),
         }
     }
@@ -56,6 +60,13 @@ impl Display for Page {
 pub struct MainState {
     pub current_mode: Option<Mode>,
     pub open_gpu_menu: Option<usize>,
+    pub lsof_window: Option<LsofData>,
+}
+
+#[derive(Clone, Debug)]
+pub struct LsofData {
+    pub gpu_id: usize,
+    pub processes: HashMap<String, Vec<String>>,
 }
 
 #[derive(Default, Clone, Debug)]

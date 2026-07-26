@@ -4,7 +4,7 @@ use zbus::{
     self, Connection, fdo, names::OwnedInterfaceName, zvariant::{OwnedObjectPath, OwnedValue}
 };
 
-use crate::models::{DaemonSettings, Mode};
+use crate::models::{DaemonSettings, LsofData, Mode};
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct GpuDevice {
@@ -155,5 +155,45 @@ impl CardwireDbus {
                 }
             }
         }
+    }
+    pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::fdo::Result<()> {
+        let connection = Connection::system().await?;
+        let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+        let proxy = zbus::Proxy::new(
+            &connection,
+            "com.github.opengamingcollective.cardwire",
+            path.as_str(),
+            "com.github.opengamingcollective.cardwire.Gpu",
+        )
+        .await
+        .map_err(|e| zbus::fdo::Error::Failed(format!("Failed to create proxy: {}", e)))?;
+        proxy.set_property("Block", &(blocked)).await
+    }
+    pub async fn lsof(&self, id: u32) -> zbus::Result<LsofData> {
+        let connection = Connection::system().await?;
+        let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+        let proxy = zbus::Proxy::new(
+            &connection,
+            "com.github.opengamingcollective.cardwire",
+            path.as_str(),
+            "com.github.opengamingcollective.cardwire.Gpu",
+        )
+        .await?;
+        let result: HashMap<String, Vec<String>> = proxy.call("Lsof", &()).await?;
+        Ok(LsofData {
+            gpu_id: id as usize,
+            processes: result,
+        })
+    }
+    pub async fn refresh_gpu(&self) -> zbus::Result<()> {
+        let connection = Connection::system().await?;
+        let proxy = zbus::Proxy::new(
+            &connection,
+            "com.github.opengamingcollective.cardwire",
+            "/com/github/opengamingcollective/cardwire",
+            "com.github.opengamingcollective.cardwire.Debug",
+        )
+        .await?;
+        proxy.call("RefreshGpu", &()).await
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    helpers::GpuDevice, models::{DaemonSettings, Mode, Page, PciDevice}
+    helpers::GpuDevice, models::{DaemonSettings, LsofData, Mode, Page, PciDevice}
 };
 use std::collections::BTreeMap;
 
@@ -19,6 +19,14 @@ pub enum Message {
     FetchedPciList(BTreeMap<String, PciDevice>),
     PciListToClipboard(),
     ToggleMenu(Option<usize>),
+    SetGpuBlock(usize, bool),
+    GpuBlockResult(Result<(usize, bool), String>),
+    RequestLsof(usize),
+    LsofResult(Result<LsofData, String>),
+    CloseLsofWindow,
+    RefreshGpu,
+    RefreshGpuResult(Result<(), String>),
+    OpenUrl(String),
     ClearError,
     ClearInfo,
     #[expect(dead_code)]
