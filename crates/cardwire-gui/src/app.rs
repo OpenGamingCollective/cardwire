@@ -310,7 +310,7 @@ impl AppState {
         }
 
         let final_app = row![
-            container(ui::page_bar())
+            container(ui::page_bar(self.current_tab))
                 .width(Fixed(200.0))
                 .height(Fill)
                 .style(container::rounded_box)

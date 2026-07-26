@@ -95,14 +95,39 @@ fn link_btn_style(_theme: &iced::Theme, status: button::Status) -> button::Style
     }
 }
 
+// Styling used for buttons in sidebar
+fn page_btn_style(theme: &iced::Theme, selected: bool, status: button::Status) -> button::Style {
+    if selected {
+        return button::primary(theme, status);
+    }
+
+    let background = match status {
+        button::Status::Hovered => Color::from_rgb(0.22, 0.22, 0.22),
+        button::Status::Pressed => Color::from_rgb(0.12, 0.12, 0.12),
+        _ => Color::from_rgb(0.16, 0.16, 0.16),
+    };
+
+    button::Style {
+        background: Some(background.into()),
+        text_color: Color::from_rgb(0.95, 0.95, 0.95),
+        border: Border {
+            radius: 4.0.into(),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
 // Iter over the Page enum and make a button for each variants, Used to navigate around the GUI
-pub fn page_bar() -> Element<'static, Message> {
+pub fn page_bar(current_page: Page) -> Element<'static, Message> {
     let buttons = Page::iter().fold(column![].spacing(10), |col, page| {
+        let selected = page == current_page;
         col.push(
             button(text!("{}", page))
                 .on_press(Message::SwitchPage(page))
                 .width(Fill)
-                .padding([8, 12]),
+                .padding([8, 12])
+                .style(move |theme, status| page_btn_style(theme, selected, status)),
         )
     });
     buttons.into()
