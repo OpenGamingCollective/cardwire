@@ -548,6 +548,7 @@ dependencies = [
  "iced_aw",
  "log",
  "serde",
+ "serde_json",
  "strum",
  "tokio",
  "tokio-stream",

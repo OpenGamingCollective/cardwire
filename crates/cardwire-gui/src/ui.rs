@@ -297,9 +297,11 @@ pub fn pci_page<'a>(pci_list: &'a BTreeMap<String, PciDevice>) -> Element<'a, Me
                 col.push(card)
             }),
     );
-    column![text!("List of PCI Devices").size(30).center(), cards]
-        .spacing(15)
-        .into()
+    let title = row![
+        text!("List of PCI Devices").size(30).center().width(Fill),
+        button("Copy to Clipboard").on_press(Message::PciListToClipboard())
+    ];
+    column![title, cards].spacing(15).into()
 }
 
 pub fn error_bar(msg: &str) -> Element<'_, Message> {

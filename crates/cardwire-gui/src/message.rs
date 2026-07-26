@@ -17,6 +17,7 @@ pub enum Message {
     UpdateBlockState(usize, bool),
     FetchedSetting(Result<(DaemonSettings, Option<bool>, Option<Mode>), String>),
     FetchedPciList(BTreeMap<String, PciDevice>),
+    PciListToClipboard(),
     ToggleMenu(Option<usize>),
     ClearError,
     #[expect(dead_code)]

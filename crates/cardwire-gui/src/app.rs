@@ -177,6 +177,10 @@ impl AppState {
             Message::FetchedPciList(pci_list) => {
                 self.pci_list = pci_list;
             }
+            Message::PciListToClipboard() => match serde_json::to_string_pretty(&self.pci_list) {
+                Ok(json) => return iced::clipboard::write(json),
+                Err(e) => self.error = Some(e.to_string()),
+            },
             Message::ToggleMenu(index) => {
                 self.main_state.open_gpu_menu = index;
             }
