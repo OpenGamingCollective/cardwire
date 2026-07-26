@@ -1,9 +1,12 @@
-use std::sync::{
-    Arc, atomic::{AtomicBool, AtomicU32, Ordering}
+use std::{
+    io::ErrorKind, sync::{
+        Arc, atomic::{AtomicBool, AtomicU32, Ordering}
+    }
 };
 
 use crate::{file::CardwireConfig, interface::Modes};
 use cardwire_ebpf::{EbpfBlocker, EbpfSettings};
+use log::warn;
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
@@ -55,18 +58,15 @@ impl ConfigInterface {
         Ok(self.config.auto_apply_gpu_state.load(Ordering::Relaxed))
     }
     #[zbus(property)]
-    pub async fn set_auto_apply_gpu_state(&mut self, state: bool) -> fdo::Result<()> {
-        self.config
-            .auto_apply_gpu_state
-            .store(state, Ordering::Relaxed);
-        Ok(())
-    }
-    #[zbus(property)]
     pub async fn experimental_nvidia_block(&self) -> fdo::Result<bool> {
         Ok(self
             .config
             .experimental_nvidia_block
             .load(Ordering::Relaxed))
+    }
+    #[zbus(property)]
+    pub async fn battery_auto_switch(&self) -> fdo::Result<bool> {
+        Ok(self.config.battery_auto_switch.load(Ordering::Relaxed))
     }
     #[zbus(property)]
     pub async fn battery_auto_switch_mode(&self) -> fdo::Result<u32> {
@@ -76,6 +76,14 @@ impl ConfigInterface {
 
     // setters
     #[zbus(property)]
+    pub async fn set_auto_apply_gpu_state(&mut self, state: bool) -> fdo::Result<()> {
+        self.config
+            .auto_apply_gpu_state
+            .store(state, Ordering::Relaxed);
+        self.save_to_file().await?;
+        Ok(())
+    }
+    #[zbus(property)]
     pub async fn set_experimental_nvidia_block(&mut self, state: bool) -> fdo::Result<()> {
         self.config
             .experimental_nvidia_block
@@ -84,17 +92,17 @@ impl ConfigInterface {
         // change the value in the ebpf map
         blocker
             .set_ebpf_setting(EbpfSettings::ExperimentalNvidia, state.into())
-            .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))
+            .map_err(|e| fdo::Error::Failed(format!("failed to set nvidia block: {}", e)))?;
+        self.save_to_file().await?;
+        Ok(())
     }
-    #[zbus(property)]
-    pub async fn battery_auto_switch(&self) -> fdo::Result<bool> {
-        Ok(self.config.battery_auto_switch.load(Ordering::Relaxed))
-    }
+
     #[zbus(property)]
     pub async fn set_battery_auto_switch(&mut self, state: bool) -> fdo::Result<()> {
         self.config
             .battery_auto_switch
             .store(state, Ordering::Relaxed);
+        self.save_to_file().await?;
         Ok(())
     }
     #[zbus(property)]
@@ -102,6 +110,7 @@ impl ConfigInterface {
         self.config
             .battery_auto_switch_mode
             .store(mode, Ordering::Relaxed);
+        self.save_to_file().await?;
         Ok(())
     }
     /// Save the daemon's configuration to cardwire.toml
@@ -115,7 +124,18 @@ impl ConfigInterface {
             Modes::try_from(self.config.battery_auto_switch_mode.load(Ordering::Relaxed))
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?,
         );
-        config.save_config().await?;
-        Ok(())
+        match config.save_config().await {
+            Ok(_) => Ok(()),
+            Err(err) => match err.kind() {
+                ErrorKind::ReadOnlyFilesystem => {
+                    warn!(
+                        "IO Error in save_config: {}, ignoring, system might be nix or bootc",
+                        err
+                    );
+                    Ok(())
+                }
+                _ => Err(fdo::Error::Failed(err.to_string())),
+            },
+        }
     }
 }
