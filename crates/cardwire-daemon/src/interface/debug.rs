@@ -107,11 +107,8 @@ impl DebugInterface {
             // Empty the current gpu_interfaces
             gpu_interfaces.clear();
             // Read the new list
-            let mut new_gpu_list =
+            let new_gpu_list =
                 gpu::read_gpu(&new_pci_list).map_err(|err| fdo::Error::Failed(err.to_string()))?;
-            if let Err(err) = check_default_drm_class(&mut new_gpu_list) {
-                warn!("Failed to determine default GPU: {}", err);
-            }
             for (id, device) in new_gpu_list {
                 let mut gpu = GpuInterface::build(
                     device,
@@ -153,7 +150,9 @@ impl DebugInterface {
 
                 gpu_interfaces.insert(id, gpu);
             }
-
+            if let Err(err) = check_default_drm_class(&mut gpu_interfaces) {
+                warn!("Failed to determine default GPU: {}", err);
+            }
             // now re-populate the gpu api
             for (id, gpu_interface) in gpu_interfaces.iter() {
                 let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);

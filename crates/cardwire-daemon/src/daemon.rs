@@ -6,13 +6,11 @@ mod interface;
 mod models;
 mod tasks;
 
-use crate::{
-    models::DaemonManager, tasks::{monitor_pci_changes, watch_power_state}
-};
+use crate::{models::DaemonManager, tasks::watch_power_state};
 use anyhow::Result;
 use env_logger::Env;
 use log::info;
-use std::{future::pending, sync::Arc};
+use std::future::pending;
 use tokio::task;
 use zbus::connection;
 #[tokio::main]
@@ -22,15 +20,14 @@ async fn main() -> Result<()> {
         .format_target(false)
         .format_timestamp(None)
         .init();
+
+    // Build the DaemonManager, it mostly consists of reading config files and setting up Arc and
+    // RwLocks
     let mut daemon = DaemonManager::new().await?;
     // Before we publish the API
     daemon.pre_daemon_tasks().await?;
 
-    // Prepare the future before moving debug
-    let battery_switch = tasks::watch_battery_status(
-        Arc::clone(&daemon.debug_interface.config.battery_auto_switch),
-        Arc::clone(&daemon.debug_interface.config.battery_auto_switch_mode),
-    );
+    // Now connect to the system dbus
     let conn_builder = connection::Builder::system()?;
     let conn = conn_builder
         .name("com.github.opengamingcollective.cardwire")?
@@ -44,10 +41,10 @@ async fn main() -> Result<()> {
 
     let object_server: &zbus::ObjectServer = conn.object_server();
     spawn_dbus_api(object_server, &mut daemon).await?;
-    // Now spawn background tasks
-    task::spawn(battery_switch);
-    task::spawn(daemon.cardwire_analyzer.run());
-    task::spawn(monitor_pci_changes());
+    // Spawn background tasks
+    task::spawn(daemon.battery_switch_future());
+    task::spawn(daemon.monitor_udev_future());
+    task::spawn(daemon.run_analyzer());
     info!("Daemon started succesfully");
     pending::<()>().await;
     Ok(())
@@ -69,7 +66,7 @@ async fn spawn_dbus_api(
         .at(path, daemon.config_interface.clone())
         .await?;
     // cardwire.Gpu
-    let mut power_tasks = daemon.power_tasks.write().await;
+    let mut power_tasks = daemon.inner.power_tasks.write().await;
     for (id, gpu_interface) in gpu_interfaces.iter() {
         let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
         object_server

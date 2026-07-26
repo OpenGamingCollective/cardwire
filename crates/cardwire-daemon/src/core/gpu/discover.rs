@@ -1,6 +1,8 @@
 //! Read a pci list and return a list of gpu
-use crate::core::{
-    gpu::models::{GpuDevice, GpuVendor}, pci::PciDevice
+use crate::{
+    core::{
+        gpu::models::{GpuDevice, GpuVendor}, pci::PciDevice
+    }, interface::GpuInterface
 };
 use log::{info, warn};
 use std::{
@@ -157,7 +159,7 @@ fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
         .ok()
 }
 /// Method from kwin
-pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io::Result<()> {
+pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> io::Result<()> {
     // skip if empty
     if gpu_list.is_empty() {
         return Ok(());
@@ -196,7 +198,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
 
     for (id, gpu) in &mut *gpu_list {
         let mut stat = GpuStats::default();
-        let prefix = format!("card{}-", gpu.card());
+        let prefix = format!("card{}-", gpu.device.card());
         for name in &drm_entries {
             if let Some(drm) = name.strip_prefix(&prefix) {
                 let status_path = class_path.join(name).join("status");
@@ -224,7 +226,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
 
         info!(
             "gpu {} id: {} internal: {}, desktop: {}, connected: {}, total: {}, connected_internal: {}, connected_desktop: {}",
-            gpu.name(),
+            gpu.device.name(),
             id,
             stat.internal_displays,
             stat.desktop_displays,
@@ -253,19 +255,20 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
     for (id, gpu) in &mut *gpu_list {
         if let Some(default_id) = default.0 {
             if id == default_id {
-                gpu.set_default(Some(true));
+                gpu.device.set_default(Some(true));
             } else {
-                gpu.set_default(Some(false));
+                gpu.device.set_default(Some(false));
             }
         }
     }
 
     // Default GPU gets ID 0, rest ordered by PCI address
-    let mut gpus: Vec<GpuDevice> = std::mem::take(gpu_list).into_values().collect();
+    let mut gpus: Vec<GpuInterface> = std::mem::take(gpu_list).into_values().collect();
     gpus.sort_by(|a, b| {
-        b.default()
-            .cmp(&a.default())
-            .then(a.pci.pci_address().cmp(b.pci.pci_address()))
+        b.device
+            .default()
+            .cmp(&a.device.default())
+            .then(a.device.pci.pci_address().cmp(b.device.pci.pci_address()))
     });
     *gpu_list = gpus.into_iter().enumerate().collect();
 

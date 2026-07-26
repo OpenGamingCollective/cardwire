@@ -2,22 +2,12 @@
 
 use log::{error, info};
 use tokio::io::{Interest, unix::AsyncFd};
-use zbus::{Connection, Result, proxy};
 
-#[proxy(
-    interface = "com.github.opengamingcollective.cardwire.Debug",
-    default_service = "com.github.opengamingcollective.cardwire",
-    default_path = "/com/github/opengamingcollective/cardwire"
-)]
-trait Cardwire {
-    fn refresh_gpu(&self) -> Result<()>;
-}
+use crate::interface::DebugInterface;
 
-pub async fn monitor_pci_changes() -> zbus::Result<()> {
-    let connection = Connection::system().await?;
+pub async fn monitor_pci_changes(debug_int: DebugInterface) -> zbus::Result<()> {
     let udev_monitor = udev::MonitorBuilder::new()?.match_subsystem("pci")?;
     let udev_fd = AsyncFd::new(udev_monitor.listen()?)?;
-    let cardwire = CardwireProxy::new(&connection).await?;
     loop {
         let mut guard = udev_fd.ready(Interest::READABLE).await?;
         if guard.ready().is_readable() {
@@ -26,7 +16,8 @@ pub async fn monitor_pci_changes() -> zbus::Result<()> {
                     && (action == "bind" || action == "unbind")
                 {
                     info!("detected pci event, refreshing GPU interfaces");
-                    if let Err(e) = cardwire.refresh_gpu().await {
+                    if let Err(e) = debug_int.refresh_gpu().await {
+                        debug_int.refresh_gpu().await?;
                         error!("failed to reresh gpu interface: {}", e);
                     }
                 }
