@@ -70,6 +70,8 @@ impl CardwireClient {
         let client = Self {
             connection: Connection::system().await?,
         };
+        // A system-bus connection alone does not prove that cardwired owns its
+        // well-known name. The status call makes this a daemon readiness check.
         client.status().await?;
         Ok(client)
     }
@@ -112,6 +114,8 @@ impl CardwireClient {
     }
 
     pub async fn gpus(&self) -> zbus::Result<BTreeMap<u32, GpuInfo>> {
+        // GPU objects are dynamic, so discover them through ObjectManager instead
+        // of assuming a fixed set of numeric object paths.
         let object_manager = ObjectManagerProxy::builder(&self.connection)
             .destination(SERVICE)?
             .path(ROOT_PATH)?
@@ -144,6 +148,8 @@ impl CardwireClient {
                     name: device.name,
                     default: device.default,
                     blocked: proxy.block().await?,
+                    // Power state is informational. Keep an otherwise usable GPU
+                    // in the menu when a driver cannot currently report it.
                     power_state: proxy
                         .power_state()
                         .await

@@ -55,6 +55,7 @@ impl fmt::Display for TrayMode {
 pub struct TrayConfig {
     pub toggle_from: TrayMode,
     pub toggle_to: TrayMode,
+    // Keep configurations written before tray-only startup was added valid.
     #[serde(default)]
     pub start_in_tray: bool,
 }
@@ -95,6 +96,8 @@ impl TrayConfig {
         }
 
         let contents = toml::to_string_pretty(&self).map_err(io::Error::other)?;
+        // Write beside the destination so rename remains an atomic operation on
+        // the same filesystem. A failed write leaves the previous config intact.
         let temporary = path.with_extension(format!("toml.tmp-{}", std::process::id()));
         let result = (|| {
             let mut file = OpenOptions::new()
@@ -123,6 +126,8 @@ impl TrayConfig {
     pub fn with_toggle_from(mut self, mode: TrayMode) -> Self {
         let previous = self.toggle_from;
         self.toggle_from = mode;
+        // Selecting the other endpoint swaps the pair instead of temporarily
+        // producing an invalid configuration with two identical modes.
         if self.toggle_to == mode {
             self.toggle_to = previous;
         }
@@ -132,6 +137,7 @@ impl TrayConfig {
     pub fn with_toggle_to(mut self, mode: TrayMode) -> Self {
         let previous = self.toggle_to;
         self.toggle_to = mode;
+        // Preserve the same distinct-endpoint invariant as `with_toggle_from`.
         if self.toggle_from == mode {
             self.toggle_from = previous;
         }

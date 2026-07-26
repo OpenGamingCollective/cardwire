@@ -115,6 +115,8 @@ impl Tray for CardwireTray {
                     ..Default::default()
                 })
                 .collect();
+            // `TrayMode::value` deliberately matches the order of `TrayMode::ALL`,
+            // which lets the D-Bus value double as the radio-group index.
             items.push(
                 ksni::menu::RadioGroup {
                     selected: self.mode.map_or(0, |mode| mode.value() as usize),
@@ -132,6 +134,8 @@ impl Tray for CardwireTray {
                 let gpu_items = self
                     .gpus
                     .values()
+                    // The daemon protects the default GPU as well, but omitting it
+                    // here prevents the tray from offering an unsafe action at all.
                     .filter(|gpu| !gpu.default)
                     .map(|gpu| {
                         let id = gpu.id;

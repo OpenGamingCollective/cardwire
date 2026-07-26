@@ -30,6 +30,8 @@ pub async fn run(
     let (action_tx, mut action_rx) = mpsc::unbounded_channel();
     let tray_handle = CardwireTray::offline(action_tx).spawn().await?;
 
+    // Each outer iteration owns one daemon connection and its signal watchers.
+    // Losing the daemon returns here, marks the tray offline, and reconnects.
     'runtime: loop {
         let client = loop {
             if tray_handle.is_closed() {
@@ -40,6 +42,8 @@ pub async fn run(
                 Err(error) => {
                     warn!("Cardwire daemon unavailable: {error}");
                     set_offline(&tray_handle).await;
+                    // Tray actions must remain responsive while cardwired is down;
+                    // in particular, users must still be able to open or quit.
                     tokio::select! {
                         () = sleep(Duration::from_secs(5)) => {}
                         action = action_rx.recv() => {
@@ -102,6 +106,8 @@ pub async fn run(
                 _ = discovery.tick() => {
                     match client.gpus().await {
                         Ok(updated) if updated.keys().ne(gpus.keys()) => {
+                            // Signal streams are bound to concrete GPU object paths.
+                            // Rebuild all GPU watchers whenever topology changes.
                             abort_watchers(&mut watchers);
                             gpus = updated;
                             watchers = spawn_watchers(&client, &gpus, event_tx.clone()).await;
@@ -220,6 +226,8 @@ async fn spawn_watchers(
     gpus: &BTreeMap<u32, GpuInfo>,
     event_tx: mpsc::UnboundedSender<RuntimeEvent>,
 ) -> Vec<JoinHandle<()>> {
+    // Keep zbus signal streams task-local and forward small owned events to the
+    // state machine. This avoids borrowing proxies across the main select loop.
     let mut handles = Vec::new();
     let mode_client = client.clone();
     let mode_tx = event_tx.clone();
@@ -328,6 +336,7 @@ async fn set_offline(tray_handle: &ksni::Handle<CardwireTray>) {
 
 async fn notify(message: &str) {
     let message = message.to_string();
+    // notify-rust exposes a blocking API; keep it off the async runtime workers.
     let _ = tokio::task::spawn_blocking(move || {
         notify_rust::Notification::new()
             .summary("Cardwire")
