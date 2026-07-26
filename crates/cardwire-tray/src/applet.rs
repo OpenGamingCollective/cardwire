@@ -139,11 +139,12 @@ impl Tray for CardwireTray {
                     .filter(|gpu| !gpu.default)
                     .map(|gpu| {
                         let id = gpu.id;
-                        let blocked = gpu.blocked;
                         ksni::menu::CheckmarkItem {
                             label: gpu.name.clone(),
-                            checked: blocked,
+                            checked: gpu.blocked,
                             activate: Box::new(move |tray: &mut Self| {
+                                let blocked =
+                                    tray.gpus.get(&id).map(|gpu| gpu.blocked).unwrap_or(false);
                                 let _ = tray.action_tx.send(TrayAction::SetGpuBlock {
                                     id,
                                     blocked: !blocked,
