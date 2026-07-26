@@ -185,27 +185,19 @@ impl AppState {
             }
             Message::UpdateTrayToggleFrom(mode) => {
                 let config = self.setting_state.tray_config.with_toggle_from(mode);
-                return Self::save_tray_config(config);
+                return self.save_tray_config(config);
             }
             Message::UpdateTrayToggleTo(mode) => {
                 let config = self.setting_state.tray_config.with_toggle_to(mode);
-                return Self::save_tray_config(config);
+                return self.save_tray_config(config);
             }
             Message::UpdateTrayStartInTray(start_in_tray) => {
                 let config = self
                     .setting_state
                     .tray_config
                     .with_start_in_tray(start_in_tray);
-                return Self::save_tray_config(config);
+                return self.save_tray_config(config);
             }
-            Message::TrayConfigSaved(result) => match result {
-                Ok(config) => {
-                    self.setting_state.tray_config = config;
-                    self.info = Some("Tray settings saved".to_string());
-                    self.error = None;
-                }
-                Err(error) => self.error = Some(format!("Could not save tray settings: {error}")),
-            },
             Message::TrayReady(handle) => {
                 self.tray_handle = Some(handle);
                 self.tray_available = true;
@@ -410,14 +402,16 @@ impl AppState {
         ])
     }
 
-    fn save_tray_config(config: TrayConfig) -> Task<Message> {
-        Task::perform(
-            async move {
-                config.save().map_err(|error| error.to_string())?;
-                Ok(config)
-            },
-            Message::TrayConfigSaved,
-        )
+    fn save_tray_config(&mut self, config: TrayConfig) -> Task<Message> {
+        match config.save() {
+            Ok(()) => {
+                self.setting_state.tray_config = config;
+                self.info = Some("Tray settings saved".to_string());
+                self.error = None;
+            }
+            Err(error) => self.error = Some(format!("Could not save tray settings: {error}")),
+        }
+        Task::none()
     }
 
     fn set_mode_from_tray(&self, mode: Mode) -> Task<Message> {

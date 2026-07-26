@@ -1,7 +1,7 @@
 use crate::{
     helpers::GpuDevice,
     models::{DaemonSettings, LsofData, Mode, Page, PciDevice},
-    tray::{TrayAction, TrayConfig, TrayHandle},
+    tray::{TrayAction, TrayHandle},
 };
 use std::collections::BTreeMap;
 
@@ -18,7 +18,6 @@ pub enum Message {
     UpdateTrayToggleFrom(Mode),
     UpdateTrayToggleTo(Mode),
     UpdateTrayStartInTray(bool),
-    TrayConfigSaved(Result<TrayConfig, String>),
     TrayReady(TrayHandle),
     TrayAction(TrayAction),
     TrayActionResult(Result<TrayUpdate, String>),

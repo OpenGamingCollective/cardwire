@@ -4,6 +4,7 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use ksni::{MenuItem, Tray, TrayMethods};
@@ -15,6 +16,7 @@ use crate::{helpers::GpuDevice, models::Mode};
 
 const CONFIG_FILE: &str = "tray.toml";
 const ICON_PREFIX: &str = "com.github.opengamingcollective.cardwire.tray";
+static TEMPORARY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -61,7 +63,8 @@ impl TrayConfig {
         }
 
         let contents = toml::to_string_pretty(&self).map_err(io::Error::other)?;
-        let temporary = path.with_extension(format!("toml.tmp-{}", std::process::id()));
+        let sequence = TEMPORARY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let temporary = path.with_extension(format!("toml.tmp-{}-{sequence}", std::process::id()));
         let result = (|| {
             let mut file = OpenOptions::new()
                 .write(true)
@@ -406,6 +409,26 @@ mod tests {
         };
         expected.save_to(&path).unwrap();
         assert_eq!(TrayConfig::load_from(&path).unwrap(), expected);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn concurrent_saves_use_distinct_temporary_files() {
+        let path = temporary_path("concurrent");
+        let configs = [
+            TrayConfig::default().with_start_in_tray(true),
+            TrayConfig::default().with_toggle_to(Mode::Smart),
+        ];
+        let writers = configs.map(|config| {
+            let path = path.clone();
+            std::thread::spawn(move || config.save_to(&path))
+        });
+
+        for writer in writers {
+            writer.join().unwrap().unwrap();
+        }
+        let saved = TrayConfig::load_from(&path).unwrap();
+        assert!(configs.contains(&saved));
         fs::remove_file(path).unwrap();
     }
 
