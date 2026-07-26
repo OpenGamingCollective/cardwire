@@ -17,8 +17,10 @@ build:
 install:
 	install -Dm0755 target/$(target)/cardwire /usr/bin/cardwire$(extension)
 	install -Dm0755 target/$(target)/cardwired /usr/bin/cardwired$(extension)
+	install -Dm0755 target/$(target)/cardwire-gui /usr/bin/cardwire-gui$(extension)
 	install -Dm0644 assets/cardwired.service /usr/lib/systemd/system/cardwired.service
 	install -Dm0644 assets/com.github.opengamingcollective.cardwire.conf /usr/share/dbus-1/system.d/com.github.opengamingcollective.cardwire.conf
+	install -Dm0644 assets/cardwire-gui.desktop /usr/share/applications/cardwire-gui.desktop
 	systemctl enable cardwired.service
 
 check:
