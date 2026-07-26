@@ -307,12 +307,32 @@ pub fn pci_page<'a>(pci_list: &'a BTreeMap<String, PciDevice>) -> Element<'a, Me
 pub fn error_bar(msg: &str) -> Element<'_, Message> {
     container(
         row![
-            text(msg).color(Color::WHITE).width(Fill),
+            text!("Error: {}", msg).color(Color::WHITE).width(Fill),
             button("X").on_press(Message::ClearError)
         ]
         .align_y(Alignment::Center),
     )
     .width(Fill)
     .padding(10)
+    .style(|_| container::Style {
+        background: Some(Color::from_rgb(239.0 / 255.0, 68.0 / 255.0, 68.0 / 255.0).into()),
+        ..Default::default()
+    })
+    .into()
+}
+pub fn info_bar(msg: &str) -> Element<'_, Message> {
+    container(
+        row![
+            text!("Info: {}", msg).color(Color::WHITE).width(Fill),
+            button("X").on_press(Message::ClearInfo)
+        ]
+        .align_y(Alignment::Center),
+    )
+    .width(Fill)
+    .padding(10)
+    .style(|_| container::Style {
+        background: Some(Color::from_rgb(59.0 / 255.0, 130.0 / 255.0, 246.0 / 255.0).into()),
+        ..Default::default()
+    })
     .into()
 }

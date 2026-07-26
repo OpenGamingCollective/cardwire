@@ -20,6 +20,7 @@ pub enum Message {
     PciListToClipboard(),
     ToggleMenu(Option<usize>),
     ClearError,
+    ClearInfo,
     #[expect(dead_code)]
     // Placeholder used when building a new feature
     None,
