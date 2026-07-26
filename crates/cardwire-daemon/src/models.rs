@@ -23,8 +23,6 @@ pub struct DaemonInner {
     pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config: Arc<ConfigMemory>,
     pub blocker: Arc<RwLock<EbpfBlocker>>,
-    #[allow(dead_code)]
-    pub object_server: Arc<RwLock<Option<zbus::ObjectServer>>>,
     pub power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<anyhow::Result<()>>>>>,
 }
 
@@ -77,8 +75,6 @@ impl DaemonManager {
         let gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>> =
             Arc::new(RwLock::new(gpu_interfaces_map));
 
-        let object_serv: Arc<RwLock<Option<zbus::ObjectServer>>> = Arc::new(RwLock::default());
-
         Ok(Self {
             mode_interface: ModeInterface::build(
                 Arc::clone(&mode_state),
@@ -109,7 +105,6 @@ impl DaemonManager {
                 gpu_list: Arc::clone(&gpu_interfaces),
                 config: Arc::clone(&user_config),
                 blocker: Arc::clone(&blocker),
-                object_server: Arc::clone(&object_serv),
                 power_tasks: Arc::clone(&power_tasks),
             },
         })
@@ -224,19 +219,40 @@ impl DaemonManager {
             .map_err(|err| err.into())
     }
     pub fn battery_switch_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
-        tasks::watch_battery_status(
-            Arc::clone(&self.inner.config.battery_auto_switch),
-            Arc::clone(&self.inner.config.battery_auto_switch_mode),
-        )
+        let auto_switch = Arc::clone(&self.inner.config.battery_auto_switch);
+        let auto_switch_mode = Arc::clone(&self.inner.config.battery_auto_switch_mode);
+        async move {
+            let res = tasks::watch_battery_status(auto_switch, auto_switch_mode).await;
+            if let Err(ref e) = res {
+                error!("battery_switch task failed: {}", e);
+            }
+            res
+        }
     }
     pub fn monitor_udev_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
-        tasks::monitor_pci_changes(self.debug_interface.clone())
+        let debug_int = self.debug_interface.clone();
+        async move {
+            let res = tasks::monitor_pci_changes(debug_int).await;
+            if let Err(ref e) = res {
+                error!("monitor_udev task failed: {}", e);
+            }
+            res
+        }
     }
     pub fn run_analyzer(&self) -> impl Future<Output = Result<(), anyhow::Error>> + 'static {
         let blocker = Arc::clone(&self.inner.blocker);
         async move {
-            let cardwire_analyzer = CardwireAnalyzer::build(Arc::clone(&blocker)).await?;
-            cardwire_analyzer.run().await
+            let cardwire_analyzer = CardwireAnalyzer::build(Arc::clone(&blocker))
+                .await
+                .map_err(|err| {
+                    error!("Failed to build CardwireAnalyzer: {}", err);
+                    err
+                })?;
+            let res = cardwire_analyzer.run().await;
+            if let Err(ref e) = res {
+                error!("CardwireAnalyzer task failed: {}", e);
+            }
+            res
         }
     }
 }

@@ -110,7 +110,7 @@ impl DebugInterface {
             let new_gpu_list =
                 gpu::read_gpu(&new_pci_list).map_err(|err| fdo::Error::Failed(err.to_string()))?;
             for (id, device) in new_gpu_list {
-                let mut gpu = GpuInterface::build(
+                let gpu = GpuInterface::build(
                     device,
                     Arc::clone(&self.blocker),
                     Arc::clone(&self.pci_list),
@@ -119,12 +119,19 @@ impl DebugInterface {
                 )
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
-                let mode = self.mode_state.read().await.mode();
-                let config = self
-                    .config
-                    .auto_apply_gpu_state
-                    .load(std::sync::atomic::Ordering::Relaxed);
+                gpu_interfaces.insert(id, gpu);
+            }
+            if let Err(err) = check_default_drm_class(&mut gpu_interfaces) {
+                warn!("Failed to determine default GPU: {}", err);
+            }
 
+            let mode = self.mode_state.read().await.mode();
+            let config = self
+                .config
+                .auto_apply_gpu_state
+                .load(std::sync::atomic::Ordering::Relaxed);
+
+            for gpu in gpu_interfaces.values_mut() {
                 let should_block = match mode {
                     Modes::Integrated | Modes::Smart => !gpu.device.is_default(),
                     Modes::Hybrid => false,
@@ -147,11 +154,6 @@ impl DebugInterface {
                         );
                     }
                 }
-
-                gpu_interfaces.insert(id, gpu);
-            }
-            if let Err(err) = check_default_drm_class(&mut gpu_interfaces) {
-                warn!("Failed to determine default GPU: {}", err);
             }
             // now re-populate the gpu api
             for (id, gpu_interface) in gpu_interfaces.iter() {
