@@ -6,8 +6,7 @@ use crate::{
 use anyhow::Context;
 
 use serde::{Deserialize, Serialize};
-use std::fs;
-use zbus::fdo;
+use std::{fs, io};
 const CONFIG_PATH: &str = "/etc/cardwire";
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -65,17 +64,12 @@ impl CardwireConfig {
         Ok(())
     }
     /// Save the config into cardwire.toml
-    pub async fn save_config(&self) -> fdo::Result<()> {
+    pub async fn save_config(&self) -> io::Result<()> {
         let path = format!("{}/cardwire.toml", CONFIG_PATH);
         match toml::to_string_pretty(&self) {
-            Ok(config_toml) => {
-                if let Err(e) = tokio::fs::write(path, config_toml).await {
-                    return Err(fdo::Error::Failed(e.to_string()));
-                }
-            }
-            Err(e) => return Err(fdo::Error::Failed(e.to_string())),
-        };
-        Ok(())
+            Ok(config_toml) => tokio::fs::write(path, config_toml).await,
+            Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
+        }
     }
     pub fn experimental_nvidia_block(&self) -> bool {
         self.experimental_nvidia_block

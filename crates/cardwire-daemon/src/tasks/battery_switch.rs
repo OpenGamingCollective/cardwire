@@ -1,13 +1,12 @@
 //! Used to listen to other dbus interface, mainly for auto battery switch and display detection
 
-use std::sync::{Arc, atomic::AtomicBool};
+use std::sync::{
+    Arc, atomic::{AtomicBool, AtomicU32, Ordering}
+};
 
 use log::info;
-use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use zbus::{Connection, Result, proxy};
-
-use crate::interface::Modes;
 
 #[proxy(
     interface = "org.freedesktop.UPower",
@@ -30,19 +29,13 @@ trait Cardwire {
 
 pub async fn watch_battery_status(
     switch_setting: Arc<AtomicBool>,
-    switch_mode: Arc<RwLock<Modes>>,
+    switch_mode: Arc<AtomicU32>,
 ) -> zbus::Result<()> {
     let connection = Connection::system().await?;
     let upower_proxy = UPowerProxy::new(&connection).await?;
 
     let cardwire = CardwireProxy::new(&connection).await?;
     let mut battery_stream = upower_proxy.receive_on_battery_changed().await;
-    let mode = switch_mode.read().await;
-    info!(
-        "Started listening to on_battery property with mode to set on ac: {}",
-        *mode
-    );
-    drop(mode);
     // only when setting is enabled
     while let Some(msg) = battery_stream.next().await {
         if !switch_setting.load(std::sync::atomic::Ordering::Relaxed) {
@@ -51,16 +44,13 @@ pub async fn watch_battery_status(
         if let Ok(state) = msg.get().await {
             info!("battery event detected: {:?}", state);
             // now get the configured mode and change
-            let mode = switch_mode.read().await;
-            let mode_u32 = Modes::into(*mode);
+            let mode = switch_mode.load(Ordering::Relaxed);
             // ignore dbus api error, it might happen on system with multiple gpus trying to switch
             // to hybrid, the daemon will just refuse
             let _ = match state {
                 true => cardwire.set_mode(0).await,
-                false => cardwire.set_mode(mode_u32).await,
+                false => cardwire.set_mode(mode).await,
             };
-            // just to be sure
-            drop(mode);
         }
     }
 
