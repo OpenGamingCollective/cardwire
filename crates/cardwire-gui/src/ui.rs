@@ -532,25 +532,26 @@ fn tray_setting_section(config: TrayConfig) -> Element<'static, Message> {
                         .color(Color::from_rgb(0.6, 0.6, 0.6)),
                 ],
                 horizontal(),
-                toggler(config.start_in_tray).on_toggle(Message::UpdateTrayStartInTray),
+                toggler(config.start_in_tray).on_toggle(move |start_in_tray| {
+                    Message::UpdateTrayConfig(TrayConfig {
+                        start_in_tray,
+                        ..config
+                    })
+                }),
             ]
             .align_y(Alignment::Center),
             row![
                 text("Toggle from:").width(Fixed(130.0)),
-                pick_list(
-                    Mode::VARIANTS,
-                    Some(config.toggle_from),
-                    Message::UpdateTrayToggleFrom,
-                ),
+                pick_list(Mode::VARIANTS, Some(config.toggle_from), move |mode| {
+                    Message::UpdateTrayConfig(config.with_toggle_from(mode))
+                },),
             ]
             .align_y(Alignment::Center),
             row![
                 text("Toggle to:").width(Fixed(130.0)),
-                pick_list(
-                    Mode::VARIANTS,
-                    Some(config.toggle_to),
-                    Message::UpdateTrayToggleTo,
-                ),
+                pick_list(Mode::VARIANTS, Some(config.toggle_to), move |mode| {
+                    Message::UpdateTrayConfig(config.with_toggle_to(mode))
+                },),
             ]
             .align_y(Alignment::Center),
         ]

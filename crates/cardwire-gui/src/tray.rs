@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     fmt,
     fs::{self, OpenOptions},
     io::{self, Write},
@@ -104,11 +104,6 @@ impl TrayConfig {
         if self.toggle_from == mode {
             self.toggle_from = previous;
         }
-        self
-    }
-
-    pub const fn with_start_in_tray(mut self, start_in_tray: bool) -> Self {
-        self.start_in_tray = start_in_tray;
         self
     }
 
@@ -335,15 +330,28 @@ pub async fn update(handle: TrayHandle, mode: Option<Mode>, gpus: BTreeMap<usize
         .await;
 }
 
-pub async fn notify_failure(message: String) {
-    let _ = tokio::task::spawn_blocking(move || {
-        notify_rust::Notification::new()
-            .summary("Cardwire")
-            .body(&message)
-            .icon(ICON_PREFIX)
-            .show()
-    })
-    .await;
+pub async fn notify(message: String) {
+    let Ok(connection) = zbus::Connection::session().await else {
+        return;
+    };
+    let _ = connection
+        .call_method(
+            Some("org.freedesktop.Notifications"),
+            "/org/freedesktop/Notifications",
+            Some("org.freedesktop.Notifications"),
+            "Notify",
+            &(
+                "Cardwire",
+                0_u32,
+                ICON_PREFIX,
+                "Cardwire",
+                message,
+                Vec::<String>::new(),
+                HashMap::<String, zbus::zvariant::OwnedValue>::new(),
+                -1_i32,
+            ),
+        )
+        .await;
 }
 
 #[cfg(test)]
@@ -416,7 +424,10 @@ mod tests {
     fn concurrent_saves_use_distinct_temporary_files() {
         let path = temporary_path("concurrent");
         let configs = [
-            TrayConfig::default().with_start_in_tray(true),
+            TrayConfig {
+                start_in_tray: true,
+                ..TrayConfig::default()
+            },
             TrayConfig::default().with_toggle_to(Mode::Smart),
         ];
         let writers = configs.map(|config| {
