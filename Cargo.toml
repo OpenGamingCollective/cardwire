@@ -45,8 +45,8 @@ iced = { version = "0.14.0", default-features = false, features = [
 ] }
 iced_aw = "0.14.1"
 strum = { version = "0.28", features = ["derive"] }
-ksni = "0.3.4"
-notify-rust = "4.17.0"
+ksni = "0.3.6"
+notify-rust = "4.18.0"
 
 [profile.dev]
 overflow-checks = true
