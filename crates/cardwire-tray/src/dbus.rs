@@ -83,11 +83,11 @@ impl CardwireClient {
             .await
     }
 
-    pub async fn mode_proxy(&self) -> zbus::Result<CardwireModeProxy<'static>> {
+    pub async fn mode_proxy(&self) -> zbus::Result<CardwireModeProxy<'_>> {
         CardwireModeProxy::new(&self.connection).await
     }
 
-    pub async fn gpu_proxy(&self, id: u32) -> zbus::Result<CardwireGpuProxy<'static>> {
+    pub async fn gpu_proxy(&self, id: u32) -> zbus::Result<CardwireGpuProxy<'_>> {
         CardwireGpuProxy::builder(&self.connection)
             .path(format!("{ROOT_PATH}/Gpu/{id}"))?
             .build()
