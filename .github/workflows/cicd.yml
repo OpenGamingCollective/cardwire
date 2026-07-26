@@ -64,7 +64,7 @@ jobs:
       checks: write
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config gcc-multilib
       - uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
@@ -86,7 +86,7 @@ jobs:
       pull-requests: write
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@nightly # Nightly
         with:
           toolchain: nightly
@@ -104,7 +104,7 @@ jobs:
     needs: [prepare]
     if: needs.prepare.outputs.run_c_checks == 'true'
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
       - run: clang-format --dry-run --Werror -i ./crates/cardwire-ebpf/src/bpf.c
@@ -114,7 +114,7 @@ jobs:
     needs: [prepare, rust-lint, rust-format, c-format]
     if: ${{ !failure() && !cancelled() && needs.prepare.outputs.run_nix_vm == 'true' }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: determinateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
       - run: nix build .#vm-test
   
@@ -125,7 +125,7 @@ jobs:
     env:
       MDBOOK_VERSION: 0.5.2
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install mdBook
         run: |
           curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf -y | sh
