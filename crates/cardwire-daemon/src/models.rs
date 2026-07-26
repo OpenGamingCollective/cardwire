@@ -214,8 +214,10 @@ impl DaemonManager {
         Ok(())
     }
     async fn apply_mode_at_startup(&self) -> Result<()> {
-        let mode = self.inner.mode_state.read().await;
-        let mode_to_apply = Modes::into(mode.mode());
+        let mode_to_apply = {
+            let mode = self.inner.mode_state.read().await;
+            Modes::into(mode.mode())
+        };
         self.mode_interface
             .set_mode(mode_to_apply)
             .await
