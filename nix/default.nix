@@ -50,6 +50,9 @@ in
       install -Dm444 ./assets/com.github.opengamingcollective.cardwire.conf \
          $out/share/dbus-1/system.d/com.github.opengamingcollective.cardwire.conf
 
+      install -Dm444 ./assets/cardwire-gui.desktop \
+         $out/share/applications/cardwire-gui.desktop
+
       installShellCompletion --cmd cardwire \
          --fish <($out/bin/cardwire completion fish)
 
