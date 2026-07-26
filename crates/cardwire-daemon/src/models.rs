@@ -235,7 +235,7 @@ impl DaemonManager {
     pub fn run_analyzer(&self) -> impl Future<Output = Result<(), anyhow::Error>> + 'static {
         let blocker = Arc::clone(&self.inner.blocker);
         async move {
-            let cardwire_analyzer = CardwireAnalyzer::build(Arc::clone(&blocker)).await.unwrap();
+            let cardwire_analyzer = CardwireAnalyzer::build(Arc::clone(&blocker)).await?;
             cardwire_analyzer.run().await
         }
     }
