@@ -108,7 +108,7 @@ cardwire gpu 1 --unblock
 > [!TIP]
 > Even though it is experimental, enabling this setting is recommended. It helps prevent unwanted GPU wakeups from Vulkan apps (GTK on gnome) and from tools that use /dev/nvidiactl, such as nvtop
 
-To get if battery auto switch is enabled:
+To get if experimental Nvidia block is enabled:
 
 ```bash
 cardwire config experimental-nvidia-block

@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 
 use anyhow::Result;
 
-pub async fn watch_xdg_folders(xdg_list: Arc<RwLock<HashMap<String, bool>>>) -> Result<()> {
+#[allow(dead_code)]
+pub async fn watch_xdg_folders(_xdg_list: Arc<RwLock<HashMap<String, bool>>>) -> Result<()> {
     Ok(())
 }

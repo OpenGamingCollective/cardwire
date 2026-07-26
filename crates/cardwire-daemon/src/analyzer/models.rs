@@ -34,6 +34,7 @@ pub struct CardwireAnalyzer {
     close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u8>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
+    #[allow(dead_code)]
     xdg_folders: Vec<PathBuf>,
 }
 
@@ -232,9 +233,11 @@ impl CardwireAnalyzer {
         Some(result)
     }
 
+    #[allow(dead_code)]
     pub fn xdg_list(&self) -> Arc<RwLock<HashMap<String, bool>>> {
         Arc::clone(&self.xdg_list)
     }
+    #[allow(dead_code)]
     pub fn xdg_folders(&self) -> &Vec<PathBuf> {
         &self.xdg_folders
     }
