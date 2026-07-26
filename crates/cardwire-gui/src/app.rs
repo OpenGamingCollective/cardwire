@@ -139,6 +139,14 @@ impl AppState {
                     error!("couldnt get gpu key: {}", id);
                 }
             }
+            Message::UpdateBlockState(id, new_state) => {
+                if let Some(gpu) = self.gpu_list.get_mut(&id) {
+                    // Update the gpu power_state
+                    gpu.blocked = new_state;
+                } else {
+                    error!("couldnt get gpu key: {}", id);
+                }
+            }
             Message::FetchedSetting(res) => match res {
                 Ok(val) => match val.0 {
                     DaemonSettings::ExpNvidiaBlock => {

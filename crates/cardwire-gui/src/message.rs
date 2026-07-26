@@ -14,6 +14,7 @@ pub enum Message {
     UpdateBatterySetting(bool),
     UpdateBatteryMode(Mode),
     UpdateGpuPowerState(usize, String),
+    UpdateBlockState(usize, bool),
     FetchedSetting(Result<(DaemonSettings, Option<bool>, Option<Mode>), String>),
     ToggleMenu(Option<usize>),
     ClearError,

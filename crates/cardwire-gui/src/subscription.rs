@@ -5,6 +5,7 @@ use iced::{
 };
 
 use log::{error, warn};
+use tokio::select;
 use tokio_stream::StreamMap;
 
 use crate::{
@@ -106,7 +107,7 @@ fn config_sub() -> Subscription<Message> {
             let mut config_switch_battery_mode =
                 proxy.receive_battery_auto_switch_mode_changed().await;
             loop {
-                tokio::select! {
+                select! {
                     // Exp nvidia block
                     Some(change) = config_nvidia_stream.next() => {
                         if let Ok(new_state) = change.get().await {
@@ -208,6 +209,7 @@ fn gpu_sub() -> Subscription<Message> {
             // Count the number of gpus, if the daemon didn't mess the BTree, having count = 2 means
             // there is a gpu at 0 and at 1
             let mut dbus_streams = StreamMap::new();
+            let mut dbus_properties = StreamMap::new();
             for (path, _) in gpu_objects {
                 let path_str = path.as_str();
                 if let Some(id_str) =
@@ -238,7 +240,7 @@ fn gpu_sub() -> Subscription<Message> {
                             .await;
                     }
 
-                    let signal = match gpu_proxy.receive_signal("PowerStateChanged").await {
+                    let power_signal = match gpu_proxy.receive_signal("PowerStateChanged").await {
                         Ok(s) => s,
                         Err(e) => {
                             error!("Couldn't receive gpu {} power signal: {}", id, e);
@@ -246,28 +248,51 @@ fn gpu_sub() -> Subscription<Message> {
                         }
                     };
                     let stream_name = format!("gpu_power_{}", id);
-                    dbus_streams.insert(stream_name, signal);
+                    dbus_streams.insert(stream_name, power_signal);
+
+                    let block_signal: proxy::PropertyStream<'_, bool> =
+                        gpu_proxy.receive_property_changed("Block").await;
+
+                    let stream_name = format!("gpu_block_{}", id);
+                    dbus_properties.insert(stream_name, block_signal);
                 }
             }
             loop {
-                while let Some(msg) = dbus_streams.next().await {
-                    let msg_id = msg.0;
-                    let msg = msg.1;
-                    match msg_id {
-                        // gpu_power state
-                        _ if msg_id.starts_with("gpu_power") => {
-                            // Turn the body into a string and parse the gpu id
-                            if let Ok(power_state) = msg.body().deserialize::<String>()
-                                && let Some(id_str) = msg_id.strip_prefix("gpu_power_")
-                                && let Ok(id) = id_str.parse::<usize>()
-                            {
-                                let _ = output
-                                    .send(Message::UpdateGpuPowerState(id, power_state))
-                                    .await;
+                select! {
+                    Some(msg) = dbus_streams.next() => {
+                        let msg_id = msg.0;
+                        let msg = msg.1;
+                        match msg_id {
+                            // gpu_power state
+                            _ if msg_id.starts_with("gpu_power") => {
+                                // Turn the body into a string and parse the gpu id
+                                if let Ok(power_state) = msg.body().deserialize::<String>()
+                                    && let Some(id_str) = msg_id.strip_prefix("gpu_power_")
+                                    && let Ok(id) = id_str.parse::<usize>()
+                                {
+                                    let _ = output
+                                        .send(Message::UpdateGpuPowerState(id, power_state))
+                                        .await;
+                                }
                             }
+                            _ => {}
                         }
-                        _ => {}
-                    }
+                    },
+                    Some(msg) = dbus_properties.next() => {
+                        let msg_id = msg.0;
+                        let msg = msg.1;
+                        match msg_id {
+                            _ if msg_id.starts_with("gpu_block") => {
+                                let zbus_response = msg.get().await;
+                                if let Ok(new_state) = zbus_response &&
+                                    let Some(id_str) = msg_id.strip_prefix("gpu_block_") &&
+                                        let Ok(id) = id_str.parse::<usize>(){
+                                    let _ = output.send(Message::UpdateBlockState(id, new_state)).await;
+                                }
+                            },
+                            _ => {}
+                        }
+                    },
                 }
             }
         })
