@@ -21,6 +21,7 @@ install:
 	install -Dm0644 assets/cardwired.service /usr/lib/systemd/system/cardwired.service
 	install -Dm0644 assets/com.github.opengamingcollective.cardwire.conf /usr/share/dbus-1/system.d/com.github.opengamingcollective.cardwire.conf
 	install -Dm0644 assets/cardwire-gui.desktop /usr/share/applications/cardwire-gui.desktop
+	for icon in assets/icons/*.svg; do install -Dm0644 "$$icon" "/usr/share/icons/hicolor/scalable/apps/$$(basename "$$icon")"; done
 	systemctl enable cardwired.service
 
 check:

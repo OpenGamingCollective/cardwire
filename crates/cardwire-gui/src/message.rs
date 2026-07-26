@@ -1,5 +1,7 @@
 use crate::{
-    helpers::GpuDevice, models::{DaemonSettings, LsofData, Mode, Page, PciDevice}
+    helpers::GpuDevice,
+    models::{DaemonSettings, LsofData, Mode, Page, PciDevice},
+    tray::{TrayAction, TrayConfig, TrayHandle},
 };
 use std::collections::BTreeMap;
 
@@ -13,6 +15,17 @@ pub enum Message {
     UpdateStateSetting(bool),
     UpdateBatterySetting(bool),
     UpdateBatteryMode(Mode),
+    UpdateTrayToggleFrom(Mode),
+    UpdateTrayToggleTo(Mode),
+    UpdateTrayStartInTray(bool),
+    TrayConfigSaved(Result<TrayConfig, String>),
+    TrayReady(TrayHandle),
+    TrayAction(TrayAction),
+    TrayActionResult(Result<TrayUpdate, String>),
+    TrayUnavailable(String),
+    TrayShutdownComplete,
+    WindowOpened(iced::window::Id),
+    WindowClosed(iced::window::Id),
     UpdateGpuPowerState(usize, String),
     UpdateBlockState(usize, bool),
     FetchedSetting(Result<(DaemonSettings, Option<bool>, Option<Mode>), String>),
@@ -29,7 +42,11 @@ pub enum Message {
     OpenUrl(String),
     ClearError,
     ClearInfo,
-    #[expect(dead_code)]
-    // Placeholder used when building a new feature
     None,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TrayUpdate {
+    Mode(Mode),
+    GpuBlock { id: usize, blocked: bool },
 }

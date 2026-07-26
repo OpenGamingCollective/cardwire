@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, HashMap};
 
 use iced::{
-    Subscription, futures::{SinkExt, StreamExt, channel::mpsc::Sender}, stream
+    Subscription,
+    futures::{SinkExt, StreamExt, channel::mpsc::Sender},
+    stream,
 };
 
 use log::{error, warn};
@@ -9,11 +11,55 @@ use tokio::select;
 use tokio_stream::StreamMap;
 
 use crate::{
-    helpers::CardwireDbus, message::Message, models::{DaemonSettings, Mode, PciDevice}
+    helpers::CardwireDbus,
+    message::Message,
+    models::{DaemonSettings, Mode, PciDevice},
+    tray,
 };
 use zbus::{
-    Connection, Proxy, names::OwnedInterfaceName, proxy, zvariant::{OwnedObjectPath, OwnedValue}
+    Connection, Proxy,
+    names::OwnedInterfaceName,
+    proxy,
+    zvariant::{OwnedObjectPath, OwnedValue},
 };
+
+pub fn tray_sub() -> Subscription<Message> {
+    Subscription::run_with("cardwire_tray_subscription", |_id| {
+        stream::channel(10, |mut output: Sender<Message>| async move {
+            let (handle, mut actions) = match tray::spawn().await {
+                Ok(tray) => tray,
+                Err(error) => {
+                    let _ = output
+                        .send(Message::TrayUnavailable(error.to_string()))
+                        .await;
+                    std::future::pending::<()>().await;
+                    return;
+                }
+            };
+
+            if output.send(Message::TrayReady(handle)).await.is_err() {
+                return;
+            }
+            while let Some(action) = actions.recv().await {
+                let quitting = action == tray::TrayAction::Quit;
+                if output.send(Message::TrayAction(action)).await.is_err() {
+                    return;
+                }
+                if quitting {
+                    std::future::pending::<()>().await;
+                    return;
+                }
+            }
+
+            let _ = output
+                .send(Message::TrayUnavailable(
+                    "tray applet stopped unexpectedly".to_string(),
+                ))
+                .await;
+            std::future::pending::<()>().await;
+        })
+    })
+}
 
 // CardwireMode is used to listen to mode change signals
 
@@ -34,6 +80,7 @@ fn mode_sub() -> Subscription<Message> {
                 Ok(conn) => conn,
                 Err(e) => {
                     warn!("Failed to connect to D-Bus: {}", e);
+                    let _ = output.send(Message::FetchedMode(Err(e.to_string()))).await;
                     return;
                 }
             };
@@ -42,14 +89,27 @@ fn mode_sub() -> Subscription<Message> {
                 Ok(p) => p,
                 Err(e) => {
                     warn!("Failed to create D-Bus proxy: {}", e);
+                    let _ = output.send(Message::FetchedMode(Err(e.to_string()))).await;
                     return;
                 }
             };
             // for startup
-            if let Ok(initial_mode) = proxy.mode().await {
-                let mode_into_enum = Mode::from_repr(initial_mode);
-                if let Some(mode) = mode_into_enum {
-                    let _ = output.send(Message::FetchedMode(Ok(mode))).await;
+            match proxy.mode().await {
+                Ok(initial_mode) => {
+                    if let Some(mode) = Mode::from_repr(initial_mode) {
+                        let _ = output.send(Message::FetchedMode(Ok(mode))).await;
+                    } else {
+                        let _ = output
+                            .send(Message::FetchedMode(Err(format!(
+                                "Unknown mode: {initial_mode}"
+                            ))))
+                            .await;
+                    }
+                }
+                Err(error) => {
+                    let _ = output
+                        .send(Message::FetchedMode(Err(error.to_string())))
+                        .await;
                 }
             }
             let mut mode_stream = proxy.receive_mode_changed().await;
@@ -62,6 +122,11 @@ fn mode_sub() -> Subscription<Message> {
                     }
                 }
             }
+            let _ = output
+                .send(Message::FetchedMode(Err(
+                    "Cardwire daemon disconnected".to_string()
+                )))
+                .await;
         })
     })
 }
@@ -185,9 +250,16 @@ fn gpu_sub() -> Subscription<Message> {
             };
 
             // First populate the daemon gpu_list
-            if let Ok(gpu_list) = CardwireDbus::new().get_devices_list().await {
-                let _ = output.send(Message::AllDevicesFetched(Ok(gpu_list))).await;
-            };
+            match CardwireDbus::new().get_devices_list().await {
+                Ok(gpu_list) => {
+                    let _ = output.send(Message::AllDevicesFetched(Ok(gpu_list))).await;
+                }
+                Err(error) => {
+                    let _ = output
+                        .send(Message::AllDevicesFetched(Err(error.to_string())))
+                        .await;
+                }
+            }
 
             let proxy = match CardwireGpuIntProxy::new(&connection).await {
                 Ok(p) => p,

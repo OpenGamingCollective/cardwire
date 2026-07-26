@@ -5,7 +5,6 @@ members = [
     "crates/cardwire-cli",
     "crates/cardwire-ebpf",
     "crates/cardwire-gui",
-    "crates/cardwire-tray",
 ]
 
 [workspace.package]

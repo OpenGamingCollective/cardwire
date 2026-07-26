@@ -546,24 +546,12 @@ dependencies = [
  "env_logger",
  "iced",
  "iced_aw",
- "log",
- "serde",
- "serde_json",
- "strum",
- "tokio",
- "tokio-stream",
- "zbus",
-]
-
-[[package]]
-name = "cardwire-tray"
-version = "0.10.3"
-dependencies = [
- "env_logger",
  "ksni",
  "log",
  "notify-rust",
  "serde",
+ "serde_json",
+ "strum",
  "tokio",
  "tokio-stream",
  "toml",
