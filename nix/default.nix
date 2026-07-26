@@ -65,6 +65,11 @@ in
         lib.makeLibraryPath [
           pkgs.udev
           pkgs.upower
+        ]
+      }
+      wrapProgram $out/bin/cardwire-gui \
+      --prefix LD_LIBRARY_PATH : ${
+        lib.makeLibraryPath [
           pkgs.wayland
           pkgs.libxkbcommon
           pkgs.vulkan-loader
