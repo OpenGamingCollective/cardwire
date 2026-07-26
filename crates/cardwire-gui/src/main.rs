@@ -14,9 +14,10 @@ fn main() -> iced::Result {
         .format_timestamp(None)
         .init();
 
-    // This prevent iced from using the dGPU, will be fixed in the next iced release
     unsafe {
+        // Vulkan wakes the dGPU
         std::env::set_var("WGPU_BACKEND", "gl");
+        // This prevent iced from using the dGPU, will be fixed in the next iced release
         std::env::set_var("WGPU_POWER_PREF", "low");
     }
 

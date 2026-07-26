@@ -36,11 +36,13 @@ impl AppState {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            // Switch to a new page, clearing the pop-ups at the same time
             Message::SwitchPage(page) => {
                 self.current_tab = page;
                 self.error = None;
                 self.info = None;
             }
+            // Happen when a gpu_list is received from dbus
             Message::AllDevicesFetched(res) => match res {
                 Ok(map) => {
                     self.gpu_list = map;
@@ -49,6 +51,7 @@ impl AppState {
                 }
                 Err(err) => self.error = Some(format!("Error fetching GPUs: {}", err)),
             },
+            // Happen when a mode is received from dbus
             Message::FetchedMode(mode) => match mode {
                 Ok(mode) => {
                     self.main_state.current_mode = Some(mode);
@@ -56,6 +59,7 @@ impl AppState {
                 }
                 Err(err) => self.error = Some(format!("Error fetching Mode: {}", err)),
             },
+            // Send the new mode to dbus
             Message::SetMode(mode) => {
                 let conn = self.zbus_conn.clone();
                 return Task::perform(
@@ -74,6 +78,7 @@ impl AppState {
                     },
                 );
             }
+            // Used to update the exp nvidia setting and send it to dbus
             Message::UpdateNvidiaSetting(setting) => {
                 let conn = self.zbus_conn.clone();
                 return Task::perform(
@@ -89,6 +94,7 @@ impl AppState {
                     },
                 );
             }
+            // Used to update auto apply state and send it to dbus
             Message::UpdateStateSetting(setting) => {
                 let conn = self.zbus_conn.clone();
                 return Task::perform(
@@ -108,6 +114,7 @@ impl AppState {
                     },
                 );
             }
+            // Used to update the auto switch on battery and send it to dbus
             Message::UpdateBatterySetting(setting) => {
                 let conn = self.zbus_conn.clone();
                 return Task::perform(
@@ -123,6 +130,7 @@ impl AppState {
                     },
                 );
             }
+            // Used to update the auto battery switch's Mode and send it to dbus
             Message::UpdateBatteryMode(setting) => {
                 let conn = self.zbus_conn.clone();
                 return Task::perform(
@@ -138,6 +146,7 @@ impl AppState {
                     },
                 );
             }
+            // Update the gpu_list power_state using the gpu key id
             Message::UpdateGpuPowerState(id, new_state) => {
                 // Get the gpu by key
                 if let Some(gpu) = self.gpu_list.get_mut(&id) {
@@ -149,6 +158,7 @@ impl AppState {
                     self.error = Some(error);
                 }
             }
+            // Same but with the block state
             Message::UpdateBlockState(id, new_state) => {
                 if let Some(gpu) = self.gpu_list.get_mut(&id) {
                     // Update the gpu power_state
@@ -159,6 +169,7 @@ impl AppState {
                     self.error = Some(error);
                 }
             }
+            // Happen when a setting is updated and received from dbus
             Message::FetchedSetting(res) => match res {
                 Ok(val) => {
                     match val.0 {
@@ -187,9 +198,11 @@ impl AppState {
                 }
                 Err(err) => self.error = Some(format!("error fetching Setting: {}", err)),
             },
+            // Fetched pci_list from dbus
             Message::FetchedPciList(pci_list) => {
                 self.pci_list = pci_list;
             }
+            // Copy the pci list to the clipboard
             Message::PciListToClipboard() => match serde_json::to_string_pretty(&self.pci_list) {
                 Ok(json) => {
                     self.info = Some("Copied pci_list to clipboard!".to_string());
@@ -197,9 +210,11 @@ impl AppState {
                 }
                 Err(e) => self.error = Some(e.to_string()),
             },
+            // Toggle the dropdown menu in the main page
             Message::ToggleMenu(index) => {
                 self.main_state.open_gpu_menu = index;
             }
+            // Block/Unblock a GPU
             Message::SetGpuBlock(id, blocked) => {
                 let conn = self.zbus_conn.clone();
                 return Task::perform(

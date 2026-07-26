@@ -11,7 +11,7 @@ use crate::{
     helpers::GpuDevice, message::Message, models::{LsofData, MainState, Mode, Page, PciDevice, SettingState}
 };
 
-// Custom macro for box theming
+// Custom macro for box theming, used by cards
 macro_rules! box_theme {
     () => {
         container::Style {
@@ -26,6 +26,7 @@ macro_rules! box_theme {
     };
 }
 
+// This is used for the GPU's dropdown menu
 fn menu_btn_style(_theme: &iced::Theme, status: button::Status) -> button::Style {
     match status {
         button::Status::Hovered => button::Style {
@@ -49,6 +50,7 @@ fn menu_btn_style(_theme: &iced::Theme, status: button::Status) -> button::Style
     }
 }
 
+// This is used for the GPU's dropdown menu
 fn trigger_btn_style(_theme: &iced::Theme, status: button::Status) -> button::Style {
     match status {
         button::Status::Hovered => button::Style {
@@ -72,6 +74,7 @@ fn trigger_btn_style(_theme: &iced::Theme, status: button::Status) -> button::St
     }
 }
 
+// Used by the link in the About Page
 fn link_btn_style(_theme: &iced::Theme, status: button::Status) -> button::Style {
     match status {
         button::Status::Hovered => button::Style {
@@ -92,6 +95,7 @@ fn link_btn_style(_theme: &iced::Theme, status: button::Status) -> button::Style
     }
 }
 
+// Iter over the Page enum and make a button for each variants, Used to navigate around the GUI
 pub fn page_bar() -> Element<'static, Message> {
     let buttons = Page::iter().fold(column![].spacing(10), |col, page| {
         col.push(
@@ -104,6 +108,7 @@ pub fn page_bar() -> Element<'static, Message> {
     buttons.into()
 }
 
+// The main page contain the mode and the GPU Cards
 pub fn main_page<'a>(
     main_state: &'a MainState,
     gpu_list: &'a BTreeMap<usize, GpuDevice>,
@@ -116,6 +121,7 @@ pub fn main_page<'a>(
     .into()
 }
 
+// A pick list containing a list of modes
 fn mode_element(current_mode: Option<Mode>) -> Element<'static, Message> {
     row![
         text!("Mode: "),
@@ -238,7 +244,7 @@ fn gpu_cards(
                             match power_state.trim() {
                                 "D0" => text!("D0").color(Color::from_rgb(1.0, 0.0, 0.0)),
                                 "D3cold" => text!("D3Cold").color(Color::from_rgb(0.0, 1.0, 0.0)),
-                                _ => text!("{}/", power_state),
+                                _ => text!("{}", power_state),
                             }
                         }
                         None => text("err"),
@@ -259,6 +265,7 @@ fn gpu_cards(
         .into()
 }
 
+// Spawn a window containing the output
 pub fn lsof_overlay<'a>(
     lsof_data: &'a LsofData,
     gpu_list: &'a BTreeMap<usize, GpuDevice>,
@@ -269,7 +276,7 @@ pub fn lsof_overlay<'a>(
         .unwrap_or("Unknown");
 
     let header = row![
-        text!("lsof — GPU {} ({})", lsof_data.gpu_id, gpu_name)
+        text!("lsof - GPU {} ({})", lsof_data.gpu_id, gpu_name)
             .size(18)
             .color(Color::from_rgb(0.9, 0.9, 0.9))
             .font(Font::MONOSPACE)
@@ -406,6 +413,7 @@ pub fn advanced_page() -> Element<'static, Message> {
     })
     .width(Fill);
 
+    //Send refresh_gpu to dbus, automatic GUI gpu_list refreshing isn't implemented yet
     let refresh_section = container(
         column![
             text("Refresh GPU List").size(20),
