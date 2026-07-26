@@ -32,6 +32,8 @@ in
       pkgs.hwdata
       pkgs.upower
       pkgs.udev
+      pkgs.wayland
+      pkgs.libxkbcommon
     ];
     doCheck = false;
     doInstallCheck = true;
@@ -63,6 +65,10 @@ in
         lib.makeLibraryPath [
           pkgs.udev
           pkgs.upower
+          pkgs.wayland
+          pkgs.libxkbcommon
+          pkgs.vulkan-loader
+          pkgs.libGL
         ]
       }
     '';
