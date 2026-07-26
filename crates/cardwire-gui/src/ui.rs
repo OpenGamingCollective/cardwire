@@ -109,9 +109,6 @@ pub fn main_page<'a>(
     gpu_list: &'a BTreeMap<usize, GpuDevice>,
 ) -> Element<'a, Message> {
     column![
-        text("the GUI is in beta, the ugly UI is intended behavior")
-            .size(35)
-            .center(),
         mode_element(main_state.current_mode),
         gpu_cards(gpu_list, main_state.open_gpu_menu)
     ]
