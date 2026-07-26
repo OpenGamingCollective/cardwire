@@ -17,7 +17,6 @@ pub async fn monitor_pci_changes(debug_int: DebugInterface) -> zbus::Result<()> 
                 {
                     info!("detected pci event, refreshing GPU interfaces");
                     if let Err(e) = debug_int.refresh_gpu().await {
-                        debug_int.refresh_gpu().await?;
                         error!("failed to reresh gpu interface: {}", e);
                     }
                 }
