@@ -397,6 +397,10 @@ pub fn about_page() -> Element<'static, Message> {
             text("luytan")
         ],
         row![
+            text("Other contributors: ").color(Color::from_rgb(0.6, 0.6, 0.6)),
+            text("SeawolfTony")
+        ],
+        row![
             text("License: ").color(Color::from_rgb(0.6, 0.6, 0.6)),
             text("GPL-3.0")
         ],
