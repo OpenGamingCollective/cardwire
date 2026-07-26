@@ -5,6 +5,7 @@ members = [
     "crates/cardwire-cli",
     "crates/cardwire-ebpf",
     "crates/cardwire-gui",
+    "crates/cardwire-tray",
 ]
 
 [workspace.package]
@@ -45,6 +46,8 @@ iced = { version = "0.14.0", default-features = false, features = [
 ] }
 iced_aw = "0.14.1"
 strum = { version = "0.28", features = ["derive"] }
+ksni = "0.3.4"
+notify-rust = "4.17.0"
 
 [profile.dev]
 overflow-checks = true
