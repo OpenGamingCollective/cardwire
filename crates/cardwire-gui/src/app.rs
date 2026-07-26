@@ -5,7 +5,7 @@ use log::error;
 use std::collections::BTreeMap;
 
 use crate::{
-    helpers::{CardwireDbus, GpuDevice}, message::Message, models::{DaemonSettings, MainState, Mode, Page, SettingState}, ui::{self, daemon_setting_page, error_bar}
+    helpers::{CardwireDbus, GpuDevice}, message::Message, models::{DaemonSettings, MainState, Mode, Page, PciDevice, SettingState}, ui::{self, daemon_setting_page, error_bar, pci_page}
 };
 
 #[derive(Debug)]
@@ -14,6 +14,7 @@ pub struct AppState {
     pub error: Option<String>,
     pub zbus_conn: CardwireDbus,
     pub gpu_list: BTreeMap<usize, GpuDevice>,
+    pub pci_list: BTreeMap<String, PciDevice>,
     pub main_state: MainState,
     pub setting_state: SettingState,
 }
@@ -25,6 +26,7 @@ impl AppState {
             error: None,
             zbus_conn: CardwireDbus::new(),
             gpu_list: BTreeMap::default(),
+            pci_list: BTreeMap::default(),
             main_state: MainState::default(),
             setting_state: SettingState::default(),
         }
@@ -172,6 +174,9 @@ impl AppState {
                 },
                 Err(err) => self.error = Some(format!("error fetching Setting: {}", err)),
             },
+            Message::FetchedPciList(pci_list) => {
+                self.pci_list = pci_list;
+            }
             Message::ToggleMenu(index) => {
                 self.main_state.open_gpu_menu = index;
             }
@@ -188,6 +193,7 @@ impl AppState {
         }
         app = app.push(container(match &self.current_tab {
             Page::Main => ui::main_page(&self.main_state, &self.gpu_list),
+            Page::Pci => pci_page(&self.pci_list),
             Page::SmartMode => text("Smart Mode TODO").into(),
             Page::CardwireSettings => daemon_setting_page(&self.setting_state),
             Page::AccessLogs => text!("TODO").into(),

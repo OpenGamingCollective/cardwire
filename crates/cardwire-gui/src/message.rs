@@ -1,5 +1,5 @@
 use crate::{
-    helpers::GpuDevice, models::{DaemonSettings, Mode, Page}
+    helpers::GpuDevice, models::{DaemonSettings, Mode, Page, PciDevice}
 };
 use std::collections::BTreeMap;
 
@@ -16,6 +16,7 @@ pub enum Message {
     UpdateGpuPowerState(usize, String),
     UpdateBlockState(usize, bool),
     FetchedSetting(Result<(DaemonSettings, Option<bool>, Option<Mode>), String>),
+    FetchedPciList(BTreeMap<String, PciDevice>),
     ToggleMenu(Option<usize>),
     ClearError,
     #[expect(dead_code)]

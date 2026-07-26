@@ -33,15 +33,17 @@ impl From<Mode> for u32 {
 pub enum Page {
     #[default]
     Main,
+    Pci,
     SmartMode,
-    CardwireSettings,
     AccessLogs,
+    CardwireSettings,
     About,
 }
 impl Display for Page {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Page::Main => write!(f, "Main"),
+            Page::Pci => write!(f, "PCI"),
             Page::SmartMode => write!(f, "Smart Mode"),
             Page::CardwireSettings => write!(f, "Cardwire Settings"),
             Page::AccessLogs => write!(f, "Access Logs"),
@@ -81,4 +83,17 @@ impl Display for DaemonSettings {
             DaemonSettings::BattAutoSwitchMode => write!(f, "BatteryAutoSwitchMode"),
         }
     }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, zbus::zvariant::Type)]
+pub struct PciDevice {
+    pub iommu_group: String,
+    pub vendor_id: String,
+    pub device_id: String,
+    pub vendor_name: String,
+    pub device_name: String,
+    pub driver: String,
+    pub class: String,
+    pub parent_pci: String,
+    pub child_pci: String,
 }

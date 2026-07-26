@@ -1,12 +1,14 @@
 use iced::{
-    Alignment, Border, Color, Element, Length::{Fill, FillPortion}, widget::{button, column, container, pick_list, row, space::horizontal, text, toggler}
+    Alignment, Border, Color, Element, Length::{Fill, FillPortion}, widget::{
+        button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler
+    }
 };
 use iced_aw::DropDown;
 use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    helpers::GpuDevice, message::Message, models::{MainState, Mode, Page, SettingState}
+    helpers::GpuDevice, message::Message, models::{MainState, Mode, Page, PciDevice, SettingState}
 };
 
 // Custom macro for box theming
@@ -215,6 +217,89 @@ pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Mes
         .push(battery_setting)
         .push(battery_mode);
     col.into()
+}
+
+pub fn pci_page<'a>(pci_list: &'a BTreeMap<String, PciDevice>) -> Element<'a, Message> {
+    let cards = scrollable(
+        pci_list
+            .iter()
+            .fold(column![].spacing(15), |col, (pci_id, device)| {
+                let title_color = Color::from_rgb(0.9, 0.9, 0.9);
+
+                let header: iced::Element<'_, Message> = row![
+                    text!("{}", device.device_name)
+                        .size(20)
+                        .color(title_color)
+                        .width(FillPortion(1)),
+                ]
+                .into();
+                let width = 150;
+                let details = column![
+                    row![
+                        text("PCI: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(width),
+                        text!("{}", pci_id)
+                    ],
+                    row![
+                        text("IOMMU group: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(width),
+                        text!("{}", device.iommu_group)
+                    ],
+                    row![
+                        text("Vendor: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(width),
+                        text!("{}", device.vendor_name)
+                    ],
+                    row![
+                        text("Driver: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(width),
+                        match device.driver.is_empty() {
+                            true => text("N/A"),
+                            false => text!("{}", device.driver),
+                        }
+                    ],
+                    row![
+                        text("Class: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(width),
+                        text!("{}", device.class)
+                    ],
+                    row![
+                        text("Parent Device: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(width),
+                        match device.parent_pci.is_empty() {
+                            true => text("N/A"),
+                            false => text!("{}", device.parent_pci),
+                        }
+                    ],
+                    row![
+                        text("Child Device: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(width),
+                        match device.child_pci.is_empty() {
+                            true => text!("N/A"),
+                            false => text!("{}", device.child_pci),
+                        }
+                    ]
+                ]
+                .spacing(8);
+
+                let card = container(column![header, details].spacing(10))
+                    .width(Fill)
+                    .padding(20)
+                    .style(|_| box_theme!());
+
+                col.push(card)
+            }),
+    );
+    column![text!("List of PCI Devices").size(30).center(), cards]
+        .spacing(15)
+        .into()
 }
 
 pub fn error_bar(msg: &str) -> Element<'_, Message> {

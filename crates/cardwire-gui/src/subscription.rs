@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use iced::{
     Subscription, futures::{SinkExt, StreamExt, channel::mpsc::Sender}, stream
@@ -9,7 +9,7 @@ use tokio::select;
 use tokio_stream::StreamMap;
 
 use crate::{
-    helpers::CardwireDbus, message::Message, models::{DaemonSettings, Mode}
+    helpers::CardwireDbus, message::Message, models::{DaemonSettings, Mode, PciDevice}
 };
 use zbus::{
     Connection, Proxy, names::OwnedInterfaceName, proxy, zvariant::{OwnedObjectPath, OwnedValue}
@@ -299,6 +299,43 @@ fn gpu_sub() -> Subscription<Message> {
     })
 }
 
+#[proxy(
+    default_service = "com.github.opengamingcollective.cardwire",
+    default_path = "/com/github/opengamingcollective/cardwire",
+    interface = "com.github.opengamingcollective.cardwire.Debug"
+)]
+trait CardwireDebug {
+    fn get_pci_devices(&self) -> zbus::Result<BTreeMap<String, PciDevice>>;
+}
+/// PCI Signal is not implemented yet, it just fetch the pci list at launch
+fn pci_sub() -> Subscription<Message> {
+    Subscription::run_with("cardwire_pci_subscription", |_| {
+        stream::channel(100, |mut output: Sender<Message>| async move {
+            let connection = match Connection::system().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    warn!("Failed to connect to D-Bus: {}", e);
+                    return;
+                }
+            };
+
+            let proxy = match CardwireDebugProxy::new(&connection).await {
+                Ok(p) => p,
+                Err(e) => {
+                    warn!("Failed to create D-Bus proxy: {}", e);
+                    return;
+                }
+            };
+
+            // For now we only fetch the pci list at launch since the daemon doesnt implement a
+            // signal
+            if let Ok(pci_list) = proxy.get_pci_devices().await {
+                let _ = output.send(Message::FetchedPciList(pci_list)).await;
+            }
+        })
+    })
+}
+
 pub fn dbus_sub() -> Subscription<Message> {
-    Subscription::batch([config_sub(), mode_sub(), gpu_sub()])
+    Subscription::batch([config_sub(), mode_sub(), gpu_sub(), pci_sub()])
 }
