@@ -95,11 +95,7 @@ fn link_btn_style(_theme: &iced::Theme, status: button::Status) -> button::Style
     }
 }
 
-fn page_btn_style(
-    theme: &iced::Theme,
-    selected: bool,
-    status: button::Status,
-) -> button::Style {
+fn page_btn_style(theme: &iced::Theme, selected: bool, status: button::Status) -> button::Style {
     if selected {
         return button::primary(theme, status);
     }
