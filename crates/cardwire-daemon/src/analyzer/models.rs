@@ -93,7 +93,7 @@ impl CardwireAnalyzer {
                                 continue;
                             }
                             let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Close) };
-                                                        let this = Arc::clone(&shared_self);
+                            let this = Arc::clone(&shared_self);
                             task::spawn(async move {
                                 this.spawn_remove_analyzer(event).await
                             });
