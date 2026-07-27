@@ -1,3 +1,4 @@
+# Dependabot configuration for Rust project
 # Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 version: 2
 updates:
@@ -13,19 +14,11 @@ updates:
     pull-request-branch-name:
       separator: "/"
     groups:
-      production-dependencies:
-        dependency-types:
-          - "production"
-        patterns:
-          - "*"
-      dev-dependencies:
-        dependency-types:
-          - "dev"
+      cargo-dependencies:
         patterns:
           - "*"
     commit-message:
       prefix: "chore(deps):"
-      prefix-development: "chore(dev-deps):"
       include: "scope"
 
   # Nix dependencies
