@@ -3,6 +3,7 @@ mod helpers;
 mod message;
 mod models;
 mod subscription;
+mod tray;
 mod ui;
 
 use app::AppState;
@@ -21,8 +22,9 @@ fn main() -> iced::Result {
         std::env::set_var("WGPU_POWER_PREF", "low");
     }
 
-    iced::application(AppState::new, AppState::update, AppState::view)
+    iced::daemon(AppState::new, AppState::update, AppState::view)
         .title(AppState::title)
-        .subscription(|_| subscription::dbus_sub())
+        .theme(iced::Theme::Dark)
+        .subscription(AppState::subscription)
         .run()
 }

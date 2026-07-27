@@ -1,14 +1,19 @@
 use iced::{
-    Alignment, Border, Color, Element, Font, Length::{Fill, FillPortion, Fixed}, widget::{
-        button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler
-    }
+    Alignment, Border, Color, Element, Font,
+    Length::{Fill, FillPortion, Fixed},
+    widget::{
+        button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler,
+    },
 };
 use iced_aw::DropDown;
 use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    helpers::GpuDevice, message::Message, models::{LsofData, MainState, Mode, Page, PciDevice, SettingState}
+    helpers::GpuDevice,
+    message::Message,
+    models::{LsofData, MainState, Mode, Page, PciDevice, SettingState},
+    tray::TrayConfig,
 };
 
 // Custom macro for box theming, used by cards
@@ -392,6 +397,10 @@ pub fn about_page() -> Element<'static, Message> {
             text("luytan")
         ],
         row![
+            text("Other contributors: ").color(Color::from_rgb(0.6, 0.6, 0.6)),
+            text("SeawolfTony")
+        ],
+        row![
             text("License: ").color(Color::from_rgb(0.6, 0.6, 0.6)),
             text("GPL-3.0")
         ],
@@ -503,12 +512,59 @@ pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Mes
     )
     .style(|_| box_theme!())
     .width(Fill);
+    let tray_settings = tray_setting_section(setting_state.tray_config);
     col = col
         .push(nvidia_setting)
         .push(state_setting)
         .push(battery_setting)
-        .push(battery_mode);
+        .push(battery_mode)
+        .push(tray_settings);
     col.into()
+}
+
+fn tray_setting_section(config: TrayConfig) -> Element<'static, Message> {
+    container(
+        column![
+            text("Tray Settings").size(20),
+            text("Choose the two modes toggled by primary-clicking the tray icon.")
+                .color(Color::from_rgb(0.6, 0.6, 0.6)),
+            row![
+                column![
+                    text("Start in tray"),
+                    text("Do not open the GUI when Cardwire starts. Takes effect next launch.")
+                        .size(13)
+                        .color(Color::from_rgb(0.6, 0.6, 0.6)),
+                ],
+                horizontal(),
+                toggler(config.start_in_tray).on_toggle(move |start_in_tray| {
+                    Message::UpdateTrayConfig(TrayConfig {
+                        start_in_tray,
+                        ..config
+                    })
+                }),
+            ]
+            .align_y(Alignment::Center),
+            row![
+                text("Toggle from:").width(Fixed(130.0)),
+                pick_list(Mode::VARIANTS, Some(config.toggle_from), move |mode| {
+                    Message::UpdateTrayConfig(config.with_toggle_from(mode))
+                },),
+            ]
+            .align_y(Alignment::Center),
+            row![
+                text("Toggle to:").width(Fixed(130.0)),
+                pick_list(Mode::VARIANTS, Some(config.toggle_to), move |mode| {
+                    Message::UpdateTrayConfig(config.with_toggle_to(mode))
+                },),
+            ]
+            .align_y(Alignment::Center),
+        ]
+        .spacing(10),
+    )
+    .style(|_| box_theme!())
+    .width(Fill)
+    .padding(20)
+    .into()
 }
 
 pub fn pci_page<'a>(pci_list: &'a BTreeMap<String, PciDevice>) -> Element<'a, Message> {

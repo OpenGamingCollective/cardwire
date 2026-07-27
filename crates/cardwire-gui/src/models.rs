@@ -1,10 +1,24 @@
 use std::{
-    collections::HashMap, fmt::{self, Display}
+    collections::HashMap,
+    fmt::{self, Display},
 };
 use strum::{EnumIter, FromRepr, VariantArray};
 
-#[derive(PartialEq, zbus::zvariant::Type, Clone, Copy, Debug, VariantArray, FromRepr, Default)]
+#[derive(
+    PartialEq,
+    Eq,
+    zbus::zvariant::Type,
+    Clone,
+    Copy,
+    Debug,
+    VariantArray,
+    FromRepr,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[repr(u32)]
+#[serde(rename_all = "kebab-case")]
 pub enum Mode {
     Integrated = 0,
     Hybrid = 1,
@@ -75,6 +89,7 @@ pub struct SettingState {
     pub state_checked: bool,
     pub battery_checked: bool,
     pub battery_mode: Option<Mode>,
+    pub tray_config: crate::tray::TrayConfig,
 }
 
 #[derive(Clone, Debug)]

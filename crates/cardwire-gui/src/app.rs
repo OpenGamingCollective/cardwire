@@ -1,11 +1,19 @@
 use iced::{
-    Alignment, Element, Length::{Fill, Fixed}, Task, widget::{column, container, row, stack, text}
+    Alignment, Element,
+    Length::{Fill, Fixed},
+    Subscription, Task,
+    widget::{column, container, row, stack, text},
+    window,
 };
 use log::error;
 use std::collections::BTreeMap;
 
 use crate::{
-    helpers::{CardwireDbus, GpuDevice}, message::Message, models::{DaemonSettings, MainState, Mode, Page, PciDevice, SettingState}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
+    helpers::{CardwireDbus, GpuDevice},
+    message::Message,
+    models::{DaemonSettings, MainState, Mode, Page, PciDevice, SettingState},
+    tray::{self, TrayAction, TrayConfig, TrayHandle},
+    ui::{self, daemon_setting_page, error_bar, info_bar, pci_page},
 };
 
 #[derive(Debug)]
@@ -18,23 +26,56 @@ pub struct AppState {
     pub pci_list: BTreeMap<String, PciDevice>,
     pub main_state: MainState,
     pub setting_state: SettingState,
+    window_id: Option<window::Id>,
+    tray_handle: Option<TrayHandle>,
+    tray_available: bool,
 }
 
 impl AppState {
-    pub fn new() -> Self {
-        AppState {
+    pub fn new() -> (Self, Task<Message>) {
+        let (tray_config, error) = match TrayConfig::load() {
+            Ok(config) => (config, None),
+            Err(error) => (
+                TrayConfig::default(),
+                Some(format!("Could not load tray settings: {error}")),
+            ),
+        };
+        let (window_id, open_window) = if tray_config.start_in_tray {
+            (None, Task::none())
+        } else {
+            let (id, task) = window::open(window::Settings::default());
+            (Some(id), task.discard())
+        };
+        let state = AppState {
             current_tab: Page::default(),
-            error: None,
+            error,
             info: None,
             zbus_conn: CardwireDbus::new(),
             gpu_list: BTreeMap::default(),
             pci_list: BTreeMap::default(),
             main_state: MainState::default(),
-            setting_state: SettingState::default(),
-        }
+            setting_state: SettingState {
+                tray_config,
+                ..SettingState::default()
+            },
+            window_id,
+            tray_handle: None,
+            tray_available: true,
+        };
+        (state, open_window)
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        let mut notification = None;
+        let sync_tray = matches!(
+            &message,
+            Message::AllDevicesFetched(_)
+                | Message::FetchedMode(_)
+                | Message::TrayReady(_)
+                | Message::UpdateGpuPowerState(..)
+                | Message::UpdateBlockState(..)
+                | Message::GpuBlockResult(_)
+        );
         match message {
             // Switch to a new page, clearing the pop-ups at the same time
             Message::SwitchPage(page) => {
@@ -49,15 +90,22 @@ impl AppState {
                     // Clear error
                     self.error = None;
                 }
-                Err(err) => self.error = Some(format!("Error fetching GPUs: {}", err)),
+                Err(err) => {
+                    self.gpu_list.clear();
+                    self.error = Some(format!("Error fetching GPUs: {}", err));
+                }
             },
             // Happen when a mode is received from dbus
             Message::FetchedMode(mode) => match mode {
                 Ok(mode) => {
+                    notification = mode_change_notification(self.main_state.current_mode, mode);
                     self.main_state.current_mode = Some(mode);
                     self.error = None;
                 }
-                Err(err) => self.error = Some(format!("Error fetching Mode: {}", err)),
+                Err(err) => {
+                    self.main_state.current_mode = None;
+                    self.error = Some(format!("Error fetching Mode: {}", err));
+                }
             },
             // Send the new mode to dbus
             Message::SetMode(mode) => {
@@ -145,6 +193,53 @@ impl AppState {
                         Err(err) => Message::FetchedSetting(Err(err)),
                     },
                 );
+            }
+            Message::UpdateTrayConfig(config) => return self.save_tray_config(config),
+            Message::TrayReady(handle) => {
+                self.tray_handle = Some(handle);
+                self.tray_available = true;
+            }
+            Message::TrayAction(action) => match action {
+                TrayAction::ToggleConfiguredMode => {
+                    return match configured_tray_mode(
+                        self.main_state.current_mode,
+                        self.setting_state.tray_config,
+                    ) {
+                        Ok(mode) => self.update(Message::SetMode(mode)),
+                        Err(error) => {
+                            self.error = Some(error);
+                            Task::none()
+                        }
+                    };
+                }
+                TrayAction::SetMode(mode) => return self.update(Message::SetMode(mode)),
+                TrayAction::SetGpuBlock { id, blocked } => {
+                    return self.update(Message::SetGpuBlock(id, blocked));
+                }
+                TrayAction::OpenGui => return self.open_or_focus_window(),
+                TrayAction::Quit => {
+                    if let Some(handle) = self.tray_handle.take() {
+                        return Task::perform(handle.shutdown(), |_| Message::TrayShutdownComplete);
+                    }
+                    return iced::exit();
+                }
+            },
+            Message::TrayUnavailable(error) => {
+                self.tray_available = false;
+                self.tray_handle = None;
+                self.error = Some(format!("Tray applet unavailable: {error}"));
+                if self.window_id.is_none() {
+                    return self.open_or_focus_window();
+                }
+            }
+            Message::TrayShutdownComplete => return iced::exit(),
+            Message::WindowClosed(id) => {
+                if self.window_id == Some(id) {
+                    self.window_id = None;
+                }
+                if !self.tray_available {
+                    return iced::exit();
+                }
             }
             // Update the gpu_list power_state using the gpu key id
             Message::UpdateGpuPowerState(id, new_state) => {
@@ -273,14 +368,65 @@ impl AppState {
             Message::OpenUrl(url) => {
                 let _ = std::process::Command::new("xdg-open").arg(url).spawn();
             }
-            Message::None => {}
+            Message::None => return Task::none(),
             Message::ClearError => self.error = None,
             Message::ClearInfo => self.info = None,
+        }
+        let sync_task = if sync_tray {
+            self.sync_tray()
+        } else {
+            Task::none()
+        };
+        if let Some(message) = notification {
+            Task::batch([
+                sync_task,
+                Task::perform(tray::notify(message), |_| Message::None),
+            ])
+        } else {
+            sync_task
+        }
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        Subscription::batch([
+            crate::subscription::dbus_sub(),
+            crate::subscription::tray_sub(),
+            window::close_events().map(Message::WindowClosed),
+        ])
+    }
+
+    fn save_tray_config(&mut self, config: TrayConfig) -> Task<Message> {
+        match config.save() {
+            Ok(()) => {
+                self.setting_state.tray_config = config;
+                self.info = Some("Tray settings saved".to_string());
+                self.error = None;
+            }
+            Err(error) => self.error = Some(format!("Could not save tray settings: {error}")),
         }
         Task::none()
     }
 
-    pub fn view(&self) -> Element<'_, Message> {
+    fn sync_tray(&self) -> Task<Message> {
+        let Some(handle) = self.tray_handle.clone() else {
+            return Task::none();
+        };
+        let mode = self.main_state.current_mode;
+        let gpus = self.gpu_list.clone();
+        Task::perform(tray::update(handle, mode, gpus), |_| Message::None)
+    }
+
+    fn open_or_focus_window(&mut self) -> Task<Message> {
+        if let Some(id) = self.window_id {
+            window::gain_focus(id)
+        } else {
+            let (id, task) = window::open(window::Settings::default());
+            self.window_id = Some(id);
+            task.discard()
+        }
+    }
+
+    pub fn view(&self, _window_id: window::Id) -> Element<'_, Message> {
         let mut main_content = column![].spacing(10).width(Fill).height(Fill);
         main_content = main_content.push(container(match &self.current_tab {
             Page::Main => ui::main_page(&self.main_state, &self.gpu_list),
@@ -320,7 +466,48 @@ impl AppState {
         final_app.into()
     }
 
-    pub fn title(&self) -> String {
+    pub fn title(&self, _window_id: window::Id) -> String {
         format!("Cardwire - {}", self.current_tab)
+    }
+}
+
+fn configured_tray_mode(current: Option<Mode>, config: TrayConfig) -> Result<Mode, String> {
+    current
+        .map(|mode| config.next_mode(mode))
+        .ok_or_else(|| "Cardwire daemon is unavailable".to_string())
+}
+
+fn mode_change_notification(current: Option<Mode>, next: Mode) -> Option<String> {
+    (current.is_some() && current != Some(next)).then(|| format!("Switched to {next} mode"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tray_toggle_uses_the_configured_pair() {
+        assert_eq!(
+            configured_tray_mode(Some(Mode::Integrated), TrayConfig::default()).unwrap(),
+            Mode::Hybrid
+        );
+    }
+
+    #[test]
+    fn tray_toggle_rejects_an_offline_daemon() {
+        assert!(configured_tray_mode(None, TrayConfig::default()).is_err());
+    }
+
+    #[test]
+    fn only_actual_mode_changes_are_notified() {
+        assert_eq!(mode_change_notification(None, Mode::Hybrid), None);
+        assert_eq!(
+            mode_change_notification(Some(Mode::Hybrid), Mode::Hybrid),
+            None
+        );
+        assert_eq!(
+            mode_change_notification(Some(Mode::Integrated), Mode::Hybrid).as_deref(),
+            Some("Switched to Hybrid mode")
+        );
     }
 }

@@ -55,6 +55,10 @@ in
       install -Dm444 ./assets/cardwire-gui.desktop \
          $out/share/applications/cardwire-gui.desktop
 
+      for icon in ./assets/icons/*.svg; do
+        install -Dm444 "$icon" "$out/share/icons/hicolor/scalable/apps/$(basename "$icon")"
+      done
+
       installShellCompletion --cmd cardwire \
          --fish <($out/bin/cardwire completion fish)
 
