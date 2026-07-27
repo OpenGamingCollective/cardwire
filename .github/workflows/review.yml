@@ -1,27 +1,29 @@
-name: Code Review
-on:
-  pull_request_target:
-    types:
-      - opened
-      - reopened
-      - synchronize
-  issue_comment:
-    types:
-      - created # Triggers when a comment is created on a PR
+name: opencode-review
 
-permissions:
-  pull-requests: write
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
-  setup-deepseek-review:
-    timeout-minutes: 30
+  review:
     runs-on: ubuntu-latest
-    name: Code Review
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read
     steps:
-      - name: DeepSeek Code Review
-        uses: hustcer/deepseek-review@develop
+      - uses: actions/checkout@v6
         with:
-          model: "deepseek-v4-pro"
-          watch-mention: "@github-actions"
-          chat-token: ${{ secrets.DEEPSEEK_TOKEN }}
-          allowed-associations: "OWNER,MEMBER,COLLABORATOR"
+          persist-credentials: false
+      - uses: anomalyco/opencode/github@latest
+        env:
+          DEEPSEEK_TOKEN: ${{ secrets.DEEPSEEK_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: deepseek/deepseek-v4-flash
+          use_github_token: true
+          prompt: |
+            Review this pull request:
+            - Check for code quality issues
+            - Look for potential bugs
