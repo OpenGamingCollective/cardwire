@@ -10,8 +10,8 @@ jobs:
     permissions:
       id-token: write
       contents: read
-      pull-requests: read
-      issues: read
+      pull-requests: write
+      issues: write  
     steps:
       - uses: actions/checkout@v6
         with:
