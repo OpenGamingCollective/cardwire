@@ -1,19 +1,14 @@
 use iced::{
-    Alignment, Border, Color, Element, Font,
-    Length::{Fill, FillPortion, Fixed},
-    widget::{
-        button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler,
-    },
+    Alignment, Border, Color, Element, Font, Length::{Fill, FillPortion, Fixed}, widget::{
+        button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler
+    }
 };
 use iced_aw::DropDown;
 use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    helpers::GpuDevice,
-    message::Message,
-    models::{LsofData, MainState, Mode, Page, PciDevice, SettingState},
-    tray::TrayConfig,
+    helpers::GpuDevice, message::Message, models::{LsofData, MainState, Mode, Page, PciDevice, SettingState}, tray::TrayConfig
 };
 
 // Custom macro for box theming, used by cards

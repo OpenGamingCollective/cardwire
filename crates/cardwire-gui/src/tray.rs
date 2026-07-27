@@ -1,10 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
-    fmt,
-    fs::{self, OpenOptions},
-    io::{self, Write},
-    path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    collections::{BTreeMap, HashMap}, fmt, fs::{self, OpenOptions}, io::{self, Write}, path::{Path, PathBuf}, sync::atomic::{AtomicU64, Ordering}
 };
 
 use ksni::{MenuItem, Tray, TrayMethods};

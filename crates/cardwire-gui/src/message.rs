@@ -1,7 +1,5 @@
 use crate::{
-    helpers::GpuDevice,
-    models::{DaemonSettings, LsofData, Mode, Page, PciDevice},
-    tray::{TrayAction, TrayConfig, TrayHandle},
+    helpers::GpuDevice, models::{DaemonSettings, LsofData, Mode, Page, PciDevice}, tray::{TrayAction, TrayConfig, TrayHandle}
 };
 use std::collections::BTreeMap;
 
