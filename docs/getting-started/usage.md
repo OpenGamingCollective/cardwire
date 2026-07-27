@@ -46,6 +46,9 @@ cardwire set integrated
 > [!TIP]
 > The dedicated GPU can still power down even if your desktop has it open, as long as nothing is actively using it. To double-check, run: `cardwire gpu 1 --lsof`
 
+> [!NOTE]
+> For NVIDIA GPUs, cardwire also blocks the ALSA device files (`/dev/snd/*`) belonging to the GPU's HDA audio controller. NVIDIA GPUs are multi-function PCI devices: function 0 is the VGA controller and function 1 is the HDA audio controller, and both share the same PCI power domain. Without blocking the ALSA devices, sound servers (pipewire or pulseaudio) periodically probe them and wake the GPU from D3cold.
+
 ### Hybrid
 
 To have cardwire allow access to all GPUs, use

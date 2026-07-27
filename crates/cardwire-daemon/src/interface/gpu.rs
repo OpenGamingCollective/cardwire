@@ -7,7 +7,7 @@ use std::{
 use crate::{
     core::{
         gpu::{DbusGpuDevice, GpuDevice, GpuVendor}, inode::{
-            backlight_to_inode, card_to_inode, nvidia_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode, sys_drm_inodes
+            backlight_to_inode, card_to_inode, nvidia_hda_snd_inodes, nvidia_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode, sys_drm_inodes
         }, pci::PciDevice
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
@@ -135,6 +135,25 @@ impl GpuInterface {
                     );
                 }
             };
+            // Block the ALSA device files of the NVIDIA HDA audio controller.
+            // The HDA function (function 1) shares the GPU's PCI power domain,
+            // so sound-server probes of /dev/snd/* wake the GPU from D3cold.
+            match nvidia_hda_snd_inodes(self.device.pci.pci_address()) {
+                Ok(inodes) => {
+                    for inode in inodes {
+                        if let Err(err) = blocker.block_inode(inode) {
+                            error!("failed to block nvidia HDA snd inode {}: {}", inode, err);
+                        }
+                    }
+                }
+                Err(err) => {
+                    error!(
+                        "(ignoring) failed to find nvidia HDA snd inodes for {}: {}",
+                        self.device.pci.pci_address(),
+                        err
+                    );
+                }
+            };
         }
         Ok(())
     }
@@ -180,6 +199,23 @@ impl GpuInterface {
                     warn!(
                         "(ignoring) failed to unblock backlight nvidia_{}: {}",
                         minor, err
+                    );
+                }
+            };
+            // Unblock the ALSA device files of the NVIDIA HDA audio controller.
+            match nvidia_hda_snd_inodes(self.device.pci.pci_address()) {
+                Ok(inodes) => {
+                    for inode in inodes {
+                        if let Err(err) = blocker.unblock_inode(inode) {
+                            warn!("failed to unblock nvidia HDA snd inode {}: {}", inode, err);
+                        }
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        "(ignoring) failed to find nvidia HDA snd inodes for {}: {}",
+                        self.device.pci.pci_address(),
+                        err
                     );
                 }
             };

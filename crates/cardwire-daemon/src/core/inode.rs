@@ -155,6 +155,103 @@ pub fn exp_nvidia_inodes() -> Result<Vec<u64>> {
     Ok(inodes)
 }
 
+/// Find the ALSA device inodes (`/dev/snd/*`) that belong to the NVIDIA HDA
+/// audio controller sibling of the given GPU.
+///
+/// NVIDIA GPUs are multi-function PCI devices: function 0 is the VGA
+/// controller and function 1 is the HDA audio controller. Both functions share
+/// the same PCI power domain, so when a sound server (pipewire or pulseaudio)
+/// opens an ALSA device belonging to the HDA function, the GPU is woken up
+/// from D3cold.
+///
+/// `gpu_pci` is the VGA function address (e.g. `0000:64:00.0`); the HDA
+/// sibling is derived as function 1 (`0000:64:00.1`).
+///
+/// In `/sys/class/sound` only the `cardN` entry has a `device` symlink that
+/// resolves directly to the PCI address. Sub-devices (`controlC{N}`,
+/// `pcmC{N}D{x}p`, `hwC{N}D{x}`) have a `device` symlink that points back at
+/// the `cardN` sysfs dir, not the PCI device. So the matching is done in two
+/// steps:
+///
+/// 1. Find the `cardN` whose `device` symlink resolves to `hda_pci` and remember `N` (the ALSA card
+///    number).
+/// 2. Collect the inode of every `/dev/snd/*` node that belongs to that card (i.e. whose name
+///    contains `C{N}`).
+pub fn nvidia_hda_snd_inodes(gpu_pci: &str) -> Result<Vec<u64>> {
+    // The HDA audio controller is function 1 of the same PCI device.
+    let hda_pci = gpu_pci.replace(".0", ".1");
+
+    let snd_class = Path::new("/sys/class/sound");
+    let dev_snd = Path::new("/dev/snd");
+
+    // Step 1: find the ALSA card number whose "device" symlink resolves to
+    // the HDA PCI address.  Only cardN entries have a direct device → PCI
+    // symlink; control/pcm/hw sub-devices point back at cardN.
+    let entries = fs::read_dir(snd_class)?;
+    let mut card_num: Option<u32> = None;
+    for entry in entries.flatten() {
+        let name = match entry.file_name().into_string() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        if !name.starts_with("card") {
+            continue;
+        }
+        let device_link = entry.path().join("device");
+        let device_target = match fs::canonicalize(&device_link) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let pci_address = match device_target.file_name().and_then(|n| n.to_str()) {
+            Some(addr) => addr,
+            None => continue,
+        };
+        if pci_address == hda_pci {
+            if let Some(rest) = name.strip_prefix("card") {
+                card_num = rest.parse::<u32>().ok();
+            }
+            break;
+        }
+    }
+
+    let Some(card_num) = card_num else {
+        // No ALSA card found for the HDA sibling — either the GPU is a
+        // single-function device with no audio, or the HDA controller has no
+        // bound driver. Nothing to block.
+        return Ok(Vec::new());
+    };
+
+    // Step 2: collect the inode of every /dev/snd/* node that belongs to this
+    // card. ALSA device nodes are named `<type>C<card>[D<dev>...]`, e.g.
+    // controlC0, pcmC0D3p, hwC0D0. The static `seq` and `timer` nodes have no
+    // card number and are skipped. We match on `C{card}` followed by either the
+    // end of the name or a `D` so that card 0 doesn't accidentally match card
+    // 10+.
+    let card_marker = format!("C{}", card_num);
+    let mut inodes: Vec<u64> = Vec::new();
+    for entry in fs::read_dir(dev_snd)?.flatten() {
+        let name = match entry.file_name().into_string() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        // Find the card marker and verify the char after it is 'D' or EOL.
+        let Some(pos) = name.find(&card_marker) else {
+            continue;
+        };
+        let after = &name[pos + card_marker.len()..];
+        if !after.is_empty() && !after.starts_with('D') {
+            continue;
+        }
+
+        let dev_path = dev_snd.join(&name);
+        if let Ok(metadata) = fs::metadata(&dev_path) {
+            inodes.push(metadata.ino());
+        }
+    }
+
+    Ok(inodes)
+}
+
 pub fn sys_drm_inodes(render: u32, card: u32) -> Result<Vec<u64>> {
     let mut inodes = Vec::new();
     let sys_path = Path::new("/sys/class/drm");
