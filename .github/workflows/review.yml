@@ -19,7 +19,7 @@ jobs:
     name: Code Review
     steps:
       - name: DeepSeek Code Review
-        uses: hustcer/deepseek-review@v1.21
+        uses: hustcer/deepseek-review@develop
         with:
           model: "deepseek-v4-pro"
           watch-mention: "@github-actions"
