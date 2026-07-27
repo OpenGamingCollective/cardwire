@@ -1,34 +1,55 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 version: 2
 updates:
+  # Rust/Cargo dependencies
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "03:00"
     target-branch: "main"
+    open-pull-requests-limit: 5
+    pull-request-branch-name:
+      separator: "/"
     groups:
-      cargo-dependencies:
+      production-dependencies:
+        dependency-types:
+          - "production"
         patterns:
-          - "*" 
-    # Nix
+          - "*"
+      dev-dependencies:
+        dependency-types:
+          - "dev"
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps):"
+      prefix-development: "chore(dev-deps):"
+      include: "scope"
+
+  # Nix dependencies
   - package-ecosystem: "nix"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "tuesday"
+      time: "03:00"
     target-branch: "main"
-    groups:
-      nix-dependencies:
-        patterns:
-          - "*"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(nix):"
+      include: "scope"
+
+  # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "wednesday"
+      time: "03:00"
     target-branch: "main"
-    groups:
-      actions-dependencies:
-        patterns:
-          - "*"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci(actions):"
+      include: "scope"
