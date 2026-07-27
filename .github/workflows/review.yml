@@ -21,7 +21,7 @@ jobs:
       - name: DeepSeek Code Review
         uses: hustcer/deepseek-review@v1
         with:
-          model: "deepseek-ai/deepseek-v4-pro"
+          model: "deepseek-v4-pro"
           watch-mention: "@github-actions"
           chat-token: ${{ secrets.DEEPSEEK_TOKEN }}
           allowed-associations: "OWNER,MEMBER,COLLABORATOR"
