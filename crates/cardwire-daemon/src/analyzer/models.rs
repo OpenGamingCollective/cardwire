@@ -130,19 +130,10 @@ impl CardwireAnalyzer {
                             if event.pid != previous_reported_pid {
                                 previous_reported_pid = event.pid;
                                 task::spawn(async move {
-                                    let comm = match str::from_utf8(&event.comm){
-                                        Ok(c) => c,
-                                        Err(_) => return,
-                                    };
                                     if let Some(app_id) = get_app_id_wayland(event.pid).await {
-                                        info!("{} with pid {} got blocked", &app_id, event.pid);
-                                    } else {
-                                        // ignore comm named electron, it's just a child of the real process
-                                        if comm.trim_end_matches("\0").trim() == "electron" {
-                                            return;
-                                        }
-                                        info!("{} with pid {} got blocked", &comm, event.pid);
-                                    };
+                                        // use dGPU term instead of GPU, smart mode is only avaible on hybrid setups
+                                        info!("{}[{}] tried to access the dGPU (blocked by cardwire)", &app_id, event.pid);
+                                    }
                                 });
                             }
                         }
