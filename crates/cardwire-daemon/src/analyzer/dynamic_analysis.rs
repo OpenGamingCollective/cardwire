@@ -64,8 +64,8 @@ pub fn check_cardwire_allow(environ: &[u8]) -> Option<bool> {
 }
 pub fn check_gpu_env(environ: &[u8]) -> bool {
     for var in environ.split(|&b| b == 0) {
-        if var.starts_with(b"DRI_PRIME==") {
-            if var.get(11) == Some(&b'1') {
+        if var.starts_with(b"DRI_PRIME=") {
+            if var.get(10) == Some(&b'1') {
                 return true; // DRI_PRIME=1
             } else {
                 return false; // DRI_PRIME=0
