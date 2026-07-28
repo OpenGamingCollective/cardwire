@@ -122,32 +122,14 @@ pub async fn get_app_id_wayland(pid: u32) -> Option<String> {
         // We use the niri ipc to get the window real name
         Desktop::Niri => {
             if let Some(socket_path) = find_niri_socket() {
-                // Connect
-
                 let max_retries = 40;
                 let delay = Duration::from_millis(50);
                 for _ in 0..max_retries {
-                    let mut socket = UnixStream::connect(socket_path.clone()).await.ok()?;
-                    // Request
-                    socket.write_all(b"{\"Windows\":null}\n").await.ok()?;
-                    socket.flush().await.ok()?;
-
-                    // Read
-                    let mut reader = BufReader::new(socket);
-                    let mut reply = String::new();
-                    reader.read_line(&mut reply).await.ok()?;
-                    let json: serde_json::Value = serde_json::from_str(&reply).ok()?;
-                    let app_id = json["Ok"]["Windows"]
-                        .as_array()?
-                        .iter()
-                        .find(|w| w["pid"].as_u64() == Some(pid as u64))
-                        .and_then(|w| w["app_id"].as_str())
-                        .map(|s| s.to_string());
+                    let app_id = query_niri_window(&socket_path, pid).await;
                     if app_id.is_some() {
                         return app_id;
-                    } else {
-                        tokio::time::sleep(delay).await;
                     }
+                    tokio::time::sleep(delay).await;
                 }
             }
         }
@@ -155,6 +137,26 @@ pub async fn get_app_id_wayland(pid: u32) -> Option<String> {
     }
 
     None
+}
+
+/// Query niri IPC for a window's app_id by pid
+/// Returns None on any error
+async fn query_niri_window(socket_path: &Path, pid: u32) -> Option<String> {
+    let mut socket = UnixStream::connect(socket_path).await.ok()?;
+    socket.write_all(b"{\"Windows\":null}\n").await.ok()?;
+    socket.flush().await.ok()?;
+
+    let mut reader = BufReader::new(socket);
+    let mut reply = String::new();
+    reader.read_line(&mut reply).await.ok()?;
+
+    let json: serde_json::Value = serde_json::from_str(&reply).ok()?;
+    json["Ok"]["Windows"]
+        .as_array()?
+        .iter()
+        .find(|w| w["pid"].as_u64() == Some(pid as u64))
+        .and_then(|w| w["app_id"].as_str())
+        .map(|s| s.to_string())
 }
 
 fn find_niri_socket() -> Option<PathBuf> {
