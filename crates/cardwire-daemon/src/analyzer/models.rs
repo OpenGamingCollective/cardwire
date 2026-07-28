@@ -8,25 +8,33 @@ use tokio::{
 
 use crate::analyzer::{
     dynamic_analysis::{
-        check_cardwire_allow, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ
+        check_cardwire_allow, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ, get_app_id_wayland
     }, static_analysis
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct Event {
+pub struct ExecEvent {
     pub pid: u32,
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct Close {
+pub struct CloseEvent {
     pub pid: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ReportEvent {
+    pub pid: u32,
+    pub comm: [u8; 16],
 }
 
 #[derive(Clone)]
 pub struct CardwireAnalyzer {
     exec_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
+    report_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u8>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
     #[allow(dead_code)]
@@ -38,21 +46,25 @@ impl CardwireAnalyzer {
         let mut blocker = blocker.write().await;
         let exec_ring = blocker.get_exec_ring()?;
         let close_ring = blocker.get_close_ring()?;
+        let report_ring = blocker.get_report_ring()?;
         let pid_map = blocker.get_pid_map()?;
 
         let exec_ring = AsyncFd::new(exec_ring)?;
         let close_ring = AsyncFd::new(close_ring)?;
+        let report_ring = AsyncFd::new(report_ring)?;
 
         // Now Rwlock -> Arc
         let exec_ring = Arc::new(Mutex::new(exec_ring));
         let pid_map = Arc::new(RwLock::new(pid_map));
         let close_ring = Arc::new(Mutex::new(close_ring));
+        let report_ring = Arc::new(Mutex::new(report_ring));
         let xdg_result = static_analysis::get_fdo_apps().await?;
         let xdg_list = Arc::new(RwLock::new(xdg_result.0));
         let xdg_folders: Vec<PathBuf> = xdg_result.1;
         Ok(CardwireAnalyzer {
             exec_ring,
             close_ring,
+            report_ring,
             pid_map,
             xdg_list,
             xdg_folders,
@@ -62,23 +74,29 @@ impl CardwireAnalyzer {
         // Clone the Arcs and Sender to move into the background task
         let exec_arc = self.exec_ring.clone();
         let close_arc = self.close_ring.clone();
+        let report_arc = self.report_ring.clone();
         // Lock the buffers once
         let mut exec_ring = exec_arc.lock().await;
         let mut close_ring = close_arc.lock().await;
+        let mut report_ring = report_arc.lock().await;
+
+        // Used to prevent duplicated logs burst
+        let mut previous_reported_pid = 0;
+
         let shared_self = Arc::new(self);
         loop {
             tokio::select! {
                 Ok(mut guard) = exec_ring.ready_mut(Interest::READABLE) => {
                     if guard.ready().is_readable() {
                         while let Some(item) = guard.get_inner_mut().next() {
-                            if item.len() < std::mem::size_of::<Event>() {
+                            if item.len() < std::mem::size_of::<ExecEvent>() {
                                 debug!("Skipping malformed exec event. Size: {}", item.len());
                                 continue;
                             }
-                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Event) };
+                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
                             let this = Arc::clone(&shared_self);
                             task::spawn(async move {
-                                this.spawn_open_analyzer(event).await
+                                this.spawn_exec_analyzer(event).await
                             });
                         }
                         guard.clear_ready();
@@ -88,11 +106,11 @@ impl CardwireAnalyzer {
                 Ok(mut guard) = close_ring.ready_mut(Interest::READABLE) => {
                     if guard.ready().is_readable() {
                         while let Some(item) = guard.get_inner_mut().next() {
-                            if item.len() < std::mem::size_of::<Close>() {
+                            if item.len() < std::mem::size_of::<CloseEvent>() {
                                 debug!("Skipping malformed close event. Size: {}", item.len());
                                 continue;
                             }
-                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Close) };
+                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const CloseEvent) };
                             let this = Arc::clone(&shared_self);
                             task::spawn(async move {
                                 this.spawn_remove_analyzer(event).await
@@ -101,11 +119,31 @@ impl CardwireAnalyzer {
                         guard.clear_ready();
                     }
                 }
+                Ok(mut guard) = report_ring.ready_mut(Interest::READABLE) => {
+                        while let Some(item) = guard.get_inner_mut().next() {
+                            if item.len() < std::mem::size_of::<ReportEvent>() {
+                                debug!("Skipping malformed report event. Size: {}", item.len());
+                                continue;
+                            }
+                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
+                            // only log if we didn't see the pid before
+                            if event.pid != previous_reported_pid {
+                                previous_reported_pid = event.pid;
+                                task::spawn(async move {
+                                    if let Some(app_id) = get_app_id_wayland(event.pid).await {
+                                        // use dGPU term instead of GPU, smart mode is only avaible on hybrid setups
+                                        info!("{}[{}] tried to access the dGPU (blocked by cardwire)", &app_id, event.pid);
+                                    }
+                                });
+                            }
+                        }
+                        guard.clear_ready();
+                }
             }
         }
     }
 
-    async fn spawn_open_analyzer(&self, event: Event) -> () {
+    async fn spawn_exec_analyzer(&self, event: ExecEvent) -> () {
         let time = Instant::now();
         let pid_map = self.pid_map.read().await;
         if pid_map.get(&event.pid, 0).is_ok() {
@@ -131,7 +169,7 @@ impl CardwireAnalyzer {
             }
         }
     }
-    async fn spawn_remove_analyzer(&self, event: Close) -> () {
+    async fn spawn_remove_analyzer(&self, event: CloseEvent) -> () {
         let mut pid_map = self.pid_map.write().await;
         if pid_map.remove(&event.pid).is_ok() {
             debug!("REMOVE: pid: {}", event.pid);
@@ -241,22 +279,22 @@ mod tests {
         let item: Vec<u8> = vec![
             0x01, 0x00, 0x00, 0x00, // pid = 1
         ];
-        assert!(item.len() >= std::mem::size_of::<Event>());
-        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Event) };
+        assert!(item.len() >= std::mem::size_of::<ExecEvent>());
+        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
         assert_eq!(event.pid, 1);
     }
 
     #[test]
     fn test_event_deserialization_rejects_undersized_buffer() {
         let item: Vec<u8> = vec![0x01, 0x00, 0x00]; // 3 bytes, Event needs 4
-        assert!(item.len() < std::mem::size_of::<Event>());
+        assert!(item.len() < std::mem::size_of::<ExecEvent>());
     }
 
     #[test]
     fn test_event_deserialization_with_large_pid() {
         // pid = 0xFFFFFFFF (u32::MAX)
         let item: Vec<u8> = vec![0xFF, 0xFF, 0xFF, 0xFF];
-        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Event) };
+        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
         assert_eq!(event.pid, u32::MAX);
     }
 
@@ -265,8 +303,8 @@ mod tests {
         let item: Vec<u8> = vec![
             0x2A, 0x00, 0x00, 0x00, // pid = 42
         ];
-        assert!(item.len() >= std::mem::size_of::<Close>());
-        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Close) };
+        assert!(item.len() >= std::mem::size_of::<CloseEvent>());
+        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const CloseEvent) };
         assert_eq!(event.pid, 42);
     }
 
@@ -368,5 +406,48 @@ mod tests {
             .next_back()
             .unwrap();
         assert_eq!(file_name, "app.exe");
+    }
+
+    // ── ReportEvent ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_report_event_deserialization_from_valid_bytes() {
+        // ReportEvent: pid (4 bytes) + comm (16 bytes) = 20 bytes
+        let mut item: Vec<u8> = vec![
+            0x39, 0x05, 0x00, 0x00, // pid = 1337
+        ];
+        // comm = "steam\0\0\0\0\0\0\0\0\0\0\0" (16 bytes, null-padded)
+        item.extend_from_slice(b"steam\0\0\0\0\0\0\0\0\0\0\0");
+        assert_eq!(item.len(), 20);
+        assert!(item.len() >= std::mem::size_of::<ReportEvent>());
+        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
+        assert_eq!(event.pid, 1337);
+        // Verify the comm field contains "steam"
+        let comm_str = std::str::from_utf8(&event.comm)
+            .unwrap()
+            .trim_end_matches('\0');
+        assert_eq!(comm_str, "steam");
+    }
+
+    #[test]
+    fn test_report_event_deserialization_rejects_undersized_buffer() {
+        // ReportEvent needs 20 bytes, give only 19
+        let item: Vec<u8> = vec![0u8; 19];
+        assert!(item.len() < std::mem::size_of::<ReportEvent>());
+    }
+
+    #[test]
+    fn test_report_event_comm_extraction_with_full_length_name() {
+        // comm is exactly 15 chars + null terminator (16 bytes total)
+        let mut item: Vec<u8> = vec![
+            0x01, 0x00, 0x00, 0x00, // pid = 1
+        ];
+        item.extend_from_slice(b"123456789012345\0"); // 15 chars + null = 16 bytes
+        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
+        assert_eq!(event.pid, 1);
+        let comm_str = std::str::from_utf8(&event.comm)
+            .unwrap()
+            .trim_end_matches('\0');
+        assert_eq!(comm_str, "123456789012345");
     }
 }

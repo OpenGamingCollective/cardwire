@@ -1,7 +1,34 @@
 //! Functions for dynamic analysis, contains:
 //! - gamemoderun analysis
 //! - library analysis
-use std::collections::HashMap;
+use std::{
+    collections::HashMap, env, fs, path::{Path, PathBuf}, time::Duration
+};
+
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader}, net::UnixStream
+};
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Desktop {
+    Niri,
+    Gnome,
+    Plasma,
+    Cosmic,
+}
+
+impl Desktop {
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "niri" => Some(Desktop::Niri),
+            "gnome" => Some(Desktop::Gnome),
+            "plasma" => Some(Desktop::Plasma),
+            "cosmic" => Some(Desktop::Cosmic),
+            _ => None,
+        }
+    }
+}
 
 /// Read the proc `environ` file to find the `SteamAppId=` string
 /// used to identify both native and proton games
@@ -80,6 +107,72 @@ pub fn check_gpu_env(environ: &[u8]) -> bool {
     }
     // Not present
     false
+}
+
+/// pid to wayland app id, needs to be async to wait
+pub async fn get_app_id_wayland(pid: u32) -> Option<String> {
+    let desktop_str: String = match env::var("XDG_CURRENT_DESKTOP") {
+        Ok(value) => value,
+        Err(_) => return None,
+    };
+    let desktop: Desktop = Desktop::from_str(&desktop_str)?;
+
+    #[allow(clippy::single_match)]
+    match desktop {
+        // We use the niri ipc to get the window real name
+        Desktop::Niri => {
+            if let Some(socket_path) = find_niri_socket() {
+                let max_retries = 40;
+                let delay = Duration::from_millis(50);
+                for _ in 0..max_retries {
+                    let app_id = query_niri_window(&socket_path, pid).await;
+                    if app_id.is_some() {
+                        return app_id;
+                    }
+                    tokio::time::sleep(delay).await;
+                }
+            }
+        }
+        _ => {}
+    }
+
+    None
+}
+
+/// Query niri IPC for a window's app_id by pid
+/// Returns None on any error
+async fn query_niri_window(socket_path: &Path, pid: u32) -> Option<String> {
+    let mut socket = UnixStream::connect(socket_path).await.ok()?;
+    socket.write_all(b"{\"Windows\":null}\n").await.ok()?;
+    socket.flush().await.ok()?;
+
+    let mut reader = BufReader::new(socket);
+    let mut reply = String::new();
+    reader.read_line(&mut reply).await.ok()?;
+
+    let json: serde_json::Value = serde_json::from_str(&reply).ok()?;
+    json["Ok"]["Windows"]
+        .as_array()?
+        .iter()
+        .find(|w| w["pid"].as_u64() == Some(pid as u64))
+        .and_then(|w| w["app_id"].as_str())
+        .map(|s| s.to_string())
+}
+
+fn find_niri_socket() -> Option<PathBuf> {
+    let run_path = Path::new("/run/user");
+    for user in run_path.read_dir().ok()? {
+        if let Ok(user) = user
+            && let Ok(dir_content) = fs::read_dir(user.path())
+        {
+            for entry in dir_content.flatten() {
+                if entry.file_name().to_string_lossy().contains("niri.wayland") {
+                    return Some(entry.path());
+                }
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -300,5 +393,29 @@ mod tests {
     #[test]
     fn test_check_gpu_env_returns_false_for_empty_input() {
         assert!(!check_gpu_env(b""));
+    }
+
+    #[test]
+    fn test_desktop_from_str_all_known_variants() {
+        assert!(matches!(Desktop::from_str("niri"), Some(Desktop::Niri)));
+        assert!(matches!(Desktop::from_str("gnome"), Some(Desktop::Gnome)));
+        assert!(matches!(Desktop::from_str("plasma"), Some(Desktop::Plasma)));
+        assert!(matches!(Desktop::from_str("cosmic"), Some(Desktop::Cosmic)));
+    }
+
+    #[test]
+    fn test_desktop_from_str_unknown_returns_none() {
+        assert!(Desktop::from_str("sway").is_none());
+        assert!(Desktop::from_str("hyprland").is_none());
+        assert!(Desktop::from_str("i3").is_none());
+        assert!(Desktop::from_str("").is_none());
+    }
+
+    #[test]
+    fn test_desktop_from_str_is_case_sensitive() {
+        assert!(Desktop::from_str("Niri").is_none());
+        assert!(Desktop::from_str("GNOME").is_none());
+        assert!(Desktop::from_str("Plasma").is_none());
+        assert!(Desktop::from_str("COSMIC").is_none());
     }
 }
