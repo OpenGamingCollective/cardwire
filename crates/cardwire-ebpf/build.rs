@@ -3,7 +3,7 @@ use std::{env, path::PathBuf, process::Command};
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let out_path = PathBuf::from(out_dir).join("bpf.o");
-    let source_path = "src/bpf.c";
+    let source_path = "src/c/bpf.c";
     let status = Command::new("clang")
         .args([
             "-O2",

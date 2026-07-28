@@ -1,12 +1,10 @@
 name: CICD
-
 on:
   pull_request:
-
+    types: [opened, synchronize, reopened, ready_for_review]
 permissions:
   contents: read
   pull-requests: read
-
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -27,7 +25,9 @@ jobs:
               per_page: 100,
             })).map(file => file.filename)
 
-            const needsVMTest = files.some(file => 
+            const isDraft = context.payload.pull_request.draft;
+
+            const needsVMTest = !isDraft && files.some(file => 
               file.endsWith('.rs') || 
               file.endsWith('.c') || 
               file.includes('.nix') ||
@@ -38,6 +38,10 @@ jobs:
 
             const needsCFormatCheck = files.some(file => 
               file.endsWith('.c')
+            );
+            
+            const needsMdBookCheck = files.some(file => 
+              file.startsWith('docs/')
             );
 
             const needsRustQuality = files.some(file => 
@@ -52,6 +56,9 @@ jobs:
             }
             if (needsRustQuality) {
               core.setOutput('run_rust_checks', 'true');
+            }
+            if (needsMdBookCheck) {
+              core.setOutput('run_mdbook_check', 'true');
             }
 
   rust-lint:
@@ -69,14 +76,26 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config gcc-multilib
       - uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
         with:
-          toolchain: 1.95.0
           components: clippy
       - uses: auguwu/clippy-action@9817d076b82df0194935be9db6154c56ac07b317 # 1.5.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           check-args: --locked --all-targets --all-features
           args: -D warnings
-
+  rust-test:
+    name: Rust Test
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    permissions:
+      contents: read
+    if: needs.prepare.outputs.run_rust_checks == 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config gcc-multilib
+      - uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff
+      - name: Test code
+        run: cargo test --all
   rust-format:
     name: Rust Format
     runs-on: ubuntu-latest
@@ -89,15 +108,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@nightly # Nightly
         with:
-          toolchain: nightly
           components: rustfmt
       - name: Format code
-        run: cargo +nightly fmt
+        run: cargo +nightly fmt --all --check
       - name: Suggest formatting changes
         uses: reviewdog/action-suggester@2558ba17e65a9039e73764a73009fc05fef28a46 # v1.24.3
         with:
           tool_name: rustfmt
-
   c-format:
     name: C Format
     runs-on: ubuntu-latest
@@ -107,8 +124,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
-      - run: clang-format --dry-run --Werror -i ./crates/cardwire-ebpf/src/bpf.c
-
+      - run: clang-format --dry-run --Werror -i ./crates/cardwire-ebpf/src/c/*
   vm-test:
     runs-on: ubuntu-latest
     needs: [prepare, rust-lint, rust-format, c-format]
@@ -117,7 +133,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: determinateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
       - run: nix build .#vm-test
-  
   mdbook-test:
     runs-on: ubuntu-latest
     needs: [prepare]

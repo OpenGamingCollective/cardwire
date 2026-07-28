@@ -106,6 +106,8 @@ static __always_inline int is_blocked_device(struct dentry *d)
 		}
 	}
 end:
+
+	// If not blocked, return 0(allowed)
 	if (!blocked) {
 		return 0;
 	}
@@ -117,7 +119,7 @@ end:
 		return 0;
 	}
 
-	// if is hybrid/manual mode, block
+	// if is integrated/manual mode, block
 	if (*mode == 0 || *mode == 2) {
 		return -ENOENT;
 	}
@@ -126,11 +128,21 @@ end:
 	if (*mode == 3) {
 		if (!bpf_map_lookup_elem(&cw_allowed_pid, &pid) &&
 		    !bpf_map_lookup_elem(&cw_allowed_pid, &ppid)) {
-			// Neither pid nor ppid is allowed, block
+			// Neither pid nor ppid is allowed, block and report the event
+			// Reserve space, return if it fails
+			struct report_t *rb_report = bpf_ringbuf_reserve(
+				&cw_report_events, sizeof(struct report_t), 0);
+			if (!rb_report) {
+				return -ENOENT;
+			}
+			// Store the pid and the comm inside the event
+			rb_report->pid = pid;
+			bpf_get_current_comm(rb_report->comm,
+					     sizeof(rb_report->comm));
+			bpf_ringbuf_submit(rb_report, 0);
 			return -ENOENT;
 		}
 	}
-
 	return 0;
 }
 
@@ -186,6 +198,17 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 		}
 
 		data->bpos += data->d_reclen;
+		// Reserve space, return if it fails
+		struct report_t *rb_report = bpf_ringbuf_reserve(
+			&cw_report_events, sizeof(struct report_t), 0);
+		if (!rb_report) {
+			bpf_printk("bpf_ringbuf_reserve failed\n");
+			return 0;
+		}
+		// Store the pid and the comm inside the event
+		rb_report->pid = bpf_get_current_pid_tgid() >> 32;
+		bpf_get_current_comm(rb_report->comm, sizeof(rb_report->comm));
+		bpf_ringbuf_submit(rb_report, 0);
 		return 0; // Continue loop
 	}
 

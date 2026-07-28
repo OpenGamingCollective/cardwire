@@ -175,3 +175,67 @@ impl ModeInterface {
         Ok(Modes::into(current_mode.mode()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_modes_try_from_valid_values() {
+        assert_eq!(Modes::try_from(0).unwrap(), Modes::Integrated);
+        assert_eq!(Modes::try_from(1).unwrap(), Modes::Hybrid);
+        assert_eq!(Modes::try_from(2).unwrap(), Modes::Manual);
+        assert_eq!(Modes::try_from(3).unwrap(), Modes::Smart);
+    }
+
+    #[test]
+    fn test_modes_try_from_invalid_value() {
+        assert!(Modes::try_from(4).is_err());
+        assert!(Modes::try_from(u32::MAX).is_err());
+    }
+
+    #[test]
+    fn test_modes_into_u32_roundtrip() {
+        for i in 0..=3u32 {
+            let mode = Modes::try_from(i).unwrap();
+            let back: u32 = mode.into();
+            assert_eq!(back, i);
+        }
+    }
+
+    #[test]
+    fn test_modes_display_formatting() {
+        assert_eq!(Modes::Integrated.to_string(), "Integrated");
+        assert_eq!(Modes::Hybrid.to_string(), "Hybrid");
+        assert_eq!(Modes::Manual.to_string(), "Manual");
+        assert_eq!(Modes::Smart.to_string(), "Smart");
+    }
+
+    #[test]
+    fn test_modes_default_is_manual() {
+        assert_eq!(Modes::default(), Modes::Manual);
+    }
+
+    #[test]
+    fn test_modes_serde_json_roundtrip() {
+        let modes = [
+            Modes::Integrated,
+            Modes::Hybrid,
+            Modes::Manual,
+            Modes::Smart,
+        ];
+        for mode in modes {
+            let json = serde_json::to_string(&mode).unwrap();
+            let deserialized: Modes = serde_json::from_str(&json).unwrap();
+            assert_eq!(deserialized, mode);
+        }
+    }
+
+    #[test]
+    fn test_modes_serde_uses_snake_case() {
+        let json = serde_json::to_string(&Modes::Integrated).unwrap();
+        assert_eq!(json, "\"integrated\"");
+        let json = serde_json::to_string(&Modes::Hybrid).unwrap();
+        assert_eq!(json, "\"hybrid\"");
+    }
+}

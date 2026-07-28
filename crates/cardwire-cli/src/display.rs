@@ -120,3 +120,59 @@ fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn make_gpu(id: u32, name: &str, pci: &str, default: bool, blocked: bool) -> GpuDevice {
+        GpuDevice {
+            id,
+            name: name.to_string(),
+            pci: pci.to_string(),
+            render: 128,
+            card: 0,
+            default,
+            blocked,
+            nvidia: false,
+            nvidia_minor: String::new(),
+        }
+    }
+
+    #[test]
+    fn test_print_devices_json_produces_valid_json() {
+        let mut map = BTreeMap::new();
+        map.insert(0, make_gpu(0, "Intel UHD", "0000:00:02.0", true, false));
+        map.insert(1, make_gpu(1, "RTX 4060", "0000:01:00.0", false, true));
+
+        let json_str = serde_json::to_string_pretty(&map).unwrap();
+        // Verify it parses back
+        let parsed: BTreeMap<usize, GpuDevice> = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[&0].name, "Intel UHD");
+        assert!(parsed[&1].blocked);
+    }
+
+    #[test]
+    fn test_print_devices_json_empty_map() {
+        let map: BTreeMap<usize, GpuDevice> = BTreeMap::new();
+        let json_str = serde_json::to_string_pretty(&map).unwrap();
+        assert_eq!(json_str, "{}");
+    }
+
+    #[test]
+    fn test_gpu_device_fields_roundtrip_through_serde() {
+        let gpu = make_gpu(42, "RX 7900 XTX", "0000:03:00.0", false, false);
+        let json = serde_json::to_string(&gpu).unwrap();
+        let parsed: GpuDevice = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, 42);
+        assert_eq!(parsed.name, "RX 7900 XTX");
+        assert_eq!(parsed.pci, "0000:03:00.0");
+        assert_eq!(parsed.render, 128);
+        assert_eq!(parsed.card, 0);
+        assert!(!parsed.default);
+        assert!(!parsed.blocked);
+        assert!(!parsed.nvidia);
+    }
+}

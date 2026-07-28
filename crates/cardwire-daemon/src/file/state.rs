@@ -142,3 +142,88 @@ impl CardwireGpuState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::interface::Modes;
+
+    /*
+        CardwireModeState
+    */
+
+    #[test]
+    fn test_mode_state_default_is_manual() {
+        let state = CardwireModeState::default();
+        assert_eq!(state.mode(), Modes::Manual);
+    }
+
+    #[test]
+    fn test_mode_state_json_roundtrip() {
+        let state = CardwireModeState::default();
+        let json = serde_json::to_string_pretty(&state).unwrap();
+        let parsed: CardwireModeState = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.mode(), state.mode());
+    }
+
+    #[test]
+    fn test_mode_state_json_parse_with_integrated_mode() {
+        let json = r#"{"mode":"integrated"}"#;
+        let parsed: CardwireModeState = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.mode(), Modes::Integrated);
+    }
+
+    #[test]
+    fn test_mode_state_json_parse_empty_uses_defaults() {
+        let json = "{}";
+        let parsed: CardwireModeState = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.mode(), Modes::Manual);
+    }
+
+    /*
+        CardwireGpuState
+    */
+
+    #[test]
+    fn test_gpu_state_default_contains_null() {
+        let state = CardwireGpuState::default();
+        assert!(state.is_default_state());
+    }
+
+    #[test]
+    fn test_gpu_state_is_default_state_false_after_custom_data() {
+        let json = r#"{"0000:01:00.0":{"block":true}}"#;
+        let gpu: BTreeMap<String, CardwireGpuUnit> = serde_json::from_str(json).unwrap();
+        let state = CardwireGpuState { gpu };
+        assert!(!state.is_default_state());
+    }
+
+    #[test]
+    fn test_gpu_state_gpu_block_state_returns_false_for_missing_key() {
+        let state = CardwireGpuState::default();
+        assert!(!state.gpu_block_state("0000:99:00.0"));
+    }
+
+    #[test]
+    fn test_gpu_state_gpu_block_state_returns_correct_value() {
+        let json = r#"{"0000:01:00.0":{"block":true},"0000:02:00.0":{"block":false}}"#;
+        let gpu: BTreeMap<String, CardwireGpuUnit> = serde_json::from_str(json).unwrap();
+        let state = CardwireGpuState { gpu };
+        assert!(state.gpu_block_state("0000:01:00.0"));
+        assert!(!state.gpu_block_state("0000:02:00.0"));
+    }
+
+    #[test]
+    fn test_gpu_unit_default_block_is_false() {
+        let unit = CardwireGpuUnit::default();
+        assert!(!unit.block);
+    }
+
+    #[test]
+    fn test_gpu_state_json_roundtrip() {
+        let state = CardwireGpuState::default();
+        let json = serde_json::to_string_pretty(&state.gpu).unwrap();
+        let parsed: BTreeMap<String, CardwireGpuUnit> = serde_json::from_str(&json).unwrap();
+        assert!(parsed.contains_key("Null"));
+    }
+}
