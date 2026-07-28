@@ -169,6 +169,8 @@ fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
         .parse::<u32>()
         .ok()
 }
+
+/// find the nvidai model using the device information file
 fn nvidia_get_device_model(pci_address: &str) -> Option<String> {
     let nvidia_driver_proc = Path::new("/proc/driver/nvidia/gpus/")
         .join(pci_address)
@@ -187,6 +189,7 @@ fn nvidia_get_device_model(pci_address: &str) -> Option<String> {
     }
 }
 
+/// Find the amd model using amdgpu.ids, require the device id and the revision for precise matching
 fn amd_get_device_model(device_id: &str, pci: &str) -> Option<String> {
     let path = "/usr/share/libdrm/amdgpu.ids";
     let device_id = device_id.to_string().replace("0x", "").to_ascii_uppercase();
