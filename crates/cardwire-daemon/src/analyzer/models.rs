@@ -27,7 +27,6 @@ pub struct CloseEvent {
 #[derive(Debug, Copy, Clone)]
 pub struct ReportEvent {
     pub pid: u32,
-    pub ppid: u32,
     pub comm: [u8; 16],
 }
 
@@ -131,6 +130,7 @@ impl CardwireAnalyzer {
                             if event.pid != previous_reported_pid {
                                 previous_reported_pid = event.pid;
                                 task::spawn(async move {
+                                    println!("huge!");
                                     let comm = match str::from_utf8(&event.comm){
                                         Ok(c) => c,
                                         Err(_) => return,
