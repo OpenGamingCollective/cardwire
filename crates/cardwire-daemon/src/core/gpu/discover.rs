@@ -189,9 +189,6 @@ fn nvidia_get_device_model(pci_address: &str) -> Option<String> {
 
 fn amd_get_device_mode(device_id: &str, pci: &str) -> Option<String> {
     let path = Path::new("/usr/share/libdrm/amdgpu.ids");
-    let path = Path::new(
-        "/nix/store/i7j9cxklwxjm54qx1y2s172bz4irqfbh-libdrm-2.4.134/share/libdrm/amdgpu.ids",
-    );
     let device_id = device_id.to_string().replace("0x", "").to_ascii_uppercase();
     let revision_path = format!("/sys/bus/pci/devices/{}/revision", pci);
     let revision_id = fs::read_to_string(revision_path)
