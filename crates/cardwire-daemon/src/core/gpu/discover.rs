@@ -197,7 +197,7 @@ fn amd_get_device_model(device_id: &str, pci: &str) -> Option<String> {
         .replace("0x", "")
         .to_ascii_uppercase();
 
-    let content = fs::read_to_string(p).ok()?;
+    let content = fs::read_to_string(path).ok()?;
 
     for line in content.lines() {
         if line.starts_with('#') {
