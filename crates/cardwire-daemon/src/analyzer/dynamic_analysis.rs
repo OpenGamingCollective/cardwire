@@ -269,13 +269,13 @@ mod tests {
 
     #[test]
     fn test_check_gpu_env_detects_dri_prime_1() {
-        let environ = b"HOME=/home\0DRI_PRIME==1\0DISPLAY=:0";
+        let environ = b"HOME=/home\0DRI_PRIME=1\0DISPLAY=:0";
         assert!(check_gpu_env(environ));
     }
 
     #[test]
     fn test_check_gpu_env_rejects_dri_prime_0() {
-        let environ = b"HOME=/home\0DRI_PRIME==0\0DISPLAY=:0";
+        let environ = b"HOME=/home\0DRI_PRIME=0\0DISPLAY=:0";
         assert!(!check_gpu_env(environ));
     }
 
