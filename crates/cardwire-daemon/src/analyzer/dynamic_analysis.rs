@@ -89,6 +89,21 @@ pub fn check_cardwire_allow(environ: &[u8]) -> Option<bool> {
     // Not present
     None
 }
+
+pub fn check_cardwire_force_dgpu(environ: &[u8]) -> Option<bool> {
+    for var in environ.split(|&b| b == 0) {
+        if var.starts_with(b"CARDWIRE_FORCE_DGPU=") {
+            if var.get(20) == Some(&b'1') {
+                return Some(true); // CARDWIRE_FORCE_DGPU=1
+            } else {
+                return Some(false); // CARDWIRE_FORCE_DGPU=0
+            }
+        }
+    }
+    // Not present
+    None
+}
+
 pub fn check_gpu_env(environ: &[u8]) -> bool {
     for var in environ.split(|&b| b == 0) {
         if var.starts_with(b"DRI_PRIME=") {

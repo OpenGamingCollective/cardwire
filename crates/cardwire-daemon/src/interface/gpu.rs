@@ -55,20 +55,20 @@ impl GpuInterface {
 }
 
 impl GpuInterface {
-    /// block the gpu
-    pub async fn block_gpu(&mut self) -> fdo::Result<()> {
+    /// block the gpu, 1 = dGPU, 0 = iGPU
+    pub async fn block_gpu(&mut self, value: u8) -> fdo::Result<()> {
         let mut blocker = self.blocker.write().await;
         let pci_list = self.pci_list.read().await;
         // First block the card id
         match card_to_inode(*self.device.card()) {
-            Ok(inode) => blocker.block_inode(inode).into_fdo()?,
+            Ok(inode) => blocker.block_inode(inode, value).into_fdo()?,
             Err(err) => {
                 error!("failed to block card{}: {}", *self.device.card(), err);
                 return Err(err).into_fdo();
             }
         };
         match render_to_inode(*self.device.render()) {
-            Ok(inode) => blocker.block_inode(inode).into_fdo()?,
+            Ok(inode) => blocker.block_inode(inode, value).into_fdo()?,
             Err(err) => {
                 error!("failed to block render{}: {}", *self.device.render(), err);
                 return Err(err).into_fdo();
@@ -81,7 +81,7 @@ impl GpuInterface {
         ) {
             Ok(inodes) => {
                 for inode in inodes {
-                    if let Err(err) = blocker.block_inode(inode) {
+                    if let Err(err) = blocker.block_inode(inode, value) {
                         error!("failed to block inode(pci) {}: {}", inode, err);
                         return Err(err).into_fdo();
                     }
@@ -100,7 +100,7 @@ impl GpuInterface {
         match sys_drm_inodes(*self.device.render(), *self.device.card()) {
             Ok(inodes) => {
                 for inode in inodes {
-                    if let Err(err) = blocker.block_inode(inode) {
+                    if let Err(err) = blocker.block_inode(inode, value) {
                         error!("failed to block inode(drm) {}: {}", inode, err);
                         return Err(err).into_fdo();
                     }
@@ -120,14 +120,14 @@ impl GpuInterface {
             && let Some(minor) = self.device.nvidia_minor()
         {
             match nvidia_to_inode(*minor) {
-                Ok(inode) => blocker.block_inode(inode).into_fdo()?,
+                Ok(inode) => blocker.block_inode(inode, value).into_fdo()?,
                 Err(err) => {
                     error!("failed to block nvidia{}: {}", *self.device.render(), err);
                     return Err(err).into_fdo();
                 }
             };
             match backlight_to_inode(*minor) {
-                Ok(inode) => blocker.block_inode(inode).into_fdo()?,
+                Ok(inode) => blocker.block_inode(inode, value).into_fdo()?,
                 Err(err) => {
                     error!(
                         "(ignoring) failed to block backlight nvidia_{}: {}",
@@ -291,7 +291,7 @@ impl GpuInterface {
                 )));
             }
             // Now block
-            self.block_gpu().await?;
+            self.block_gpu(1).await?;
             info!("Set GPU {} block={}", self.device.name(), block);
             // save new state to file
             let mut gpu_state = self.gpu_state.write().await;

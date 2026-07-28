@@ -146,7 +146,7 @@ impl DebugInterface {
                         "GPU {} should be blocked, re-applying block on hotplug",
                         gpu.device.name()
                     );
-                    if let Err(e) = gpu.block_gpu().await {
+                    if let Err(e) = gpu.block_gpu(1).await {
                         warn!(
                             "failed to automatically re-block {}: {}",
                             gpu.device.name(),

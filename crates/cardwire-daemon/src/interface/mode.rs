@@ -125,11 +125,18 @@ impl ModeInterface {
                 for gpu in gpu_list.values_mut() {
                     if !gpu.device.is_default() {
                         if mode == Modes::Integrated || mode == Modes::Smart {
-                            gpu.block_gpu().await?;
+                            // Here we block the dGPU
+                            gpu.block_gpu(1).await?;
                         } else {
                             gpu.unblock_gpu().await?;
                         }
                     };
+
+                    // If we in smart mode and is the default gpu, push it to the blocked inode map
+                    // but it wont get blocked, trust
+                    if mode == Modes::Smart && gpu.device.is_default() {
+                        gpu.block_gpu(0).await?;
+                    }
                 }
             }
 
@@ -152,7 +159,7 @@ impl ModeInterface {
                             gpu.unblock_gpu().await?;
                         } else {
                             info!("blocking: {} ", gpu.device.pci().pci_address());
-                            gpu.block_gpu().await?;
+                            gpu.block_gpu(1).await?;
                         }
                     } else {
                         gpu.unblock_gpu().await?;

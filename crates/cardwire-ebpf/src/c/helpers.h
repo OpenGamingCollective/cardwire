@@ -89,12 +89,15 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	bool blocked = false;
 
 	struct inode *inode = BPF_CORE_READ(d, d_inode);
+	__u8 *map_val = 0;
 	// Match card/render/nvidia minor
 	if (inode) {
 		__u64 d_ino = BPF_CORE_READ(inode, i_ino);
 		if (d_ino) {
-			// if it's a blocked inode, go to end
-			if (bpf_map_lookup_elem(&cw_blocked_ino, &d_ino)) {
+			map_val = bpf_map_lookup_elem(&cw_blocked_ino, &d_ino);
+			// if inode is in the map, blocked
+			// we store the value to identify the dGPU/iGPU
+			if (map_val) {
 				blocked = true;
 				goto end;
 			}
@@ -126,6 +129,25 @@ end:
 
 	// if smart, check the pid list
 	if (*mode == 3) {
+		// Check if the inode is linked to the iGPU
+		if (map_val && *map_val == 0) {
+			__u8 *allow_map_value =
+				bpf_map_lookup_elem(&cw_allowed_pid, &pid);
+			if (!allow_map_value) {
+				allow_map_value = bpf_map_lookup_elem(
+					&cw_allowed_pid, &ppid);
+			}
+			// IF the inode is linked to a iGPU and the map_key exist
+			if (allow_map_value) {
+				// This mean the inode is allowed, but to check if we should force the dGPU or not,value should be at 0
+				if (*allow_map_value == 0) {
+					// We should hide the iGPU
+					return -ENOENT;
+				}
+			}
+			return 0;
+		}
+
 		if (!bpf_map_lookup_elem(&cw_allowed_pid, &pid) &&
 		    !bpf_map_lookup_elem(&cw_allowed_pid, &ppid)) {
 			// Neither pid nor ppid is allowed, block and report the event
@@ -178,9 +200,9 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 	bpf_probe_read_user_str(dirname, sizeof(dirname), dirent->d_name);
 
 	// Check if this is a file we want to hide
-	if (bpf_map_lookup_elem(&cw_blocked_ino, &d_inode) ||
-	    (is_nvidia_enabled() &&
-	     bpf_map_lookup_elem(&cw_exp_blk_ino, &d_inode))) {
+	__u8 *map_val = bpf_map_lookup_elem(&cw_blocked_ino, &d_inode);
+	if (map_val || (is_nvidia_enabled() &&
+			bpf_map_lookup_elem(&cw_exp_blk_ino, &d_inode))) {
 		if (data->last_visible_bpos != 0xFFFFFFFF) {
 			struct linux_dirent64 *visible_dirent =
 				(struct linux_dirent64
@@ -191,12 +213,51 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 				       &visible_dirent->d_reclen);
 
 			__u16 new_reclen = visible_reclen + data->d_reclen;
+			// check for iGPU
+			if (is_smart()) {
+				__u32 pid = bpf_get_current_pid_tgid() >> 32;
+				struct task_struct *task =
+					(struct task_struct *)
+						bpf_get_current_task();
+				__u32 ppid =
+					BPF_CORE_READ(task, real_parent, tgid);
 
+				__u8 *allow_map_value = bpf_map_lookup_elem(
+					&cw_allowed_pid, &pid);
+
+				if (map_val && *map_val == 0) {
+					// It's the iGPU
+					if (allow_map_value) {
+						// map is valid and value isn't 1 (dGPU)
+						if (*allow_map_value != 1) {
+							// force dGPU is active: hide the iGPU
+							bpf_probe_write_user(
+								&visible_dirent
+									 ->d_reclen,
+								&new_reclen,
+								sizeof(new_reclen));
+							goto end;
+						} else {
+							// allowed process, no force: show iGPU
+							goto not_hidden;
+						}
+					} else {
+						goto not_hidden;
+					}
+				} else {
+					// It's the dGPU
+					if (allow_map_value) {
+						// Allowed process: must see the dGPU!
+						goto not_hidden;
+					}
+					// Unallowed process: fall through to hide the dGPU
+				}
+			}
 			// Overwrite the visible file's length so it skips over the hidden file
 			bpf_probe_write_user(&visible_dirent->d_reclen,
 					     &new_reclen, sizeof(new_reclen));
 		}
-
+end:
 		data->bpos += data->d_reclen;
 		// Reserve space, return if it fails
 		struct report_t *rb_report = bpf_ringbuf_reserve(
@@ -212,6 +273,7 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 		return 0; // Continue loop
 	}
 
+not_hidden:
 	// Not a hidden file, update last_visible_bpos and advance
 	data->last_visible_bpos = data->bpos;
 	data->bpos += data->d_reclen;
