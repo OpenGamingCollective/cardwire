@@ -116,6 +116,8 @@ pub async fn get_app_id_wayland(pid: u32, ppid: u32) -> Option<String> {
         Err(_) => return None,
     };
     let desktop: Desktop = Desktop::from_str(&desktop_str)?;
+
+    #[allow(clippy::single_match)]
     match desktop {
         // We use the niri ipc to get the window real name
         Desktop::Niri => {
