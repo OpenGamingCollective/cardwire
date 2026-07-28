@@ -90,3 +90,60 @@ pub struct IommuGroup {
     pub id: usize,
     pub devices: Vec<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pci_device_accessors_return_constructed_values() {
+        let pci = PciDevice::new(
+            "0000:01:00.0".to_string(),
+            Some(5),
+            Some("0x1002".to_string()),
+            Some("0x7480".to_string()),
+            Some("AMD".to_string()),
+            Some("Navi 31".to_string()),
+            Some("amdgpu".to_string()),
+            Some("0x030000".to_string()),
+            Some("0000:00:01.0".to_string()),
+            Some("0000:01:00.1".to_string()),
+        );
+        assert_eq!(pci.pci_address(), "0000:01:00.0");
+        assert_eq!(*pci.iommu_group(), Some(5));
+        assert_eq!(pci.vendor_id().as_deref(), Some("0x1002"));
+        assert_eq!(pci.device_id().as_deref(), Some("0x7480"));
+        assert_eq!(pci.vendor_name().as_deref(), Some("AMD"));
+        assert_eq!(pci.device_name().as_deref(), Some("Navi 31"));
+        assert_eq!(pci.driver().as_deref(), Some("amdgpu"));
+        assert_eq!(pci.class().as_deref(), Some("0x030000"));
+        assert_eq!(pci.parent_pci().as_deref(), Some("0000:00:01.0"));
+        assert_eq!(pci.child_pci().as_deref(), Some("0000:01:00.1"));
+    }
+
+    #[test]
+    fn test_pci_device_with_all_none_fields() {
+        let pci = PciDevice::new(
+            "0000:02:00.0".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(pci.pci_address(), "0000:02:00.0");
+        assert_eq!(*pci.iommu_group(), None);
+        assert_eq!(pci.vendor_id().as_deref(), None);
+        assert_eq!(pci.device_id().as_deref(), None);
+        assert_eq!(pci.vendor_name().as_deref(), None);
+        assert_eq!(pci.device_name().as_deref(), None);
+        assert_eq!(pci.driver().as_deref(), None);
+        assert_eq!(pci.class().as_deref(), None);
+        assert_eq!(pci.parent_pci().as_deref(), None);
+        assert_eq!(pci.child_pci().as_deref(), None);
+    }
+}

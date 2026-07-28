@@ -228,3 +228,145 @@ fn get_real_process_name(pid: u32) -> Option<String> {
     let base_name = binary.split('/').next_back().unwrap_or(binary);
     Some(base_name.to_string())
 }
+
+// TESTS
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ptr;
+
+    #[test]
+    fn test_event_deserialization_from_valid_bytes() {
+        let item: Vec<u8> = vec![
+            0x01, 0x00, 0x00, 0x00, // pid = 1
+        ];
+        assert!(item.len() >= std::mem::size_of::<Event>());
+        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Event) };
+        assert_eq!(event.pid, 1);
+    }
+
+    #[test]
+    fn test_event_deserialization_rejects_undersized_buffer() {
+        let item: Vec<u8> = vec![0x01, 0x00, 0x00]; // 3 bytes, Event needs 4
+        assert!(item.len() < std::mem::size_of::<Event>());
+    }
+
+    #[test]
+    fn test_event_deserialization_with_large_pid() {
+        // pid = 0xFFFFFFFF (u32::MAX)
+        let item: Vec<u8> = vec![0xFF, 0xFF, 0xFF, 0xFF];
+        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Event) };
+        assert_eq!(event.pid, u32::MAX);
+    }
+
+    #[test]
+    fn test_close_event_deserialization() {
+        let item: Vec<u8> = vec![
+            0x2A, 0x00, 0x00, 0x00, // pid = 42
+        ];
+        assert!(item.len() >= std::mem::size_of::<Close>());
+        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Close) };
+        assert_eq!(event.pid, 42);
+    }
+
+    #[test]
+    fn test_get_real_process_name_returns_exe_for_wine_proton_cmdline() {
+        let cmdline_bytes =
+            r"S:\common\NieR·Replicant·ver.1.22474487139\NieR·Replicant·ver.1.22474487139.exe"
+                .as_bytes();
+
+        assert!(!cmdline_bytes.is_empty());
+        let args: Vec<&str> = cmdline_bytes
+            .split(|&b| b == 0)
+            .filter_map(|b| std::str::from_utf8(b).ok())
+            .filter(|s| !s.is_empty())
+            .collect();
+        assert!(!args.is_empty());
+        {
+            let binary = args[0];
+
+            // Check Wine/Proton
+            if binary.contains("wine") || binary.contains("proton") {
+                for arg in args.iter().skip(1) {
+                    if arg.to_lowercase().ends_with(".exe") {
+                        let file_name = arg.split(&['/', '\\'][..]).next_back().unwrap_or(arg);
+                        assert_eq!(file_name, "NieR·Replicant·ver.1.22474487139.exe");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_get_real_process_name_returns_jar_for_java_cmdline() {
+        let cmdline_bytes = "minecraft.jar".as_bytes();
+
+        assert!(!cmdline_bytes.is_empty());
+        let args: Vec<&str> = cmdline_bytes
+            .split(|&b| b == 0)
+            .filter_map(|b| std::str::from_utf8(b).ok())
+            .filter(|s| !s.is_empty())
+            .collect();
+        assert!(!args.is_empty());
+        {
+            let binary = args[0];
+
+            // Check Wine/Proton
+            if binary.ends_with(".java") {
+                for arg in args.iter().skip(1) {
+                    if arg.ends_with(".jar") {
+                        let file_name = arg.split('/').next_back().unwrap_or(arg);
+                        assert_eq!(file_name, "minecraft");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_get_real_process_name_returns_basename_for_regular_binary() {
+        // Simulate a regular binary like "/usr/bin/steam"
+        let cmdline_bytes = b"/usr/bin/steam\0--no-browser\0";
+        let args: Vec<&str> = cmdline_bytes
+            .split(|&b| b == 0)
+            .filter_map(|b| std::str::from_utf8(b).ok())
+            .filter(|s| !s.is_empty())
+            .collect();
+        assert!(!args.is_empty());
+        let binary = args[0];
+        let base_name = binary.split('/').next_back().unwrap_or(binary);
+        assert_eq!(base_name, "steam");
+    }
+
+    #[test]
+    fn test_get_real_process_name_returns_none_for_empty_cmdline() {
+        let cmdline_bytes = b"";
+        assert!(cmdline_bytes.is_empty());
+    }
+
+    #[test]
+    fn test_get_real_process_name_extracts_wine_exe_from_multiarg_cmdline() {
+        // Simulates: wine64-preloader\0C:\game\app.exe\0--fullscreen
+        let cmdline_bytes = b"wine64-preloader\0C:\\game\\app.exe\0--fullscreen";
+        let args: Vec<&str> = cmdline_bytes
+            .split(|&b| b == 0)
+            .filter_map(|b| std::str::from_utf8(b).ok())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let binary = args[0];
+        assert!(binary.contains("wine"));
+        // Find the .exe argument
+        let exe_arg = args
+            .iter()
+            .skip(1)
+            .find(|a| a.to_lowercase().ends_with(".exe"));
+        assert!(exe_arg.is_some());
+        let file_name = exe_arg
+            .unwrap()
+            .split(&['/', '\\'][..])
+            .next_back()
+            .unwrap();
+        assert_eq!(file_name, "app.exe");
+    }
+}

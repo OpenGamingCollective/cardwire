@@ -84,3 +84,78 @@ impl CardwireConfig {
         self.battery_auto_switch_mode
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::interface::Modes;
+
+    #[test]
+    fn test_cardwire_config_default_values() {
+        let config = CardwireConfig::default();
+        assert!(config.auto_apply_gpu_state());
+        assert!(!config.experimental_nvidia_block());
+        assert!(!config.battery_auto_switch());
+        assert_eq!(config.battery_auto_switch_mode(), Modes::Hybrid);
+    }
+
+    #[test]
+    fn test_cardwire_config_build_values() {
+        let config = CardwireConfig::new(false, true, true, Modes::Smart);
+        assert!(!config.auto_apply_gpu_state());
+        assert!(config.experimental_nvidia_block());
+        assert!(config.battery_auto_switch());
+        assert_eq!(config.battery_auto_switch_mode(), Modes::Smart);
+    }
+
+    #[test]
+    fn test_cardwire_config_toml_roundtrip() {
+        let config = CardwireConfig::default();
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let parsed: CardwireConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.auto_apply_gpu_state(), config.auto_apply_gpu_state());
+        assert_eq!(
+            parsed.experimental_nvidia_block(),
+            config.experimental_nvidia_block()
+        );
+        assert_eq!(parsed.battery_auto_switch(), config.battery_auto_switch());
+        assert_eq!(
+            parsed.battery_auto_switch_mode(),
+            config.battery_auto_switch_mode()
+        );
+    }
+
+    #[test]
+    fn test_cardwire_config_toml_parse_with_missing_fields_uses_defaults() {
+        // Only specify one field — serde(default) should fill the rest
+        let toml_str = "auto_apply_gpu_state = false\n";
+        let parsed: CardwireConfig = toml::from_str(toml_str).unwrap();
+        assert!(!parsed.auto_apply_gpu_state());
+        // All others should be defaults
+        assert!(!parsed.experimental_nvidia_block());
+        assert!(!parsed.battery_auto_switch());
+        assert_eq!(parsed.battery_auto_switch_mode(), Modes::Hybrid);
+    }
+
+    #[test]
+    fn test_cardwire_config_toml_parse_empty_string_uses_all_defaults() {
+        let parsed: CardwireConfig = toml::from_str("").unwrap();
+        assert!(parsed.auto_apply_gpu_state());
+        assert!(!parsed.experimental_nvidia_block());
+    }
+
+    #[test]
+    fn test_cardwire_config_toml_with_custom_values() {
+        let toml_str = r#"
+auto_apply_gpu_state = false
+experimental_nvidia_block = true
+battery_auto_switch = true
+battery_auto_switch_mode = "smart"
+"#;
+        let parsed: CardwireConfig = toml::from_str(toml_str).unwrap();
+        assert!(!parsed.auto_apply_gpu_state());
+        assert!(parsed.experimental_nvidia_block());
+        assert!(parsed.battery_auto_switch());
+        assert_eq!(parsed.battery_auto_switch_mode(), Modes::Smart);
+    }
+}

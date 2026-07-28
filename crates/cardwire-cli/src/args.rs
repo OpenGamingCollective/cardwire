@@ -142,3 +142,123 @@ pub struct GpuAction {
     #[arg(long, help = "Get GPU power state")]
     pub power: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cli_mode_display_all_variants() {
+        assert_eq!(CliMode::Integrated.to_string(), "Integrated");
+        assert_eq!(CliMode::Hybrid.to_string(), "Hybrid");
+        assert_eq!(CliMode::Manual.to_string(), "Manual");
+        assert_eq!(CliMode::Smart.to_string(), "Smart");
+    }
+
+    #[test]
+    fn test_args_parse_set_command() {
+        let args = Args::try_parse_from(["cardwire", "set", "hybrid"]).unwrap();
+        match args.command {
+            Commands::Set { mode } => assert!(matches!(mode, CliMode::Hybrid)),
+            _ => panic!("expected Set command"),
+        }
+    }
+
+    #[test]
+    fn test_args_parse_get_command() {
+        let args = Args::try_parse_from(["cardwire", "get"]).unwrap();
+        assert!(matches!(args.command, Commands::Get));
+    }
+
+    #[test]
+    fn test_args_parse_list_command() {
+        let args = Args::try_parse_from(["cardwire", "list"]).unwrap();
+        match args.command {
+            Commands::List { full, json } => {
+                assert!(!full);
+                assert!(!json);
+            }
+            _ => panic!("expected List command"),
+        }
+    }
+
+    #[test]
+    fn test_args_parse_list_with_json_flag() {
+        let args = Args::try_parse_from(["cardwire", "list", "--json"]).unwrap();
+        match args.command {
+            Commands::List { json, .. } => assert!(json),
+            _ => panic!("expected List command"),
+        }
+    }
+
+    #[test]
+    fn test_args_parse_list_with_full_flag() {
+        let args = Args::try_parse_from(["cardwire", "list", "--full"]).unwrap();
+        match args.command {
+            Commands::List { full, .. } => assert!(full),
+            _ => panic!("expected List command"),
+        }
+    }
+
+    #[test]
+    fn test_args_parse_gpu_block_command() {
+        let args = Args::try_parse_from(["cardwire", "gpu", "1", "--block"]).unwrap();
+        match args.command {
+            Commands::Gpu { id, action } => {
+                assert_eq!(id, 1);
+                assert!(action.block);
+                assert!(!action.unblock);
+            }
+            _ => panic!("expected Gpu command"),
+        }
+    }
+
+    #[test]
+    fn test_args_parse_set_all_modes() {
+        for mode_str in ["integrated", "hybrid", "manual", "smart"] {
+            let result = Args::try_parse_from(["cardwire", "set", mode_str]);
+            assert!(result.is_ok(), "failed to parse mode: {mode_str}");
+        }
+    }
+
+    #[test]
+    fn test_args_parse_set_invalid_mode_fails() {
+        let result = Args::try_parse_from(["cardwire", "set", "asusmux"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_args_parse_config_auto_apply() {
+        let args =
+            Args::try_parse_from(["cardwire", "config", "auto-apply-gpu-state", "true"]).unwrap();
+        match args.command {
+            Commands::Config { action } => match action {
+                ConfigAction::AutoApplyGpuState { set } => assert_eq!(set, Some(true)),
+                _ => panic!("expected AutoApplyGpuState"),
+            },
+            _ => panic!("expected Config command"),
+        }
+    }
+
+    #[test]
+    fn test_args_parse_manager_status() {
+        let args = Args::try_parse_from(["cardwire", "manager", "status"]).unwrap();
+        assert!(matches!(
+            args.command,
+            Commands::Manager {
+                action: ManagerAction::Status
+            }
+        ));
+    }
+
+    #[test]
+    fn test_args_parse_debug_diagnostic() {
+        let args = Args::try_parse_from(["cardwire", "debug", "diagnostic-gpu"]).unwrap();
+        assert!(matches!(
+            args.command,
+            Commands::Debug {
+                action: DebugAction::DiagnosticGpu
+            }
+        ));
+    }
+}
