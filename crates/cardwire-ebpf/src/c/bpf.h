@@ -74,7 +74,8 @@ struct task_struct {
 } __attribute__((preserve_access_index));
 
 // Ring related struct
-struct event_t {
+
+struct exec_t {
 	__u32 pid;
 };
 

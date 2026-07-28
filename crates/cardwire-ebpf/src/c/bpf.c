@@ -70,7 +70,7 @@ int BPF_PROG(inode_getattr, const struct path *path)
 }
 
 /*
-	To analyze the app before it's launch if the mode is smart or enforce, send event_t to cardwire
+	To analyze the app before it's launch if the mode is smart or enforce, send exec_t to cardwire
 */
 SEC("tracepoint/sched/sched_process_exec")
 int trace_exec(void *ctx)
@@ -80,9 +80,9 @@ int trace_exec(void *ctx)
 		return 0;
 
 	// Init the struct
-	struct event_t *rb_data = {};
+	struct exec_t *rb_data = {};
 	rb_data =
-		bpf_ringbuf_reserve(&cw_exec_events, sizeof(struct event_t), 0);
+		bpf_ringbuf_reserve(&cw_exec_events, sizeof(struct exec_t), 0);
 	// Check if present
 	if (!rb_data) {
 		return 0;
