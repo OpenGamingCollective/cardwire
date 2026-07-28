@@ -110,7 +110,7 @@ pub fn check_gpu_env(environ: &[u8]) -> bool {
 }
 
 /// pid to wayland app id, needs to be async to wait
-pub async fn get_app_id_wayland(pid: u32, ppid: u32) -> Option<String> {
+pub async fn get_app_id_wayland(pid: u32) -> Option<String> {
     let desktop_str: String = match env::var("XDG_CURRENT_DESKTOP") {
         Ok(value) => value,
         Err(_) => return None,
@@ -140,10 +140,7 @@ pub async fn get_app_id_wayland(pid: u32, ppid: u32) -> Option<String> {
                     let app_id = json["Ok"]["Windows"]
                         .as_array()?
                         .iter()
-                        .find(|w| {
-                            w["pid"].as_u64() == Some(pid as u64)
-                                || w["pid"].as_u64() == Some(ppid as u64)
-                        })
+                        .find(|w| w["pid"].as_u64() == Some(pid as u64))
                         .and_then(|w| w["app_id"].as_str())
                         .map(|s| s.to_string());
                     if app_id.is_some() {

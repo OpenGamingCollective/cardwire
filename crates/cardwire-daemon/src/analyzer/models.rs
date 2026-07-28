@@ -130,12 +130,11 @@ impl CardwireAnalyzer {
                             if event.pid != previous_reported_pid {
                                 previous_reported_pid = event.pid;
                                 task::spawn(async move {
-                                    println!("huge!");
                                     let comm = match str::from_utf8(&event.comm){
                                         Ok(c) => c,
                                         Err(_) => return,
                                     };
-                                    if let Some(app_id) = get_app_id_wayland(event.pid, event.ppid).await {
+                                    if let Some(app_id) = get_app_id_wayland(event.pid).await {
                                         info!("{} with pid {} got blocked", &app_id, event.pid);
                                     } else {
                                         // ignore comm named electron, it's just a child of the real process
