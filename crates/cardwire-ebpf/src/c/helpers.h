@@ -86,16 +86,6 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	if (is_process_whitelisted())
 		return 0;
 
-	// Reserve space, return if it fails
-	struct report_t *rb_report = bpf_ringbuf_reserve(
-		&cw_report_events, sizeof(struct report_t), 0);
-	if (!rb_report) {
-		return 0;
-	}
-	// Store the pid and the comm inside the event
-	rb_report->pid = pid;
-	bpf_get_current_comm(rb_report->comm, sizeof(rb_report->comm));
-
 	bool blocked = false;
 
 	struct inode *inode = BPF_CORE_READ(d, d_inode);
@@ -117,9 +107,8 @@ static __always_inline int is_blocked_device(struct dentry *d)
 	}
 end:
 
-	// If not blocked, we simply discard the ringbuf and return 0(allowed)
+	// If not blocked, return 0(allowed)
 	if (!blocked) {
-		bpf_ringbuf_discard(rb_report, 0);
 		return 0;
 	}
 	// get mode
@@ -127,14 +116,11 @@ end:
 	__u8 *mode = bpf_map_lookup_elem(&cw_mode, &key);
 	// if map lookup fails, or we are not blocking, or it's hybrid mode, allow
 	if (!mode || *mode == 1) {
-		// discard the event
-		bpf_ringbuf_discard(rb_report, 0);
 		return 0;
 	}
 
-	// if is integrated/manual mode, block but don't send the event
+	// if is integrated/manual mode, block
 	if (*mode == 0 || *mode == 2) {
-		bpf_ringbuf_discard(rb_report, 0);
 		return -ENOENT;
 	}
 
@@ -143,12 +129,20 @@ end:
 		if (!bpf_map_lookup_elem(&cw_allowed_pid, &pid) &&
 		    !bpf_map_lookup_elem(&cw_allowed_pid, &ppid)) {
 			// Neither pid nor ppid is allowed, block and report the event
+			// Reserve space, return if it fails
+			struct report_t *rb_report = bpf_ringbuf_reserve(
+				&cw_report_events, sizeof(struct report_t), 0);
+			if (!rb_report) {
+				return -ENOENT;
+			}
+			// Store the pid and the comm inside the event
+			rb_report->pid = pid;
+			bpf_get_current_comm(rb_report->comm,
+					     sizeof(rb_report->comm));
 			bpf_ringbuf_submit(rb_report, 0);
 			return -ENOENT;
 		}
 	}
-
-	bpf_ringbuf_discard(rb_report, 0);
 	return 0;
 }
 
@@ -179,17 +173,6 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 		return 0; // Skip and continue
 	}
 
-	// Reserve space, return if it fails
-	struct report_t *rb_report = bpf_ringbuf_reserve(
-		&cw_report_events, sizeof(struct report_t), 0);
-	if (!rb_report) {
-		bpf_printk("bpf_ringbuf_reserve failed\n");
-		return 0;
-	}
-	// Store the pid and the comm inside the event
-	rb_report->pid = bpf_get_current_pid_tgid() >> 32;
-	bpf_get_current_comm(rb_report->comm, sizeof(rb_report->comm));
-
 	//Read the name of this entry
 	char dirname[64] = {};
 	bpf_probe_read_user_str(dirname, sizeof(dirname), dirent->d_name);
@@ -215,6 +198,16 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 		}
 
 		data->bpos += data->d_reclen;
+		// Reserve space, return if it fails
+		struct report_t *rb_report = bpf_ringbuf_reserve(
+			&cw_report_events, sizeof(struct report_t), 0);
+		if (!rb_report) {
+			bpf_printk("bpf_ringbuf_reserve failed\n");
+			return 0;
+		}
+		// Store the pid and the comm inside the event
+		rb_report->pid = bpf_get_current_pid_tgid() >> 32;
+		bpf_get_current_comm(rb_report->comm, sizeof(rb_report->comm));
 		bpf_ringbuf_submit(rb_report, 0);
 		return 0; // Continue loop
 	}
@@ -222,6 +215,5 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 	// Not a hidden file, update last_visible_bpos and advance
 	data->last_visible_bpos = data->bpos;
 	data->bpos += data->d_reclen;
-	bpf_ringbuf_discard(rb_report, 0);
 	return 0; // Continue loop
 }
