@@ -121,7 +121,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
-      - run: clang-format --dry-run --Werror -i ./crates/cardwire-ebpf/src/bpf.c
+      - run: clang-format --dry-run --Werror -i ./crates/cardwire-ebpf/src/c/*
   vm-test:
     runs-on: ubuntu-latest
     needs: [prepare, rust-lint, rust-format, c-format]
