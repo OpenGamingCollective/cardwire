@@ -36,6 +36,10 @@ jobs:
             const needsCFormatCheck = files.some(file => 
               file.endsWith('.c')
             );
+            
+            const needsMdBookCheck = files.some(file => 
+              file.startsWith('docs/')
+            );
 
             const needsRustQuality = files.some(file => 
               file.endsWith('.rs')
@@ -49,6 +53,9 @@ jobs:
             }
             if (needsRustQuality) {
               core.setOutput('run_rust_checks', 'true');
+            }
+            if (needsMdBookCheck) {
+              core.setOutput('run_mdbook_check', 'true');
             }
 
   rust-lint:
