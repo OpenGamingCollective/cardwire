@@ -32,3 +32,49 @@ impl From<&str> for Error {
         Error::Other(s.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_from_str() {
+        let err = Error::from("something went wrong");
+        match err {
+            Error::Other(msg) => assert_eq!(msg, "something went wrong"),
+            _ => panic!("expected Error::Other"),
+        }
+    }
+
+    #[test]
+    fn test_error_display_iommu_not_enabled() {
+        let err = Error::IommuNotEnabled;
+        assert_eq!(err.to_string(), "IOMMU Not Enabled");
+    }
+
+    #[test]
+    fn test_error_display_missing_devices_dir() {
+        let err = Error::MissingDevicesDir(std::path::PathBuf::from("/sys/test"));
+        assert!(err.to_string().contains("/sys/test"));
+    }
+
+    #[test]
+    fn test_error_display_io_error() {
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "file not found");
+        let err = Error::Io(io_err);
+        assert!(err.to_string().contains("file not found"));
+    }
+
+    #[test]
+    fn test_error_display_parse_int() {
+        let parse_err = "abc".parse::<u32>().unwrap_err();
+        let err = Error::ParseInt(parse_err);
+        assert!(err.to_string().contains("parse"));
+    }
+
+    #[test]
+    fn test_error_display_other() {
+        let err = Error::Other("custom error".to_string());
+        assert_eq!(err.to_string(), "custom error");
+    }
+}

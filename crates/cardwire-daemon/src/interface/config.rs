@@ -139,3 +139,38 @@ impl ConfigInterface {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::file::CardwireConfig;
+
+    #[test]
+    fn test_config_memory_build_from_default_config() {
+        let config = CardwireConfig::default();
+        let memory = ConfigMemory::build(config);
+        assert!(memory.auto_apply_gpu_state.load(Ordering::Relaxed));
+        assert!(!memory.experimental_nvidia_block.load(Ordering::Relaxed));
+        assert!(!memory.battery_auto_switch.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn test_config_memory_build_from_custom_config() {
+        let config = CardwireConfig::new(false, true, true, Modes::Smart);
+        let memory = ConfigMemory::build(config);
+        assert!(!memory.auto_apply_gpu_state.load(Ordering::Relaxed));
+        assert!(memory.experimental_nvidia_block.load(Ordering::Relaxed));
+        assert!(memory.battery_auto_switch.load(Ordering::Relaxed));
+        let mode_val = memory.battery_auto_switch_mode.load(Ordering::Relaxed);
+        assert_eq!(Modes::try_from(mode_val).unwrap(), Modes::Smart);
+    }
+
+    #[test]
+    fn test_config_memory_atomic_store_and_load() {
+        let config = CardwireConfig::default();
+        let memory = ConfigMemory::build(config);
+        // Mutate the atomic
+        memory.auto_apply_gpu_state.store(false, Ordering::Relaxed);
+        assert!(!memory.auto_apply_gpu_state.load(Ordering::Relaxed));
+    }
+}
