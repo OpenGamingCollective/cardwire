@@ -151,7 +151,7 @@ mod tests {
         let parsed: BTreeMap<usize, GpuDevice> = serde_json::from_str(&json_str).unwrap();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[&0].name, "Intel UHD");
-        assert_eq!(parsed[&1].blocked, true);
+        assert!(parsed[&1].blocked);
     }
 
     #[test]
