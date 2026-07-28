@@ -85,7 +85,7 @@ struct close_t {
 
 struct report_t {
 	__u32 pid;
-	char comm[32];
+	char comm[16];
 };
 
 // EBPF maps
@@ -104,7 +104,7 @@ struct {
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
-} cw_report SEC(".maps");
+} cw_report_events SEC(".maps");
 
 // List of blocked comm
 // Used for smart mode

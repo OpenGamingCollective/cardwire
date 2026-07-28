@@ -222,6 +222,11 @@ impl EbpfBlocker {
         let ring_buf: RingBuf<aya::maps::MapData> = RingBuf::try_from(map).unwrap();
         Ok(ring_buf)
     }
+    pub fn get_report_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
+        let map = self.ebpf.take_map("cw_report_events").unwrap();
+        let ring_buf: RingBuf<aya::maps::MapData> = RingBuf::try_from(map).unwrap();
+        Ok(ring_buf)
+    }
     pub fn get_pid_map(&mut self) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u8>> {
         let map = self.ebpf.take_map("cw_allowed_pid").unwrap();
         let map: HashMap<aya::maps::MapData, u32, u8> = HashMap::try_from(map).unwrap();

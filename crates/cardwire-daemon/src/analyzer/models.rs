@@ -23,10 +23,18 @@ pub struct CloseEvent {
     pub pid: u32,
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ReportEvent {
+    pub pid: u32,
+    pub comm: [u8; 16],
+}
+
 #[derive(Clone)]
 pub struct CardwireAnalyzer {
     exec_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
+    report_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u8>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
     #[allow(dead_code)]
@@ -38,21 +46,25 @@ impl CardwireAnalyzer {
         let mut blocker = blocker.write().await;
         let exec_ring = blocker.get_exec_ring()?;
         let close_ring = blocker.get_close_ring()?;
+        let report_ring = blocker.get_report_ring()?;
         let pid_map = blocker.get_pid_map()?;
 
         let exec_ring = AsyncFd::new(exec_ring)?;
         let close_ring = AsyncFd::new(close_ring)?;
+        let report_ring = AsyncFd::new(report_ring)?;
 
         // Now Rwlock -> Arc
         let exec_ring = Arc::new(Mutex::new(exec_ring));
         let pid_map = Arc::new(RwLock::new(pid_map));
         let close_ring = Arc::new(Mutex::new(close_ring));
+        let report_ring = Arc::new(Mutex::new(report_ring));
         let xdg_result = static_analysis::get_fdo_apps().await?;
         let xdg_list = Arc::new(RwLock::new(xdg_result.0));
         let xdg_folders: Vec<PathBuf> = xdg_result.1;
         Ok(CardwireAnalyzer {
             exec_ring,
             close_ring,
+            report_ring,
             pid_map,
             xdg_list,
             xdg_folders,
@@ -62,9 +74,15 @@ impl CardwireAnalyzer {
         // Clone the Arcs and Sender to move into the background task
         let exec_arc = self.exec_ring.clone();
         let close_arc = self.close_ring.clone();
+        let report_arc = self.report_ring.clone();
         // Lock the buffers once
         let mut exec_ring = exec_arc.lock().await;
         let mut close_ring = close_arc.lock().await;
+        let mut report_ring = report_arc.lock().await;
+
+        // Used to prevent duplicated logs burst
+        let mut previous_reported_pid = 0;
+
         let shared_self = Arc::new(self);
         loop {
             tokio::select! {
@@ -100,6 +118,21 @@ impl CardwireAnalyzer {
                         }
                         guard.clear_ready();
                     }
+                }
+                Ok(mut guard) = report_ring.ready_mut(Interest::READABLE) => {
+                        while let Some(item) = guard.get_inner_mut().next() {
+                            if item.len() < std::mem::size_of::<ReportEvent>() {
+                                debug!("Skipping malformed close event. Size: {}", item.len());
+                                continue;
+                            }
+                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
+                            // only log if we didn't see the pid before
+                            if event.pid != previous_reported_pid && let Ok(comm) = str::from_utf8(&event.comm) {
+                                info!("{} with pid {} got blocked", &comm, event.pid);
+                                previous_reported_pid = event.pid;
+                            }
+                        }
+                        guard.clear_ready();
                 }
             }
         }
