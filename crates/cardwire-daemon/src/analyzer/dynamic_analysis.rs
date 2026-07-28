@@ -394,4 +394,28 @@ mod tests {
     fn test_check_gpu_env_returns_false_for_empty_input() {
         assert!(!check_gpu_env(b""));
     }
+
+    #[test]
+    fn test_desktop_from_str_all_known_variants() {
+        assert!(matches!(Desktop::from_str("niri"), Some(Desktop::Niri)));
+        assert!(matches!(Desktop::from_str("gnome"), Some(Desktop::Gnome)));
+        assert!(matches!(Desktop::from_str("plasma"), Some(Desktop::Plasma)));
+        assert!(matches!(Desktop::from_str("cosmic"), Some(Desktop::Cosmic)));
+    }
+
+    #[test]
+    fn test_desktop_from_str_unknown_returns_none() {
+        assert!(Desktop::from_str("sway").is_none());
+        assert!(Desktop::from_str("hyprland").is_none());
+        assert!(Desktop::from_str("i3").is_none());
+        assert!(Desktop::from_str("").is_none());
+    }
+
+    #[test]
+    fn test_desktop_from_str_is_case_sensitive() {
+        assert!(Desktop::from_str("Niri").is_none());
+        assert!(Desktop::from_str("GNOME").is_none());
+        assert!(Desktop::from_str("Plasma").is_none());
+        assert!(Desktop::from_str("COSMIC").is_none());
+    }
 }
