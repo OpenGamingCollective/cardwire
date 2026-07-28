@@ -82,6 +82,8 @@ jobs:
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config gcc-multilib
       - uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff
       - name: Test code
         run: cargo test --all
