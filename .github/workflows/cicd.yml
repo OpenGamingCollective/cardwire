@@ -1,6 +1,7 @@
 name: CICD
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 permissions:
   contents: read
   pull-requests: read
@@ -24,7 +25,9 @@ jobs:
               per_page: 100,
             })).map(file => file.filename)
 
-            const needsVMTest = files.some(file => 
+            const isDraft = context.payload.pull_request.draft;
+
+            const needsVMTest = !isDraft && files.some(file => 
               file.endsWith('.rs') || 
               file.endsWith('.c') || 
               file.includes('.nix') ||
