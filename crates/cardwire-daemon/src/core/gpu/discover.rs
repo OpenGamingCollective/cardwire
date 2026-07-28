@@ -46,11 +46,22 @@ fn build_gpu(device: &PciDevice) -> io::Result<GpuDevice> {
         _ => None,
     };
 
-    // if None use a default placeholder name
-    let device_name = device
-        .device_name()
-        .clone()
-        .unwrap_or_else(|| "Unknown Device".to_string());
+    let device_name = match gpu_vendor {
+        GpuVendor::Nvidia => nvidia_get_device_model(device.pci_address()),
+        GpuVendor::Amd => match device.device_id() {
+            Some(id) => amd_get_device_mode(&id, device.pci_address()),
+            None => None,
+        },
+        _ => None,
+    }
+    // If none, just use the hwdata name or a placeholder
+    .unwrap_or_else(|| {
+        warn!("Couldn't get device_name, falling back to hwdata");
+        device.device_name().clone().unwrap_or_else(|| {
+            warn!("Couldn't get name using hwdata, falling back to default");
+            "Unknown Device".to_string()
+        })
+    });
 
     Ok(GpuDevice::new(
         device_name,
@@ -158,6 +169,64 @@ fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
         .parse::<u32>()
         .ok()
 }
+fn nvidia_get_device_model(pci_address: &str) -> Option<String> {
+    let nvidia_driver_proc = Path::new("/proc/driver/nvidia/gpus/")
+        .join(pci_address)
+        .join("information");
+    let information = fs::read_to_string(nvidia_driver_proc).ok()?;
+    let model = information
+        .lines()
+        .find(|line| line.starts_with("Model:"))?
+        .split_once(':')?
+        .1
+        .trim()
+        .to_string();
+    match !model.is_empty() {
+        true => Some(model),
+        false => None,
+    }
+}
+
+fn amd_get_device_mode(device_id: &str, pci: &str) -> Option<String> {
+    let path = Path::new("/usr/share/libdrm/amdgpu.ids");
+    let path = Path::new(
+        "/nix/store/i7j9cxklwxjm54qx1y2s172bz4irqfbh-libdrm-2.4.134/share/libdrm/amdgpu.ids",
+    );
+    let device_id = device_id.to_string().replace("0x", "").to_ascii_uppercase();
+    let revision_path = format!("/sys/bus/pci/devices/{}/revision", pci);
+    let revision_id = fs::read_to_string(revision_path)
+        .ok()?
+        .replace("0x", "")
+        .to_ascii_uppercase();
+    match fs::read_to_string(path) {
+        Ok(content) => {
+            let model_lines: Vec<&str> = content
+                .lines()
+                .filter(|line| line.starts_with(&device_id))
+                .collect();
+            println!("revision: {}", &revision_id.trim());
+            println!("device lines: {:?}", model_lines);
+            let device_name = model_lines.iter().find(|line| {
+                line.split("\t").nth(1).is_some_and(|rev| {
+                    println!(
+                        "trying {} with {} got {}",
+                        rev,
+                        revision_id,
+                        rev == revision_id
+                    );
+                    rev.eq_ignore_ascii_case(&revision_id)
+                })
+            })?;
+            println!("device_name: {}", device_name);
+            None
+        }
+        Err(err) => {
+            warn!("couldn't read amdgpu.ids: {}", err);
+            None
+        }
+    }
+}
+
 /// Method from kwin
 pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> io::Result<()> {
     // skip if empty
