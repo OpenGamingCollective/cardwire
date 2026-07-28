@@ -49,7 +49,7 @@ fn build_gpu(device: &PciDevice) -> io::Result<GpuDevice> {
     let device_name = match gpu_vendor {
         GpuVendor::Nvidia => nvidia_get_device_model(device.pci_address()),
         GpuVendor::Amd => match device.device_id() {
-            Some(id) => amd_get_device_mode(&id, device.pci_address()),
+            Some(id) => amd_get_device_model(id, device.pci_address()),
             None => None,
         },
         _ => None,
@@ -187,41 +187,43 @@ fn nvidia_get_device_model(pci_address: &str) -> Option<String> {
     }
 }
 
-fn amd_get_device_mode(device_id: &str, pci: &str) -> Option<String> {
-    let path = Path::new("/usr/share/libdrm/amdgpu.ids");
+fn amd_get_device_model(device_id: &str, pci: &str) -> Option<String> {
+    let paths = [
+        "/usr/share/libdrm/amdgpu.ids",
+        "/nix/store/i7j9cxklwxjm54qx1y2s172bz4irqfbh-libdrm-2.4.134/share/libdrm/amdgpu.ids",
+    ];
     let device_id = device_id.to_string().replace("0x", "").to_ascii_uppercase();
-    let revision_path = format!("/sys/bus/pci/devices/{}/revision", pci);
-    let revision_id = fs::read_to_string(revision_path)
+
+    let revision = fs::read_to_string(format!("/sys/bus/pci/devices/{}/revision", pci))
         .ok()?
+        .trim()
         .replace("0x", "")
         .to_ascii_uppercase();
-    match fs::read_to_string(path) {
-        Ok(content) => {
-            let model_lines: Vec<&str> = content
-                .lines()
-                .filter(|line| line.starts_with(&device_id))
-                .collect();
-            println!("revision: {}", &revision_id.trim());
-            println!("device lines: {:?}", model_lines);
-            let device_name = model_lines.iter().find(|line| {
-                line.split("\t").nth(1).is_some_and(|rev| {
-                    println!(
-                        "trying {} with {} got {}",
-                        rev,
-                        revision_id,
-                        rev == revision_id
-                    );
-                    rev.eq_ignore_ascii_case(&revision_id)
-                })
-            })?;
-            println!("device_name: {}", device_name);
-            None
+
+    let content = paths.iter().find_map(|p| fs::read_to_string(p).ok())?;
+
+    for line in content.lines() {
+        if line.starts_with('#') {
+            continue;
         }
-        Err(err) => {
-            warn!("couldn't read amdgpu.ids: {}", err);
-            None
+
+        let mut parts = line.split('\t');
+        let Some(id) = parts.next() else {
+            continue;
+        };
+        let Some(rev) = parts.next() else {
+            continue;
+        };
+        let Some(name) = parts.next() else {
+            continue;
+        };
+
+        if id.trim_end_matches(',') == device_id && rev.trim_end_matches(',') == revision {
+            return Some(name.to_string());
         }
     }
+
+    None
 }
 
 /// Method from kwin
