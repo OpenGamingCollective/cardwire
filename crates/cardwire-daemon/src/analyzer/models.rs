@@ -8,7 +8,7 @@ use tokio::{
 
 use crate::analyzer::{
     dynamic_analysis::{
-        check_cardwire_allow, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ
+        check_cardwire_allow, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ, get_app_id_wayland
     }, static_analysis
 };
 #[repr(C)]
@@ -27,6 +27,7 @@ pub struct CloseEvent {
 #[derive(Debug, Copy, Clone)]
 pub struct ReportEvent {
     pub pid: u32,
+    pub ppid: u32,
     pub comm: [u8; 16],
 }
 
@@ -127,9 +128,23 @@ impl CardwireAnalyzer {
                             }
                             let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
                             // only log if we didn't see the pid before
-                            if event.pid != previous_reported_pid && let Ok(comm) = str::from_utf8(&event.comm) {
-                                info!("{} with pid {} got blocked", &comm, event.pid);
+                            if event.pid != previous_reported_pid {
                                 previous_reported_pid = event.pid;
+                                task::spawn(async move {
+                                    let comm = match str::from_utf8(&event.comm){
+                                        Ok(c) => c,
+                                        Err(_) => return,
+                                    };
+                                    if let Some(app_id) = get_app_id_wayland(event.pid, event.ppid).await {
+                                        info!("{} with pid {} got blocked", &app_id, event.pid);
+                                    } else {
+                                        // ignore comm named electron, it's just a child of the real process
+                                        if comm.trim_end_matches("\0").trim() == "electron" {
+                                            return;
+                                        }
+                                        info!("{} with pid {} got blocked", &comm, event.pid);
+                                    };
+                                });
                             }
                         }
                         guard.clear_ready();

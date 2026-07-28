@@ -1,7 +1,34 @@
 //! Functions for dynamic analysis, contains:
 //! - gamemoderun analysis
 //! - library analysis
-use std::collections::HashMap;
+use std::{
+    collections::HashMap, env, fs, path::{Path, PathBuf}, time::Duration
+};
+
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader}, net::UnixStream
+};
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Desktop {
+    Niri,
+    Gnome,
+    Plasma,
+    Cosmic,
+}
+
+impl Desktop {
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "niri" => Some(Desktop::Niri),
+            "gnome" => Some(Desktop::Gnome),
+            "plasma" => Some(Desktop::Plasma),
+            "cosmic" => Some(Desktop::Cosmic),
+            _ => None,
+        }
+    }
+}
 
 /// Read the proc `environ` file to find the `SteamAppId=` string
 /// used to identify both native and proton games
@@ -80,6 +107,71 @@ pub fn check_gpu_env(environ: &[u8]) -> bool {
     }
     // Not present
     false
+}
+
+/// pid to wayland app id, needs to be async to wait
+pub async fn get_app_id_wayland(pid: u32, ppid: u32) -> Option<String> {
+    let desktop_str: String = match env::var("XDG_CURRENT_DESKTOP") {
+        Ok(value) => value,
+        Err(_) => return None,
+    };
+    let desktop: Desktop = Desktop::from_str(&desktop_str)?;
+    match desktop {
+        // We use the niri ipc to get the window real name
+        Desktop::Niri => {
+            if let Some(socket_path) = find_niri_socket() {
+                // Connect
+
+                let max_retries = 40;
+                let delay = Duration::from_millis(50);
+                for _ in 0..max_retries {
+                    let mut socket = UnixStream::connect(socket_path.clone()).await.ok()?;
+                    // Request
+                    socket.write_all(b"{\"Windows\":null}\n").await.ok()?;
+                    socket.flush().await.ok()?;
+
+                    // Read
+                    let mut reader = BufReader::new(socket);
+                    let mut reply = String::new();
+                    reader.read_line(&mut reply).await.ok()?;
+                    let json: serde_json::Value = serde_json::from_str(&reply).ok()?;
+                    let app_id = json["Ok"]["Windows"]
+                        .as_array()?
+                        .iter()
+                        .find(|w| {
+                            w["pid"].as_u64() == Some(pid as u64)
+                                || w["pid"].as_u64() == Some(ppid as u64)
+                        })
+                        .and_then(|w| w["app_id"].as_str())
+                        .map(|s| s.to_string());
+                    if app_id.is_some() {
+                        return app_id;
+                    } else {
+                        tokio::time::sleep(delay).await;
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    None
+}
+
+fn find_niri_socket() -> Option<PathBuf> {
+    let run_path = Path::new("/run/user");
+    for user in run_path.read_dir().ok()? {
+        if let Ok(user) = user
+            && let Ok(dir_content) = fs::read_dir(user.path())
+        {
+            for entry in dir_content.flatten() {
+                if entry.file_name().to_string_lossy().contains("niri.wayland") {
+                    return Some(entry.path());
+                }
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
