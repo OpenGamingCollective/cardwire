@@ -13,13 +13,13 @@ use crate::analyzer::{
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct Event {
+pub struct ExecEvent {
     pub pid: u32,
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct Close {
+pub struct CloseEvent {
     pub pid: u32,
 }
 
@@ -71,14 +71,14 @@ impl CardwireAnalyzer {
                 Ok(mut guard) = exec_ring.ready_mut(Interest::READABLE) => {
                     if guard.ready().is_readable() {
                         while let Some(item) = guard.get_inner_mut().next() {
-                            if item.len() < std::mem::size_of::<Event>() {
+                            if item.len() < std::mem::size_of::<ExecEvent>() {
                                 debug!("Skipping malformed exec event. Size: {}", item.len());
                                 continue;
                             }
-                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Event) };
+                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
                             let this = Arc::clone(&shared_self);
                             task::spawn(async move {
-                                this.spawn_open_analyzer(event).await
+                                this.spawn_exec_analyzer(event).await
                             });
                         }
                         guard.clear_ready();
@@ -88,11 +88,11 @@ impl CardwireAnalyzer {
                 Ok(mut guard) = close_ring.ready_mut(Interest::READABLE) => {
                     if guard.ready().is_readable() {
                         while let Some(item) = guard.get_inner_mut().next() {
-                            if item.len() < std::mem::size_of::<Close>() {
+                            if item.len() < std::mem::size_of::<CloseEvent>() {
                                 debug!("Skipping malformed close event. Size: {}", item.len());
                                 continue;
                             }
-                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Close) };
+                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const CloseEvent) };
                             let this = Arc::clone(&shared_self);
                             task::spawn(async move {
                                 this.spawn_remove_analyzer(event).await
@@ -105,7 +105,7 @@ impl CardwireAnalyzer {
         }
     }
 
-    async fn spawn_open_analyzer(&self, event: Event) -> () {
+    async fn spawn_exec_analyzer(&self, event: ExecEvent) -> () {
         let time = Instant::now();
         let pid_map = self.pid_map.read().await;
         if pid_map.get(&event.pid, 0).is_ok() {
@@ -131,7 +131,7 @@ impl CardwireAnalyzer {
             }
         }
     }
-    async fn spawn_remove_analyzer(&self, event: Close) -> () {
+    async fn spawn_remove_analyzer(&self, event: CloseEvent) -> () {
         let mut pid_map = self.pid_map.write().await;
         if pid_map.remove(&event.pid).is_ok() {
             debug!("REMOVE: pid: {}", event.pid);
@@ -241,22 +241,22 @@ mod tests {
         let item: Vec<u8> = vec![
             0x01, 0x00, 0x00, 0x00, // pid = 1
         ];
-        assert!(item.len() >= std::mem::size_of::<Event>());
-        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Event) };
+        assert!(item.len() >= std::mem::size_of::<ExecEvent>());
+        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
         assert_eq!(event.pid, 1);
     }
 
     #[test]
     fn test_event_deserialization_rejects_undersized_buffer() {
         let item: Vec<u8> = vec![0x01, 0x00, 0x00]; // 3 bytes, Event needs 4
-        assert!(item.len() < std::mem::size_of::<Event>());
+        assert!(item.len() < std::mem::size_of::<ExecEvent>());
     }
 
     #[test]
     fn test_event_deserialization_with_large_pid() {
         // pid = 0xFFFFFFFF (u32::MAX)
         let item: Vec<u8> = vec![0xFF, 0xFF, 0xFF, 0xFF];
-        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Event) };
+        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
         assert_eq!(event.pid, u32::MAX);
     }
 
@@ -265,8 +265,8 @@ mod tests {
         let item: Vec<u8> = vec![
             0x2A, 0x00, 0x00, 0x00, // pid = 42
         ];
-        assert!(item.len() >= std::mem::size_of::<Close>());
-        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const Close) };
+        assert!(item.len() >= std::mem::size_of::<CloseEvent>());
+        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const CloseEvent) };
         assert_eq!(event.pid, 42);
     }
 
