@@ -1,5 +1,6 @@
 use std::{
-    collections::HashMap, fmt::{self, Display}
+    collections::HashMap,
+    fmt::{self, Display},
 };
 use strum::{EnumIter, FromRepr, VariantArray};
 
@@ -88,7 +89,7 @@ pub struct SettingState {
     pub state_checked: bool,
     pub battery_checked: bool,
     pub battery_mode: Option<Mode>,
-    pub tray_config: crate::tray::TrayConfig,
+    pub gui_config: crate::gui_config::GuiConfig,
 }
 
 #[derive(Clone, Debug)]

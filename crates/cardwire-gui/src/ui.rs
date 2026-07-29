@@ -1,14 +1,19 @@
 use iced::{
-    Alignment, Border, Color, Element, Font, Length::{Fill, FillPortion, Fixed}, widget::{
-        button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler
-    }
+    Alignment, Border, Color, Element, Font,
+    Length::{Fill, FillPortion, Fixed},
+    widget::{
+        button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler,
+    },
 };
 use iced_aw::DropDown;
 use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    helpers::GpuDevice, message::Message, models::{LsofData, MainState, Mode, Page, PciDevice, SettingState}, tray::TrayConfig
+    gui_config::{GuiConfig, PrimaryClickAction},
+    helpers::GpuDevice,
+    message::Message,
+    models::{LsofData, MainState, Mode, Page, PciDevice, SettingState},
 };
 
 // Custom macro for box theming, used by cards
@@ -507,21 +512,93 @@ pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Mes
     )
     .style(|_| box_theme!())
     .width(Fill);
-    let tray_settings = tray_setting_section(setting_state.tray_config);
+    let gui_settings = gui_setting_section(setting_state.gui_config.clone());
     col = col
         .push(nvidia_setting)
         .push(state_setting)
         .push(battery_setting)
         .push(battery_mode)
-        .push(tray_settings);
+        .push(gui_settings);
     col.into()
 }
 
-fn tray_setting_section(config: TrayConfig) -> Element<'static, Message> {
+fn gui_setting_section(config: GuiConfig) -> Element<'static, Message> {
+    let start_in_tray_config = config.clone();
+    let action_config = config.clone();
+    let integrated_config = config.clone();
+    let hybrid_config = config.clone();
+    let manual_config = config.clone();
+    let smart_config = config.clone();
+    let can_disable_integrated = config.primary_click_modes.len() > 1
+        || !config.primary_click_modes.contains(&Mode::Integrated);
+    let can_disable_hybrid =
+        config.primary_click_modes.len() > 1 || !config.primary_click_modes.contains(&Mode::Hybrid);
+    let can_disable_manual =
+        config.primary_click_modes.len() > 1 || !config.primary_click_modes.contains(&Mode::Manual);
+    let can_disable_smart =
+        config.primary_click_modes.len() > 1 || !config.primary_click_modes.contains(&Mode::Smart);
+    let primary_click_mode_settings =
+        (config.primary_click_action == PrimaryClickAction::SwitchMode).then(|| {
+            column![
+                text("Modes to switch between:").size(16),
+                row![
+                    text("Integrated").width(Fixed(130.0)),
+                    toggler(config.primary_click_modes.contains(&Mode::Integrated))
+                        .on_toggle_maybe(can_disable_integrated.then(|| move |enabled| {
+                            Message::UpdateGuiConfig(
+                                integrated_config
+                                    .clone()
+                                    .with_primary_click_mode(Mode::Integrated, enabled),
+                            )
+                        }),),
+                ]
+                .align_y(Alignment::Center),
+                row![
+                    text("Hybrid").width(Fixed(130.0)),
+                    toggler(config.primary_click_modes.contains(&Mode::Hybrid)).on_toggle_maybe(
+                        can_disable_hybrid.then(|| move |enabled| {
+                            Message::UpdateGuiConfig(
+                                hybrid_config
+                                    .clone()
+                                    .with_primary_click_mode(Mode::Hybrid, enabled),
+                            )
+                        }),
+                    ),
+                ]
+                .align_y(Alignment::Center),
+                row![
+                    text("Manual").width(Fixed(130.0)),
+                    toggler(config.primary_click_modes.contains(&Mode::Manual)).on_toggle_maybe(
+                        can_disable_manual.then(|| move |enabled| {
+                            Message::UpdateGuiConfig(
+                                manual_config
+                                    .clone()
+                                    .with_primary_click_mode(Mode::Manual, enabled),
+                            )
+                        }),
+                    ),
+                ]
+                .align_y(Alignment::Center),
+                row![
+                    text("Smart").width(Fixed(130.0)),
+                    toggler(config.primary_click_modes.contains(&Mode::Smart)).on_toggle_maybe(
+                        can_disable_smart.then(|| move |enabled| {
+                            Message::UpdateGuiConfig(
+                                smart_config
+                                    .clone()
+                                    .with_primary_click_mode(Mode::Smart, enabled),
+                            )
+                        }),
+                    ),
+                ]
+                .align_y(Alignment::Center),
+            ]
+            .spacing(10)
+        });
     container(
         column![
-            text("Tray Settings").size(20),
-            text("Choose the two modes toggled by primary-clicking the tray icon.")
+            text("GUI Settings").size(20),
+            text("Configure Cardwire's startup and tray icon behavior.")
                 .color(Color::from_rgb(0.6, 0.6, 0.6)),
             row![
                 column![
@@ -532,27 +609,26 @@ fn tray_setting_section(config: TrayConfig) -> Element<'static, Message> {
                 ],
                 horizontal(),
                 toggler(config.start_in_tray).on_toggle(move |start_in_tray| {
-                    Message::UpdateTrayConfig(TrayConfig {
+                    Message::UpdateGuiConfig(GuiConfig {
                         start_in_tray,
-                        ..config
+                        ..start_in_tray_config.clone()
                     })
                 }),
             ]
             .align_y(Alignment::Center),
             row![
-                text("Toggle from:").width(Fixed(130.0)),
-                pick_list(Mode::VARIANTS, Some(config.toggle_from), move |mode| {
-                    Message::UpdateTrayConfig(config.with_toggle_from(mode))
-                },),
+                text("Primary click:").width(Fixed(130.0)),
+                pick_list(
+                    PrimaryClickAction::VARIANTS,
+                    Some(config.primary_click_action),
+                    move |primary_click_action| Message::UpdateGuiConfig(GuiConfig {
+                        primary_click_action,
+                        ..action_config.clone()
+                    }),
+                ),
             ]
             .align_y(Alignment::Center),
-            row![
-                text("Toggle to:").width(Fixed(130.0)),
-                pick_list(Mode::VARIANTS, Some(config.toggle_to), move |mode| {
-                    Message::UpdateTrayConfig(config.with_toggle_to(mode))
-                },),
-            ]
-            .align_y(Alignment::Center),
+            primary_click_mode_settings,
         ]
         .spacing(10),
     )

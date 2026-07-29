@@ -1,129 +1,19 @@
 use std::{
-    collections::{BTreeMap, HashMap}, fmt, fs::{self, OpenOptions}, io::{self, Write}, path::{Path, PathBuf}, sync::atomic::{AtomicU64, Ordering}
+    collections::{BTreeMap, HashMap},
+    fmt,
 };
 
 use ksni::{MenuItem, Tray, TrayMethods};
-use serde::{Deserialize, Serialize};
 use strum::VariantArray;
 use tokio::sync::mpsc;
 
 use crate::{helpers::GpuDevice, models::Mode};
 
-const CONFIG_FILE: &str = "tray.toml";
 const ICON_PREFIX: &str = "com.github.opengamingcollective.cardwire.tray";
-static TEMPORARY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct TrayConfig {
-    pub toggle_from: Mode,
-    pub toggle_to: Mode,
-    #[serde(default)]
-    pub start_in_tray: bool,
-}
-
-impl Default for TrayConfig {
-    fn default() -> Self {
-        Self {
-            toggle_from: Mode::Integrated,
-            toggle_to: Mode::Hybrid,
-            start_in_tray: false,
-        }
-    }
-}
-
-impl TrayConfig {
-    pub fn load() -> io::Result<Self> {
-        let path = config_path()?;
-        if path.exists() {
-            Self::load_from(&path)
-        } else {
-            Ok(Self::default())
-        }
-    }
-
-    fn load_from(path: &Path) -> io::Result<Self> {
-        let config = toml::from_str(&fs::read_to_string(path)?).map_err(io::Error::other)?;
-        Self::validate(config)
-    }
-
-    pub fn save(self) -> io::Result<()> {
-        self.save_to(&config_path()?)
-    }
-
-    fn save_to(self, path: &Path) -> io::Result<()> {
-        Self::validate(self)?;
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let contents = toml::to_string_pretty(&self).map_err(io::Error::other)?;
-        let sequence = TEMPORARY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let temporary = path.with_extension(format!("toml.tmp-{}-{sequence}", std::process::id()));
-        let result = (|| {
-            let mut file = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(&temporary)?;
-            file.write_all(contents.as_bytes())?;
-            file.sync_all()?;
-            fs::rename(&temporary, path)
-        })();
-        if result.is_err() {
-            let _ = fs::remove_file(temporary);
-        }
-        result
-    }
-
-    pub fn next_mode(self, current: Mode) -> Mode {
-        if current == self.toggle_from {
-            self.toggle_to
-        } else {
-            self.toggle_from
-        }
-    }
-
-    pub fn with_toggle_from(mut self, mode: Mode) -> Self {
-        let previous = self.toggle_from;
-        self.toggle_from = mode;
-        if self.toggle_to == mode {
-            self.toggle_to = previous;
-        }
-        self
-    }
-
-    pub fn with_toggle_to(mut self, mode: Mode) -> Self {
-        let previous = self.toggle_to;
-        self.toggle_to = mode;
-        if self.toggle_from == mode {
-            self.toggle_from = previous;
-        }
-        self
-    }
-
-    fn validate(config: Self) -> io::Result<Self> {
-        if config.toggle_from == config.toggle_to {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "tray toggle modes must be different",
-            ))
-        } else {
-            Ok(config)
-        }
-    }
-}
-
-fn config_path() -> io::Result<PathBuf> {
-    xdg::BaseDirectories::with_prefix("cardwire")
-        .get_config_home()
-        .map(|path| path.join(CONFIG_FILE))
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not determine config home"))
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TrayAction {
-    ToggleConfiguredMode,
+    PrimaryClick,
     SetMode(Mode),
     SetGpuBlock { id: usize, blocked: bool },
     OpenGui,
@@ -166,7 +56,7 @@ impl Tray for CardwireTray {
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
-        let _ = self.action_tx.send(TrayAction::ToggleConfiguredMode);
+        let _ = self.action_tx.send(TrayAction::PrimaryClick);
     }
 
     fn tool_tip(&self) -> ksni::ToolTip {
@@ -353,14 +243,6 @@ pub async fn notify(message: String) {
 mod tests {
     use super::*;
 
-    fn temporary_path(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "cardwire-tray-{name}-{}-{}",
-            std::process::id(),
-            std::thread::current().name().unwrap_or("test")
-        ))
-    }
-
     fn gpu(name: &str, default: bool, blocked: bool, power_state: &str) -> GpuDevice {
         GpuDevice {
             id: 0,
@@ -384,94 +266,10 @@ mod tests {
     }
 
     #[test]
-    fn defaults_to_integrated_and_hybrid() {
-        let config = TrayConfig::default();
-        assert_eq!(config.toggle_from, Mode::Integrated);
-        assert_eq!(config.toggle_to, Mode::Hybrid);
-        assert!(!config.start_in_tray);
-    }
-
-    #[test]
-    fn rejects_duplicate_modes() {
-        let path = temporary_path("duplicate");
-        fs::write(&path, "toggle_from = 'smart'\ntoggle_to = 'smart'\n").unwrap();
-        assert_eq!(
-            TrayConfig::load_from(&path).unwrap_err().kind(),
-            io::ErrorKind::InvalidData
-        );
-        fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn saves_and_loads_current_schema() {
-        let path = temporary_path("roundtrip");
-        let expected = TrayConfig {
-            toggle_from: Mode::Manual,
-            toggle_to: Mode::Smart,
-            start_in_tray: true,
-        };
-        expected.save_to(&path).unwrap();
-        assert_eq!(TrayConfig::load_from(&path).unwrap(), expected);
-        fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn concurrent_saves_use_distinct_temporary_files() {
-        let path = temporary_path("concurrent");
-        let configs = [
-            TrayConfig {
-                start_in_tray: true,
-                ..TrayConfig::default()
-            },
-            TrayConfig::default().with_toggle_to(Mode::Smart),
-        ];
-        let writers = configs.map(|config| {
-            let path = path.clone();
-            std::thread::spawn(move || config.save_to(&path))
-        });
-
-        for writer in writers {
-            writer.join().unwrap().unwrap();
-        }
-        let saved = TrayConfig::load_from(&path).unwrap();
-        assert!(configs.contains(&saved));
-        fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn selecting_duplicate_endpoint_swaps_the_other_endpoint() {
-        let config = TrayConfig::default().with_toggle_from(Mode::Hybrid);
-        assert_eq!(config.toggle_from, Mode::Hybrid);
-        assert_eq!(config.toggle_to, Mode::Integrated);
-    }
-
-    #[test]
-    fn chooses_configured_toggle_destination() {
-        let config = TrayConfig {
-            toggle_from: Mode::Smart,
-            toggle_to: Mode::Manual,
-            start_in_tray: false,
-        };
-        assert_eq!(config.next_mode(Mode::Smart), Mode::Manual);
-        assert_eq!(config.next_mode(Mode::Hybrid), Mode::Smart);
-    }
-
-    #[test]
-    fn loads_legacy_schema_with_visible_gui_default() {
-        let path = temporary_path("legacy");
-        fs::write(&path, "toggle_from = 'integrated'\ntoggle_to = 'hybrid'\n").unwrap();
-        assert!(!TrayConfig::load_from(&path).unwrap().start_in_tray);
-        fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn primary_activation_requests_configured_toggle() {
+    fn primary_activation_requests_primary_click() {
         let (mut tray, mut actions) = tray(Some(Mode::Integrated));
         tray.activate(0, 0);
-        assert_eq!(
-            actions.try_recv().unwrap(),
-            TrayAction::ToggleConfiguredMode
-        );
+        assert_eq!(actions.try_recv().unwrap(), TrayAction::PrimaryClick);
     }
 
     #[test]
