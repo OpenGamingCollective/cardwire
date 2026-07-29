@@ -56,22 +56,27 @@ cardwire set hybrid
 
 ### Smart Mode
 
-Smart mode blocks the dedicated GPU by default like integrated mode, but uses eBPF to analyze each application at launch and selectively allow GPU access for approved apps.
+Smart mode blocks the dedicated GPU by default like integrated mode, but uses a real time analyzer to scan each application at launch and selectively allow GPU access for approved apps.
 
-It checks:
+Cardwire natively integrates with desktop environments (GNOME, KDE) via a **Switcheroo DBus shim**. This means you can simply right-click an application in your app launcher and select **"Launch using Discrete Graphics Card"**, and Cardwire will automatically unblock the GPU for that application.
 
-- `CARDWIRE_ALLOW` env var (highest priority) (1 = allow 0 = block)
+> [!TIP]
+> When an application is launched via the Switcheroo UI or with `CARDWIRE_FORCE_DGPU=1`, Cardwire will hide the integrated GPU (iGPU) from the app. The app will _only_ be able to see and use the dedicated GPU, guaranteeing it runs on the correct hardware.
+
+When launching apps in Smart mode, cardwire checks for the following to allow the dGPU:
+
+- `CARDWIRE_ALLOW=1` env var (highest priority, unblocks the GPU but doesn't force the app to use it)
+- `CARDWIRE_FORCE_DGPU=1` env var (unblocks the GPU, forces the app to use it, and completely hides the iGPU)
 - Steam games (`SteamAppId=`)
-- gamemode (`libgamemodeauto.so`)
-- Flatpak apps with XDG `PrefersNonDefaultGpu=true`
-- and explicit GPU env vars (`DRI_PRIME=1`, `__NV_PRIME_RENDER_OFFLOAD=1`)
+- Flatpak apps with XDG `PrefersNonDefaultGpu=true` (Only on system that does not implement switcheroo/cardwire)
+- Explicit GPU env vars (`DRI_PRIME=1`, `__NV_PRIME_RENDER_OFFLOAD=1`)
 
 ```bash
 cardwire set smart
 ```
->[!Note]
-> This feature is a work in progress. The detection methods will be improved in future updates.
 
+> [!Note]
+> This feature is a work in progress. The detection methods will be improved in future updates.
 
 ### Manual
 
@@ -120,12 +125,6 @@ To enable/disable it:
 cardwire config experimental-nvidia-block true
 ```
 
-And save
-
-```bash
-cardwire config save
-```
-
 ### Battery Auto Switch Mode
 
 Cardwire can automatically switch GPU modes when the system switches between battery and AC power. When `battery_auto_switch` is enabled, cardwire switches to integrated mode on battery and back to a configurable mode when on AC power.
@@ -142,12 +141,6 @@ To enable/disable it:
 cardwire config battery-auto-switch true
 ```
 
-And save
-
-```bash
-cardwire config save
-```
-
 The mode cardwire switches to on AC power is controlled by `battery_auto_switch_mode`. This can be set to `integrated`, `hybrid`, `manual`, or `smart`.
 
 To get the current battery auto switch mode:
@@ -160,12 +153,6 @@ To set the battery auto switch mode:
 
 ```bash
 cardwire config battery-auto-switch-mode hybrid
-```
-
-And save
-
-```bash
-cardwire config save
 ```
 
 ### Auto Apply Gpu State
@@ -193,20 +180,14 @@ Example output:
 
 In this example, both GPUs are set to allow access (block: false) when manual mode is restored
 
-To get the current battery auto switch mode:
+To get the current setting:
 
 ```bash
 cardwire config auto-apply-gpu-state
 ```
 
-To set the battery auto switch mode:
+To set the setting:
 
 ```bash
 cardwire config auto-apply-gpu-state true
-```
-
-And save
-
-```bash
-cardwire config save
 ```
