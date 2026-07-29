@@ -136,14 +136,14 @@ end:
 				bpf_map_lookup_elem(&cw_allowed_pid, &pid);
 
 			// if the isn't in the map, check the ppid
-			if (!allow_map_value) {
-				allow_map_value = bpf_map_lookup_elem(
+			if (!allow_map_value_pid) {
+				allow_map_value_pid = bpf_map_lookup_elem(
 					&cw_allowed_pid, &ppid);
 			}
 			// IF the inode is linked to a iGPU and the map_key exist
-			if (allow_map_value) {
+			if (allow_map_value_pid) {
 				// This mean the inode is allowed, but to check if we should force the dGPU or not,value should be at 0
-				if (*allow_map_value == 0) {
+				if (*allow_map_value_pid == 0) {
 					// We should hide the iGPU
 					return -ENOENT;
 				}
