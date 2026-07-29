@@ -2,7 +2,9 @@
 
 ## Arch/CachyOS/Arch-based
 
-using AUR:
+The official Open Gaming Collective Arch packages are available here: [ogc-arch-packaging](https://github.com/OpenGamingCollective/ogc-arch-packaging#Using-the-repo)
+
+Alternatively, using the AUR:
 
 ```bash
 yay -S cardwire
@@ -84,7 +86,33 @@ sudo systemctl enable cardwired --now
 > [!NOTE]
 > Thanks to the Fyra Labs / Terra team for packaging and maintaining Cardwire on Fedora !!
 
-## Ubuntu
+## AerynOS
+
+Cardwire is available in the official AerynOS repositories.
+
+```bash
+sudo moss install cardwire
+```
+
+And start the service:
+
+```bash
+sudo systemctl enable cardwired --now
+```
+
+## Ubuntu / Debian
+
+A `.deb` package is available on the [releases page](https://github.com/OpenGamingCollective/cardwire/releases). You can download and install it using `apt`.
+
+```bash
+sudo apt install ./cardwire_*.deb
+```
+
+```bash
+sudo systemctl enable cardwired --now
+```
+
+### Build from source (Alternative)
 
 Install build dependencies:
 
@@ -106,12 +134,6 @@ make build
 sudo make install
 ```
 
-Then [enable BPF LSM](#enabling-bpf-lsm) and start the service:
-
-```bash
-sudo systemctl enable cardwired --now
-```
-
 ## Other distros
 
 For now, other distros must clone the repo and use `make` to build and install Cardwire. You will also need to enable BPF LSM manually — see the [Enabling BPF LSM](#enabling-bpf-lsm) section above.
@@ -130,6 +152,5 @@ make build
 sudo make install
 ```
 
-> [!NOTE]
-> A .deb package for Debian based system is planned.
+
 
