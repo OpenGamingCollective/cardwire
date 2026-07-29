@@ -94,20 +94,10 @@ pub fn check_env(env_var: &str, environ: &[u8]) -> Option<bool> {
 }
 
 pub fn check_gpu_env(environ: &[u8]) -> bool {
-    for var in environ.split(|&b| b == 0) {
-        if var.starts_with(b"DRI_PRIME=") {
-            if var.get(10) == Some(&b'1') {
-                return true; // DRI_PRIME=1
-            } else {
-                return false; // DRI_PRIME=0
-            }
-        } else if var.starts_with(b"__NV_PRIME_RENDER_OFFLOAD=") {
-            if var.get(26) == Some(&b'1') {
-                return true; // =1
-            } else {
-                return false; // = 0
-            }
-        }
+    if let Some(val) = check_env("DRI_PRIME", &environ) {
+        return val;
+    } else if let Some(val) = check_env("__NV_PRIME_RENDER_OFFLOAD", &environ) {
+        return val;
     }
     // Not present
     false
