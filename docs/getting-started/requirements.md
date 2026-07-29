@@ -1,16 +1,38 @@
 # Requirements
 
-Requirements to be able to run Cardwire:
+To run Cardwire, your system needs to meet a few core requirements. **Good news: if you are using a modern Linux distribution, you likely already meet all of these out of the box!**
 
-## Kernel
+## 1. Supported Distributions (Kernel & System)
 
-### 1. Version 5.7 or later
+Cardwire requires:
+- **Linux Kernel 5.8 or later** (with `CONFIG_BPF_LSM` enabled).
+- **systemd** as the init system.
 
-```bash
-uname -r
-```
+> [!TIP]
+> The following distributions are known to work out of the box with zero manual configuration required:
+> - **OGC Distros (Officially Supported)**: Bazzite, Ultramarine, Nobara, PikaOS, ChimeraOS, winesapOS
+> - **NixOS (Officially Supported)**
+> - Arch Linux / CachyOS
+> - Fedora (and Atomic variants)
+> - Debian
 
-### 2. Built with `CONFIG_BPF_LSM` enabled
+If you are using one of these distributions, you can safely skip the advanced verification below and head straight to the [Installation Guide](installation.md).
+
+> [!WARNING]
+> Non-systemd distros are currently not supported. If you want to use Cardwire on a non-systemd distro, either open a PR with patches or configure the required services on your setup.
+
+## 2. Display Server
+
+> [!CAUTION]
+> Cardwire only supports **Wayland**. X11 is unsupported.
+
+---
+
+## Advanced: Manual Kernel Verification
+
+If you are not using a distribution listed above, or if you are compiling your own kernel, you will need to manually verify that eBPF LSM is enabled.
+
+### 1. Verify `CONFIG_BPF_LSM` is enabled
 
 On e.g. Ubuntu/Fedora:
 
@@ -24,11 +46,11 @@ On other distros possibly:
 zcat /proc/config.gz | grep CONFIG_BPF_LSM
 ```
 
-> returns `CONFIG_BPF_LSM=y` if it's enabled
+> Returns `CONFIG_BPF_LSM=y` if it's enabled.
 
-### 3. Bpf present in the boot cmdline
+### 2. Verify BPF is in the boot cmdline
 
-On most distros
+Check your current boot parameters:
 
 ```bash
 cat /proc/cmdline | tr ' ' '\n'|grep lsm
@@ -46,16 +68,12 @@ or
 zcat /proc/config.gz | grep CONFIG_LSM=
 ```
 
-> Outputs e.g. `lsm=landlock,yama,apparmor,bpf` or `CONFIG_LSM="landlock,lockdown,yama,integrity,apparmor,bpf"`
+> Outputs e.g. `lsm=landlock,yama,apparmor,bpf` or `CONFIG_LSM="landlock,lockdown,yama,integrity,apparmor,bpf"`.
+> If it contains 'bpf', bpf is already enabled and usable in your system!
 
-> If it contains 'bpf', bpf is already enabled and usable in your system, go to [installation](getting-started/installation.md)
+### Enabling BPF LSM (with GRUB)
 
-#### Enabling BPF LSM (with GRUB)
-
-> [!CAUTION]
-> bpf should already be enabled by default on these distros: Arch, CachyOS, Bazzite, Fedora, NixOS, Debian
-
-Edit `/etc/default/grub` and append `bpf` to `GRUB_CMDLINE_LINUX_DEFAULT`, keeping all existing entries:
+If `bpf` is not in your boot cmdline, edit `/etc/default/grub` and append `bpf` to `GRUB_CMDLINE_LINUX_DEFAULT`, keeping all existing entries:
 
 ```bash
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash lsm=landlock,lockdown,yama,integrity,apparmor,bpf"
@@ -75,15 +93,3 @@ Apply and reboot:
 ```bash
 sudo reboot
 ```
-
-## System
-
-### Non-systemd distros
-
-> [!WARNING]
-> Cardwire only supports systemd-based distros. If you want to use it on a non-systemd distro, either open a PR with patches for non-systemd or get it working on your setup.
-
-### Display server support
-
-> [!CAUTION]
-> X11 is not tested and not supported. Cardwire only supports Wayland.
