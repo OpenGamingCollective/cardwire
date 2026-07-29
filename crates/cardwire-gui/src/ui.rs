@@ -520,117 +520,75 @@ pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Mes
 fn gui_setting_section(config: GuiConfig) -> Element<'static, Message> {
     let start_in_tray_config = config.clone();
     let action_config = config.clone();
-    let integrated_config = config.clone();
-    let hybrid_config = config.clone();
-    let manual_config = config.clone();
-    let smart_config = config.clone();
-    let can_disable_integrated = config.primary_click_modes.len() > 1
-        || !config.primary_click_modes.contains(&Mode::Integrated);
-    let can_disable_hybrid =
-        config.primary_click_modes.len() > 1 || !config.primary_click_modes.contains(&Mode::Hybrid);
-    let can_disable_manual =
-        config.primary_click_modes.len() > 1 || !config.primary_click_modes.contains(&Mode::Manual);
-    let can_disable_smart =
-        config.primary_click_modes.len() > 1 || !config.primary_click_modes.contains(&Mode::Smart);
     let primary_click_mode_settings =
         (config.primary_click_action == PrimaryClickAction::SwitchMode).then(|| {
-            column![
-                text("Modes to switch between:").size(16),
-                row![
-                    text("Integrated").width(Fixed(130.0)),
-                    toggler(config.primary_click_modes.contains(&Mode::Integrated))
-                        .on_toggle_maybe(can_disable_integrated.then_some(move |enabled| {
-                            Message::UpdateGuiConfig(
-                                integrated_config
-                                    .clone()
-                                    .with_primary_click_mode(Mode::Integrated, enabled),
-                            )
-                        }),),
-                ]
-                .align_y(Alignment::Center),
-                row![
-                    text("Hybrid").width(Fixed(130.0)),
-                    toggler(config.primary_click_modes.contains(&Mode::Hybrid)).on_toggle_maybe(
-                        can_disable_hybrid.then_some(move |enabled| {
-                            Message::UpdateGuiConfig(
-                                hybrid_config
-                                    .clone()
-                                    .with_primary_click_mode(Mode::Hybrid, enabled),
-                            )
-                        }),
-                    ),
-                ]
-                .align_y(Alignment::Center),
-                row![
-                    text("Manual").width(Fixed(130.0)),
-                    toggler(config.primary_click_modes.contains(&Mode::Manual)).on_toggle_maybe(
-                        can_disable_manual.then_some(move |enabled| {
-                            Message::UpdateGuiConfig(
-                                manual_config
-                                    .clone()
-                                    .with_primary_click_mode(Mode::Manual, enabled),
-                            )
-                        }),
-                    ),
-                ]
-                .align_y(Alignment::Center),
-                row![
-                    text("Smart").width(Fixed(130.0)),
-                    toggler(config.primary_click_modes.contains(&Mode::Smart)).on_toggle_maybe(
-                        can_disable_smart.then_some(move |enabled| {
-                            Message::UpdateGuiConfig(
-                                smart_config
-                                    .clone()
-                                    .with_primary_click_mode(Mode::Smart, enabled),
-                            )
-                        }),
-                    ),
-                ]
-                .align_y(Alignment::Center),
-            ]
-            .spacing(10)
+            Mode::VARIANTS.iter().copied().fold(
+                column![text("Modes to switch between:").size(16)].spacing(10),
+                |column, mode| {
+                    let mode_config = config.clone();
+                    let enabled = config.primary_click_modes.contains(&mode);
+                    let can_disable = config.primary_click_modes.len() > 1 || !enabled;
+
+                    column.push(
+                        row![
+                            text(mode.to_string()).width(Fixed(130.0)),
+                            toggler(enabled).on_toggle_maybe(can_disable.then_some(
+                                move |enabled| {
+                                    Message::UpdateGuiConfig(
+                                        mode_config.clone().with_primary_click_mode(mode, enabled),
+                                    )
+                                }
+                            ),),
+                        ]
+                        .align_y(Alignment::Center),
+                    )
+                },
+            )
         });
-    container(
-        column![
-            text("GUI Settings").size(20),
-            text("Configure Cardwire's startup and tray icon behavior.")
-                .color(Color::from_rgb(0.6, 0.6, 0.6)),
-            row![
-                column![
-                    text("Start in tray"),
-                    text("Do not open the GUI when Cardwire starts. Takes effect next launch.")
-                        .size(13)
-                        .color(Color::from_rgb(0.6, 0.6, 0.6)),
-                ],
-                horizontal(),
-                toggler(config.start_in_tray).on_toggle(move |start_in_tray| {
-                    Message::UpdateGuiConfig(GuiConfig {
-                        start_in_tray,
-                        ..start_in_tray_config.clone()
-                    })
-                }),
-            ]
-            .align_y(Alignment::Center),
-            row![
-                text("Primary click:").width(Fixed(130.0)),
-                pick_list(
-                    PrimaryClickAction::VARIANTS,
-                    Some(config.primary_click_action),
-                    move |primary_click_action| Message::UpdateGuiConfig(GuiConfig {
-                        primary_click_action,
-                        ..action_config.clone()
-                    }),
-                ),
-            ]
-            .align_y(Alignment::Center),
-            primary_click_mode_settings,
+    let mut content = column![
+        text("GUI Settings").size(20),
+        text("Configure Cardwire's startup and tray icon behavior.")
+            .color(Color::from_rgb(0.6, 0.6, 0.6)),
+        row![
+            column![
+                text("Start in tray"),
+                text("Do not open the GUI when Cardwire starts. Takes effect next launch.")
+                    .size(13)
+                    .color(Color::from_rgb(0.6, 0.6, 0.6)),
+            ],
+            horizontal(),
+            toggler(config.start_in_tray).on_toggle(move |start_in_tray| {
+                Message::UpdateGuiConfig(GuiConfig {
+                    start_in_tray,
+                    ..start_in_tray_config.clone()
+                })
+            }),
         ]
-        .spacing(10),
-    )
-    .style(|_| box_theme!())
-    .width(Fill)
-    .padding(20)
-    .into()
+        .align_y(Alignment::Center),
+        row![
+            text("Primary click:").width(Fixed(130.0)),
+            pick_list(
+                PrimaryClickAction::VARIANTS,
+                Some(config.primary_click_action),
+                move |primary_click_action| Message::UpdateGuiConfig(GuiConfig {
+                    primary_click_action,
+                    ..action_config.clone()
+                }),
+            ),
+        ]
+        .align_y(Alignment::Center),
+    ]
+    .spacing(10);
+
+    if let Some(settings) = primary_click_mode_settings {
+        content = content.push(settings);
+    }
+
+    container(content)
+        .style(|_| box_theme!())
+        .width(Fill)
+        .padding(20)
+        .into()
 }
 
 pub fn pci_page<'a>(pci_list: &'a BTreeMap<String, PciDevice>) -> Element<'a, Message> {
