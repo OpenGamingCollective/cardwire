@@ -94,9 +94,9 @@ pub fn check_env(env_var: &str, environ: &[u8]) -> Option<bool> {
 }
 
 pub fn check_gpu_env(environ: &[u8]) -> bool {
-    if let Some(val) = check_env("DRI_PRIME", &environ) {
+    if let Some(val) = check_env("DRI_PRIME", environ) {
         return val;
-    } else if let Some(val) = check_env("__NV_PRIME_RENDER_OFFLOAD", &environ) {
+    } else if let Some(val) = check_env("__NV_PRIME_RENDER_OFFLOAD", environ) {
         return val;
     }
     // Not present
