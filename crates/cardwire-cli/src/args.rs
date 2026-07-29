@@ -85,6 +85,8 @@ pub enum Commands {
         #[arg(help = "The shell to generate the completions for")]
         shell: Shell,
     },
+    #[command(about = "Complete gpus for shell", hide = true)]
+    CompleteGpus,
 }
 
 #[derive(Subcommand, Debug)]
