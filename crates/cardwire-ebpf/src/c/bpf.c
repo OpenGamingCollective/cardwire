@@ -149,8 +149,16 @@ int cardwire_sys_enter_getdents64(struct trace_event_raw_sys_enter *ctx)
 	// if we in smart mode and the pid is allowed, skip
 	if (is_smart()) {
 		if (is_pid_allowed(pid, ppid)) {
-			// if allowed, skip
-			return 0;
+			__u8 *allow_val =
+				bpf_map_lookup_elem(&cw_allowed_pid, &pid);
+			if (!allow_val) {
+				allow_val = bpf_map_lookup_elem(&cw_allowed_pid,
+								&ppid);
+			}
+			// If force_dgpu is NOT enabled, we can safely skip patching
+			if (allow_val && *allow_val != 0) {
+				return 0;
+			}
 		}
 	}
 
@@ -185,8 +193,16 @@ int cardwire_sys_exit_getdents64(struct trace_event_raw_sys_exit *ctx)
 	// if we in smart mode and the pid is allowed, skip
 	if (is_smart()) {
 		if (is_pid_allowed(pid, ppid)) {
-			// if allowed, skip
-			return 0;
+			__u8 *allow_val =
+				bpf_map_lookup_elem(&cw_allowed_pid, &pid);
+			if (!allow_val) {
+				allow_val = bpf_map_lookup_elem(&cw_allowed_pid,
+								&ppid);
+			}
+			// If force_dgpu is NOT enabled, we can safely skip patching
+			if (allow_val && *allow_val != 0) {
+				return 0;
+			}
 		}
 	}
 

@@ -116,7 +116,8 @@ impl EbpfBlocker {
         }
     }
 
-    pub fn block_inode(&mut self, inode: u64) -> CardwireEbpfResult<()> {
+    /// Block an inode, value should be a either 0(iGPU) or 1 (dGPU)
+    pub fn block_inode(&mut self, inode: u64, value: u8) -> CardwireEbpfResult<()> {
         // Also insert hardcoded values for now
         let mut inode_map: HashMap<_, u64, u8> = HashMap::try_from(
             self.ebpf
@@ -125,7 +126,7 @@ impl EbpfBlocker {
         )
         .map_err(CardwireEbpfError::aya)?;
         inode_map
-            .insert(inode, 1, 0)
+            .insert(inode, value, 0)
             .map_err(CardwireEbpfError::aya)?;
         Ok(())
     }
@@ -155,7 +156,9 @@ impl EbpfBlocker {
         )
         .map_err(CardwireEbpfError::aya)?;
         match inode_map.get(&inode, 0) {
-            Ok(_) => Ok(true),
+            // 1 = dGPU, 0 = iGPU, if the inode is in the map it means the dGPU is meant to be
+            // blocked so true
+            Ok(value) => Ok(value == 1),
             Err(MapError::KeyNotFound) => Ok(false),
             Err(err) => Err(CardwireEbpfError::aya(err)),
         }
