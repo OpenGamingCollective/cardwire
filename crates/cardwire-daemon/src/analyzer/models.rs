@@ -8,7 +8,7 @@ use tokio::{
 
 use crate::analyzer::{
     dynamic_analysis::{
-        check_cardwire_allow, check_cardwire_force_dgpu, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ, get_app_id_wayland
+        check_env, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ, get_app_id_wayland
     }, static_analysis
 };
 #[repr(C)]
@@ -189,10 +189,10 @@ impl CardwireAnalyzer {
             Err(_) => return None,
         };
         // First check CARDWIRE_ALLOW, if  None continue
-        if let Some(allow) = check_cardwire_allow(&environ) {
+        if let Some(allow) = check_env("CARDWIRE_ALLOW", &environ) {
             return Some((allow, 1));
         }
-        if let Some(value) = check_cardwire_force_dgpu(&environ) {
+        if let Some(value) = check_env("CARDWIRE_FORCE_DGPU", &environ) {
             return Some((value, 0));
         }
         let xdg_list = self.xdg_list.read().await;
