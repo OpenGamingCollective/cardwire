@@ -1,19 +1,14 @@
 use iced::{
-    Alignment, Border, Color, Element, Font,
-    Length::{Fill, FillPortion, Fixed},
-    widget::{
-        button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler,
-    },
+    Alignment, Border, Color, Element, Font, Length::{Fill, FillPortion, Fixed}, widget::{
+        button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler
+    }
 };
 use iced_aw::DropDown;
 use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    gui_config::{GuiConfig, PrimaryClickAction},
-    helpers::GpuDevice,
-    message::Message,
-    models::{LsofData, MainState, Mode, Page, PciDevice, SettingState},
+    gui_config::{GuiConfig, PrimaryClickAction}, helpers::GpuDevice, message::Message, models::{LsofData, MainState, Mode, Page, PciDevice, SettingState}
 };
 
 // Custom macro for box theming, used by cards
@@ -544,7 +539,7 @@ fn gui_setting_section(config: GuiConfig) -> Element<'static, Message> {
                 row![
                     text("Integrated").width(Fixed(130.0)),
                     toggler(config.primary_click_modes.contains(&Mode::Integrated))
-                        .on_toggle_maybe(can_disable_integrated.then(|| move |enabled| {
+                        .on_toggle_maybe(can_disable_integrated.then_some(move |enabled| {
                             Message::UpdateGuiConfig(
                                 integrated_config
                                     .clone()
@@ -556,7 +551,7 @@ fn gui_setting_section(config: GuiConfig) -> Element<'static, Message> {
                 row![
                     text("Hybrid").width(Fixed(130.0)),
                     toggler(config.primary_click_modes.contains(&Mode::Hybrid)).on_toggle_maybe(
-                        can_disable_hybrid.then(|| move |enabled| {
+                        can_disable_hybrid.then_some(move |enabled| {
                             Message::UpdateGuiConfig(
                                 hybrid_config
                                     .clone()
@@ -569,7 +564,7 @@ fn gui_setting_section(config: GuiConfig) -> Element<'static, Message> {
                 row![
                     text("Manual").width(Fixed(130.0)),
                     toggler(config.primary_click_modes.contains(&Mode::Manual)).on_toggle_maybe(
-                        can_disable_manual.then(|| move |enabled| {
+                        can_disable_manual.then_some(move |enabled| {
                             Message::UpdateGuiConfig(
                                 manual_config
                                     .clone()
@@ -582,7 +577,7 @@ fn gui_setting_section(config: GuiConfig) -> Element<'static, Message> {
                 row![
                     text("Smart").width(Fixed(130.0)),
                     toggler(config.primary_click_modes.contains(&Mode::Smart)).on_toggle_maybe(
-                        can_disable_smart.then(|| move |enabled| {
+                        can_disable_smart.then_some(move |enabled| {
                             Message::UpdateGuiConfig(
                                 smart_config
                                     .clone()

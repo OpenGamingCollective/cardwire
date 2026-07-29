@@ -1,20 +1,11 @@
 use iced::{
-    Alignment, Element,
-    Length::{Fill, Fixed},
-    Subscription, Task,
-    widget::{column, container, row, stack, text},
-    window,
+    Alignment, Element, Length::{Fill, Fixed}, Subscription, Task, widget::{column, container, row, stack, text}, window
 };
 use log::error;
 use std::collections::BTreeMap;
 
 use crate::{
-    gui_config::{GuiConfig, PrimaryClickAction},
-    helpers::{CardwireDbus, GpuDevice},
-    message::Message,
-    models::{DaemonSettings, MainState, Mode, Page, PciDevice, SettingState},
-    tray::{self, TrayAction, TrayHandle},
-    ui::{self, daemon_setting_page, error_bar, info_bar, pci_page},
+    gui_config::{GuiConfig, PrimaryClickAction}, helpers::{CardwireDbus, GpuDevice}, message::Message, models::{DaemonSettings, MainState, Mode, Page, PciDevice, SettingState}, tray::{self, TrayAction, TrayHandle}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
 };
 
 #[derive(Debug)]

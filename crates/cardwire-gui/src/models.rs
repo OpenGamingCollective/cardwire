@@ -1,6 +1,5 @@
 use std::{
-    collections::HashMap,
-    fmt::{self, Display},
+    collections::HashMap, fmt::{self, Display}
 };
 use strum::{EnumIter, FromRepr, VariantArray};
 
