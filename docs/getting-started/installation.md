@@ -108,8 +108,6 @@ A `.deb` package is available on the [releases page](https://github.com/OpenGami
 sudo apt install ./cardwire_*.deb
 ```
 
-Then [enable BPF LSM](#enabling-bpf-lsm) (if not already enabled by default) and start the service:
-
 ```bash
 sudo systemctl enable cardwired --now
 ```
