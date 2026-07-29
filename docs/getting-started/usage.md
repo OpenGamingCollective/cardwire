@@ -56,7 +56,7 @@ cardwire set hybrid
 
 ### Smart Mode
 
-Smart mode blocks the dedicated GPU by default like integrated mode, but uses a real time analyzer to scan each application at launch and selectively allow GPU access for approved apps.
+Smart mode blocks the dedicated GPU by default like integrated mode, but uses a real-time analyzer to scan each application at launch and selectively allow GPU access for approved apps.
 
 Cardwire natively integrates with desktop environments (GNOME, KDE) via a **Switcheroo DBus shim**. This means you can simply right-click an application in your app launcher and select **"Launch using Discrete Graphics Card"**, and Cardwire will automatically unblock the GPU for that application.
 
