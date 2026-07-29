@@ -39,6 +39,17 @@ async fn main() -> Result<()> {
         .build()
         .await?;
 
+    let conn_builder = connection::Builder::system()?;
+    let _conn = conn_builder
+        .name("net.hadess.SwitcherooControl")?
+        .serve_at(
+            "/net/hadess/SwitcherooControl",
+            daemon.switcheroo_interface.clone(),
+        )?
+        .replace_existing_names(true)
+        .build()
+        .await?;
+
     let object_server: &zbus::ObjectServer = conn.object_server();
     spawn_dbus_api(object_server, &mut daemon).await?;
     // Spawn background tasks
