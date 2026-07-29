@@ -42,3 +42,13 @@ and
 ```bash
 cat /sys/class/drm/*/status
 ```
+
+## nvidia-powerd failure after switching modes
+
+When switching to integrated mode on NVIDIA hardware, you may see errors or failures related to the `nvidia-powerd` service. This is a known quirk caused by the GPU entering `D3Cold` (a deep sleep state) which prevents `nvidia-powerd` from communicating with it.
+
+Service must be restarted:
+
+```bash
+sudo systemctl restart nvidia-powerd.service
+```
