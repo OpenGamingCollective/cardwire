@@ -8,7 +8,7 @@ use tokio::{
 
 use crate::analyzer::{
     dynamic_analysis::{
-        check_env, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland
+        check_env, check_fdo_app_id, check_for_flatpak_run, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland
     }, static_analysis
 };
 #[repr(C)]
