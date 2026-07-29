@@ -261,13 +261,11 @@ async fn main() -> anyhow::Result<()> {
                 let path_str = path.as_str();
                 if let Some(id_str) =
                     path_str.strip_prefix("/com/github/opengamingcollective/cardwire/Gpu/")
+                    && let Ok(id) = id_str.parse::<u32>()
+                    && let Ok(dbus_dev) = client.get_device(id).await
                 {
-                    if let Ok(id) = id_str.parse::<u32>() {
-                        if let Ok(dbus_dev) = client.get_device(id).await {
-                            // The \t makes fish show the name as a description next to the ID
-                            println!("{}\t{}", id, dbus_dev.name);
-                        }
-                    }
+                    // The \t makes fish show the name as a description next to the ID
+                    println!("{}\t{}", id, dbus_dev.name);
                 }
             }
         }
