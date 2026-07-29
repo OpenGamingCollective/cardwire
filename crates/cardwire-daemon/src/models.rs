@@ -218,19 +218,27 @@ impl DaemonManager {
         }
         Ok(())
     }
-    async fn apply_mode_at_startup(&self, mode: Option<u32>) -> Result<()> {
+    async fn apply_mode_at_startup(&self, mode_arg: Option<u32>) -> Result<()> {
         // If a mode is supplied as arg, use it, else read the internal state (from file)
-        let mode_to_apply = match mode {
+        let mut mode_lock = self.inner.mode_state.write().await;
+        let mode_to_apply = match mode_arg {
             Some(mode) => mode,
-            None => {
-                let mode = self.inner.mode_state.read().await;
-                Modes::into(mode.mode())
-            }
+            None => Modes::into(mode_lock.mode()),
         };
-        self.mode_interface
+        // store the result to return it later
+        let res = self
+            .mode_interface
             .set_mode(mode_to_apply)
             .await
-            .map_err(|err| err.into())
+            .map_err(|err| err.into());
+        // If a mode was supplied as arg and we can convert u32 -> Modes, we bring back the user
+        // configured mode
+        if mode_arg.is_some()
+            && let Ok(mode_var) = Modes::try_from(mode_to_apply)
+        {
+            mode_lock.save_state(mode_var).await?;
+        }
+        res
     }
     pub fn battery_switch_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let auto_switch = Arc::clone(&self.inner.config.battery_auto_switch);
