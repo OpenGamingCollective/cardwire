@@ -195,14 +195,16 @@ impl CardwireAnalyzer {
         if let Some(value) = check_env("CARDWIRE_FORCE_DGPU", &environ) {
             return Some((value, 0));
         }
+
+        let switcheroo_support = desktop_supports_switcheroo(&environ);
+
         let xdg_list = self.xdg_list.read().await;
-        let mut result = (!desktop_supports_switcheroo(&environ)
-            && check_fdo_app_id(comm, &xdg_list))
+        let mut result = (!switcheroo_support && check_fdo_app_id(comm, &xdg_list))
             || check_steam_environ(&environ)
             || check_gpu_env(&environ);
         // if no result with environ file, read cmdline
         // The goal is to reduce unnecessary reads
-        if !result && !desktop_supports_switcheroo(&environ) {
+        if !result && !switcheroo_support {
             let path_cmd = format!("/proc/{}/cmdline", pid);
             let cmdline = match fs::read_to_string(path_cmd) {
                 Ok(content) => content,
