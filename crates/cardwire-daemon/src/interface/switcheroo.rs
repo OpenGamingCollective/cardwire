@@ -48,8 +48,8 @@ impl SwitcherooInterface {
                 // It's the dGPU, force DGPU
                 vec!["CARDWIRE_FORCE_DGPU".to_string(), "1".to_string()]
             } else {
-                // It's the iGPU, give an empty environment array
-                vec![]
+                // It's the iGPU, don't allow the dGPU
+                vec!["CARDWIRE_ALLOW".to_string(), "0".to_string()]
             };
             let env_val = Value::from(env_vars);
             dict.insert("Environment", OwnedValue::try_from(env_val).unwrap());
