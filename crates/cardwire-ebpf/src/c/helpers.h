@@ -131,8 +131,11 @@ end:
 	if (*mode == 3) {
 		// Check if the inode is linked to the iGPU
 		if (map_val && *map_val == 0) {
-			__u8 *allow_map_value =
+			// Check if the PID is in the map
+			__u8 *allow_map_value_pid =
 				bpf_map_lookup_elem(&cw_allowed_pid, &pid);
+
+			// if the isn't in the map, check the ppid
 			if (!allow_map_value) {
 				allow_map_value = bpf_map_lookup_elem(
 					&cw_allowed_pid, &ppid);
@@ -215,6 +218,7 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 			__u16 new_reclen = visible_reclen + data->d_reclen;
 			// check for iGPU
 			if (is_smart()) {
+				// Get the process pid and ppid
 				__u32 pid = bpf_get_current_pid_tgid() >> 32;
 				struct task_struct *task =
 					(struct task_struct *)
@@ -222,13 +226,19 @@ static __always_inline int patch_dirent_if_found(__u32 _,
 				__u32 ppid =
 					BPF_CORE_READ(task, real_parent, tgid);
 
+				// Read the map to check if the pid is present
 				__u8 *allow_map_value = bpf_map_lookup_elem(
 					&cw_allowed_pid, &pid);
-
+				// if pid is not present, try with ppid
+				if (!allow_map_value) {
+					allow_map_value = bpf_map_lookup_elem(
+						&cw_allowed_pid, &ppid);
+				}
+				// check if it's an inode linked to the iGPU
 				if (map_val && *map_val == 0) {
 					// It's the iGPU
 					if (allow_map_value) {
-						// map is valid and value isn't 1 (dGPU)
+						// PID exist and value isn't 1 (dGPU)
 						if (*allow_map_value != 1) {
 							// force dGPU is active: hide the iGPU
 							bpf_probe_write_user(
