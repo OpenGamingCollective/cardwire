@@ -8,7 +8,7 @@ use tokio::{
 
 use crate::analyzer::{
     dynamic_analysis::{
-        check_env, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ, get_app_id_wayland
+        check_env, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland
     }, static_analysis
 };
 #[repr(C)]
@@ -196,13 +196,13 @@ impl CardwireAnalyzer {
             return Some((value, 0));
         }
         let xdg_list = self.xdg_list.read().await;
-
-        let mut result = check_fdo_app_id(comm, &xdg_list)
+        let mut result = (!desktop_supports_switcheroo(&environ)
+            && check_fdo_app_id(comm, &xdg_list))
             || check_steam_environ(&environ)
             || check_gpu_env(&environ);
         // if no result with environ file, read cmdline
         // The goal is to reduce unnecessary reads
-        if !result {
+        if !result && !desktop_supports_switcheroo(&environ) {
             let path_cmd = format!("/proc/{}/cmdline", pid);
             let cmdline = match fs::read_to_string(path_cmd) {
                 Ok(content) => content,

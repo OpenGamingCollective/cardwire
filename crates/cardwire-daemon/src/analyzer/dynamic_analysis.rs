@@ -22,12 +22,34 @@ impl Desktop {
     fn from_str(s: &str) -> Option<Self> {
         match s {
             "niri" => Some(Desktop::Niri),
-            "gnome" => Some(Desktop::Gnome),
+            "GNOME" => Some(Desktop::Gnome),
             "plasma" => Some(Desktop::Plasma),
             "cosmic" => Some(Desktop::Cosmic),
             _ => None,
         }
     }
+}
+
+pub fn desktop_supports_switcheroo(environ: &[u8]) -> bool {
+    let env_var = b"XDG_CURRENT_DESKTOP=";
+
+    for var in environ.split(|&b| b == 0) {
+        if var.starts_with(env_var) {
+            let value_bytes = &var[env_var.len()..];
+
+            let desktop = String::from_utf8_lossy(value_bytes).to_lowercase();
+
+            return desktop.contains("gnome")
+                || desktop.contains("kde")
+                || desktop.contains("plasma")
+                || desktop.contains("cinnamon")
+                || desktop.contains("xfce")
+                || desktop.contains("mate");
+        }
+    }
+
+    // Not found, or it's a WM like Sway/Hyprland
+    false
 }
 
 /// Read the proc `environ` file to find the `SteamAppId=` string
