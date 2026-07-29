@@ -220,10 +220,12 @@ impl DaemonManager {
     }
     async fn apply_mode_at_startup(&self, mode_arg: Option<u32>) -> Result<()> {
         // If a mode is supplied as arg, use it, else read the internal state (from file)
-        let mut mode_lock = self.inner.mode_state.write().await;
         let mode_to_apply = match mode_arg {
             Some(mode) => mode,
-            None => Modes::into(mode_lock.mode()),
+            None => {
+                let mode_lock = self.inner.mode_state.read().await;
+                Modes::into(mode_lock.mode())
+            }
         };
         // store the result to return it later
         let res = self
@@ -236,6 +238,7 @@ impl DaemonManager {
         if mode_arg.is_some()
             && let Ok(mode_var) = Modes::try_from(mode_to_apply)
         {
+            let mut mode_lock = self.inner.mode_state.write().await;
             mode_lock.save_state(mode_var).await?;
         }
         res
