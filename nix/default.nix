@@ -45,7 +45,10 @@ in
     # Point to the correct hwdata location
     postPatch = ''
       substituteInPlace crates/cardwire-daemon/src/core/pci/pci_device.rs \
-      --replace "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
+        --replace "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
+
+      substituteInPlace crates/cardwire-daemon/src/core/gpu/discover.rs \
+        --replace "/usr/share/libdrm/amdgpu.ids" "${pkgs.libdrm}/share/libdrm/amdgpu.ids"
     '';
     # Copy dbus conf, systemd service and make shell completion
     postInstall = ''
