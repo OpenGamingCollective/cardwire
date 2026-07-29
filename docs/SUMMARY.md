@@ -15,5 +15,7 @@
 # Development
 
 - [DBus](development/dbus.md)
+- [SwitcherooShim](development/switcheroo.md)
+- [SmartMode](development/smart.md)
 - [BPF](development/bpf.md) 
 - [Build&Dev](development/build-dev.md)

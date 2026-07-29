@@ -4,12 +4,17 @@
 
 - **Bus Name:** `com.github.opengamingcollective.cardwire`
 
+> [!NOTE]
+> Cardwire also implements the SwitcherooControl interface for desktop environment integration. See [switcherooctl.md](switcherooctl.md) for details.
+
 ---
 
 ## Object Path
+
 `/com/github/opengamingcollective/cardwire`
 
 ### Manager
+
 `com.github.opengamingcollective.cardwire.Manager`
 
 **Methods:**
@@ -25,6 +30,7 @@
   - **Outputs:** None
 
 ### Mode
+
 `com.github.opengamingcollective.cardwire.Mode`
 
 **Properties:**
@@ -38,9 +44,10 @@
     - `0` Integrated: Block the dGPU. Requires exactly 2 GPUs
     - `1` Hybrid: Unblock the dGPU. Requires exactly 2 GPUs
     - `2` Manual: Allow per-GPU blocking via individual GPU objects. Applies saved GPU state on mode change if `auto_apply_gpu_state` is enabled
-    - `3` Smart
+    - `3` Smart: Block the dGPU by default but dynamically allow access per-application using eBPF. Requires exactly 2 GPUs
 
 ### Config
+
 `com.github.opengamingcollective.cardwire.Config`
 
 **Properties:**
@@ -65,14 +72,8 @@
   - **Type:** `b`
   - **Access:** Read/Write
 
-**Methods:**
-
-- **`SaveToFile`**
-  Save the current daemon configuration (properties above) to the `cardwire.toml` config file
-  - **Inputs:** None
-  - **Outputs:** None
-
 ### Debug
+
 `com.github.opengamingcollective.cardwire.Debug`
 
 **Methods:**
@@ -93,6 +94,7 @@
       - `child_pci`: `s` - Child PCI address (empty string if unknown)
 
 ### Gpu
+
 `/com/github/opengamingcollective/cardwire/Gpu/{id}`
 
 Represents a single GPU device, where `{id}` is the numeric identifier of the GPU (0 is always the default one). These objects can be dynamically discovered by calling `GetManagedObjects` on the standard `org.freedesktop.DBus.ObjectManager` interface located at the root path (`/com/github/opengamingcollective/cardwire`)
