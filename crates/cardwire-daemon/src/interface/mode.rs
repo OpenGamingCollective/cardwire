@@ -7,8 +7,10 @@ use aya::maps::HashMap as AyaHashMap;
 use cardwire_ebpf::EbpfBlocker;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt, sync::Arc};
-use tokio::sync::{Mutex, RwLock};
+use std::{collections::BTreeMap, fmt, process::Stdio, sync::Arc};
+use tokio::{
+    process::Command, sync::{Mutex, RwLock}, task
+};
 use zbus::{fdo, interface};
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug)]
@@ -96,6 +98,47 @@ impl ModeInterface {
             .insert(0, mode as u8, 0)
             .map_err(|err| fdo::Error::Failed(err.to_string()))
     }
+
+    /// restart the nvidia-powerd service using systemctl
+    async fn restart_nvidia_powerd() {
+        let service = "nvidia-powerd.service";
+        // Check if nvidia-powerd is present on the system
+        let found_nvidia_powerd = match Command::new("systemctl")
+            .arg("status")
+            .arg(service)
+            .stderr(Stdio::null())
+            .status()
+            .await
+        {
+            // If no err, skip
+            Ok(status) => status.success(),
+            Err(err) => {
+                error!("error while trying to find nvidia-powerd: {}", err);
+                return;
+            }
+        };
+
+        // If present, try to restart it, else ignore it
+        if found_nvidia_powerd {
+            match Command::new("systemctl")
+                .arg("restart")
+                .arg(service)
+                .status()
+                .await
+            {
+                Ok(status) => {
+                    if status.success() {
+                        info!("successfully restart nvidia-powerd.service");
+                    } else {
+                        warn!("error restarting nvidia-powerd: {:?}", status.code())
+                    }
+                }
+                Err(err) => {
+                    error!("error while trying to restart nvidia-powerd: {}", err)
+                }
+            };
+        }
+    }
 }
 
 #[interface(name = "com.github.opengamingcollective.cardwire.Mode")]
@@ -173,6 +216,9 @@ impl ModeInterface {
         if let Err(e) = current_mode.save_state(mode).await {
             warn!("mode couldn't be saved to config: {e}");
         }
+        // try to restart nvidia-powerd, if error just ignore it
+        task::spawn(ModeInterface::restart_nvidia_powerd());
+
         info!("Switched to {}", mode);
         Ok(())
     }
