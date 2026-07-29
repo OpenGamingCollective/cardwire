@@ -39,8 +39,8 @@ async fn main() -> Result<()> {
         .build()
         .await?;
 
-    let conn_builder = connection::Builder::system()?;
     let _conn = match async {
+        let conn_builder = connection::Builder::system()?;
         conn_builder
             .name("net.hadess.SwitcherooControl")?
             .serve_at(
