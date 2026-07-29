@@ -130,12 +130,12 @@ impl ModeInterface {
                         } else {
                             gpu.unblock_gpu().await?;
                         }
-                    };
-
-                    // If we in smart mode and is the default gpu, push it to the blocked inode map
-                    // but it wont get blocked, trust
-                    if mode == Modes::Smart && gpu.device.is_default() {
+                    } else if mode == Modes::Smart {
+                        // push default gpu (iGPU) into the blocked inode map for tracking only
                         gpu.block_gpu(0).await?;
+                    } else {
+                        // clear
+                        gpu.unblock_gpu().await?;
                     }
                 }
             }
