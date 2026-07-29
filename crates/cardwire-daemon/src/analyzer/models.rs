@@ -210,15 +210,6 @@ impl CardwireAnalyzer {
             };
             result = check_for_flatpak_run(&cmdline, &xdg_list);
         }
-        // reading map is slow, should be done if every test are false
-        if !result {
-            let path_map = format!("/proc/{}/map", pid);
-            let map = match fs::read(path_map) {
-                Ok(content) => content,
-                Err(_) => return None,
-            };
-            result = check_gamemode(&map);
-        }
         Some((result, 1))
     }
 
