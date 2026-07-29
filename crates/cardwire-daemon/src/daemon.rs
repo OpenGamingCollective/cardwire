@@ -40,15 +40,29 @@ async fn main() -> Result<()> {
         .await?;
 
     let conn_builder = connection::Builder::system()?;
-    let _conn = conn_builder
-        .name("net.hadess.SwitcherooControl")?
-        .serve_at(
-            "/net/hadess/SwitcherooControl",
-            daemon.switcheroo_interface.clone(),
-        )?
-        .replace_existing_names(true)
-        .build()
-        .await?;
+    let _conn = match async {
+        conn_builder
+            .name("net.hadess.SwitcherooControl")?
+            .serve_at(
+                "/net/hadess/SwitcherooControl",
+                daemon.switcheroo_interface.clone(),
+            )?
+            .replace_existing_names(true)
+            .build()
+            .await
+    }
+    .await
+    {
+        Ok(connection) => {
+            info!("Switcheroo DBus shim started successfully");
+            Some(connection)
+        }
+        Err(e) => {
+            // If the DBus policy blocks it, or Switcheroo is already running,
+            log::warn!("Failed to start Switcheroo D-Bus shim: {}", e);
+            None
+        }
+    };
 
     let object_server: &zbus::ObjectServer = conn.object_server();
     spawn_dbus_api(object_server, &mut daemon).await?;
