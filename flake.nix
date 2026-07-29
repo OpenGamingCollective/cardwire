@@ -63,6 +63,7 @@
             (pkgs system).udev
             (pkgs system).pkg-config
             (pkgs system).mdbook
+            (pkgs system).mdbook-mermaid
             (pkgs system).wayland
             (pkgs system).libxkbcommon
           ]

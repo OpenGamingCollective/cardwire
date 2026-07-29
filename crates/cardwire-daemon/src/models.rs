@@ -3,7 +3,7 @@ use crate::{
     analyzer::CardwireAnalyzer, core::{
         gpu::{self, GpuVendor, check_default_drm_class}, inode::exp_nvidia_inodes, pci::{self}
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
-        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
+        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes, SwitcherooInterface
     }, tasks
 };
 use anyhow::{Context, Result};
@@ -32,6 +32,7 @@ pub struct DaemonManager {
     pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config_interface: ConfigInterface,
     pub debug_interface: DebugInterface,
+    pub switcheroo_interface: SwitcherooInterface,
     pub inner: DaemonInner,
 }
 
@@ -99,6 +100,7 @@ impl DaemonManager {
                 None,
                 Arc::clone(&power_tasks),
             )?,
+            switcheroo_interface: SwitcherooInterface::build(Arc::clone(&gpu_interfaces)),
             inner: DaemonInner {
                 mode_state: Arc::clone(&mode_state),
                 gpu_state: Arc::clone(&gpu_state),
@@ -129,7 +131,15 @@ impl DaemonManager {
         // If it's the first time cardwired is launched, we need to populate the gpu state file
         self.populate_state_file().await?;
 
-        self.apply_mode_at_startup().await?;
+        // This one can fail on asus laptop when switching to integrated using the kernel attribute
+        if let Err(err) = self.apply_mode_at_startup(None).await {
+            error!(
+                "failed to apply mode at startup: {}, switching to manual...",
+                err
+            );
+            // 2 = manual
+            self.apply_mode_at_startup(Some(2)).await?
+        };
 
         Ok(())
     }
@@ -208,15 +218,30 @@ impl DaemonManager {
         }
         Ok(())
     }
-    async fn apply_mode_at_startup(&self) -> Result<()> {
-        let mode_to_apply = {
-            let mode = self.inner.mode_state.read().await;
-            Modes::into(mode.mode())
+    async fn apply_mode_at_startup(&self, mode_arg: Option<u32>) -> Result<()> {
+        // If a mode is supplied as arg, use it, else read the internal state (from file)
+        let mode_to_apply = match mode_arg {
+            Some(mode) => mode,
+            None => {
+                let mode_lock = self.inner.mode_state.read().await;
+                Modes::into(mode_lock.mode())
+            }
         };
-        self.mode_interface
+        // store the result to return it later
+        let res = self
+            .mode_interface
             .set_mode(mode_to_apply)
             .await
-            .map_err(|err| err.into())
+            .map_err(|err| err.into());
+        // If a mode was supplied as arg and we can convert u32 -> Modes, we bring back the user
+        // configured mode
+        if mode_arg.is_some()
+            && let Ok(mode_var) = Modes::try_from(mode_to_apply)
+        {
+            let mut mode_lock = self.inner.mode_state.write().await;
+            mode_lock.save_state(mode_var).await?;
+        }
+        res
     }
     pub fn battery_switch_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let auto_switch = Arc::clone(&self.inner.config.battery_auto_switch);

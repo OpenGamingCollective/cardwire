@@ -1,0 +1,69 @@
+# Smart
+
+## Introduction
+
+Having an integrated and hybrid mode is good, but what if we could have the best of both worlds?
+
+This is what cardwire's smart mode was made for. Cardwire uses a mix of kernel-space + userspace to directly allow processes on the fly
+
+### Kernel-Space
+
+Using the eBPF program and the `tracepoint/sched/sched_process_exec` hooks, the kernel program notifies `cardwired` when a new process is executed, sending its pid using `cw_exec_events` RING_BUF, once the process is received by `cardwired`, it will be analyzed in real-time and if it's a process that should be allowed, its pid will be inserted into the `cw_allowed_pid` map
+
+When a process exits, a notification is sent to `cardwired`, cardwired will remove the PID from its map to prevent the map from overflowing
+
+If you want to dive deeper into the kernel code, take a look at [BPF](bpf.md)
+
+### Userspace
+
+The userspace of Smart mode acts as the brain. It is responsible for making the actual decisions about whether a process is allowed to use a GPU. It is divided into three main components:
+
+- **`CardwireAnalyzer`**: A dedicated background task that listens to the `cw_exec_events` and `cw_close_events` ring buffers. When it receives a new PID from the kernel, it invokes the analysis helpers. If the application passes, it populates the `cw_allowed_pid` map with a value of `1` (normal) or `0` (`iGPU`).
+- **`dynamic_analysis.rs`**: A set of helper functions used to analyze a process in real-time. By reading `/proc/<pid>/environ` and `/proc/<pid>/cmdline`, it checks for explicitly requested GPUs (like `CARDWIRE_ALLOW=1`, `CARDWIRE_FORCE_DGPU=1`, `DRI_PRIME=1`) or implicit signs like Steam games (`SteamAppId`) and Flatpak wrappers.
+- **`static_analysis.rs`**: A set of helper functions that analyze system data when the daemon starts. Specifically, it scans the XDG data directories for `.desktop` files containing `PrefersNonDefaultGPU=true` or `X-KDE-RunOnDiscreteGpu=true`, building a whitelist of application names that should automatically be granted dGPU access when they launch.
+
+## Complete Execution Flow
+
+Here is a comprehensive breakdown of how the Kernel and Userspace interact in real-time when an application launches:
+
+```mermaid
+sequenceDiagram
+    participant Proc as Process
+    participant Kernel as eBPF Kernel Hooks
+    participant Map as BPF Maps
+    participant Daemon as CardwireAnalyzer (Userspace)
+
+    Note over Proc,Daemon: 1. Process Launch
+    Proc->>Kernel: sched_process_exec
+    Kernel->>Map: Send PID via cw_exec_events (RingBuf)
+    Map->Daemon: Listen to cw_exec_events and wait for new events
+
+    Note over Daemon: 2. Real-time Analysis
+    Daemon->>Daemon: Read /proc/<pid>/environ & cmdline
+    Daemon->>Daemon: Check env vars, Steam, Flatpak, XDG lists
+
+    alt Is Allowed?
+        Daemon->>Map: Insert PID into cw_allowed_pid
+    else Not Allowed
+        Daemon->>Daemon: Do nothing
+    end
+
+    Note over Proc,Kernel: 3. GPU Access & Directory Listing
+    Proc->>Kernel: getdents64 / file_open (/dev/dri/)
+    Kernel->>Map: Check cw_allowed_pid
+
+    alt PID not in cw_allowed_pid
+        Kernel-->>Proc: hide GPU (Return -ENOENT)
+        Kernel->>Daemon: Send block event (cw_report_events)
+    else PID in cw_allowed_pid (Value 1 = Normal)
+        Kernel-->>Proc: Allow dGPU and iGPU
+    else PID in cw_allowed_pid (Value 0 = FORCE_DGPU)
+        Kernel-->>Proc: Allow dGPU, Hide iGPU (-ENOENT)
+    end
+
+    Note over Proc,Daemon: 4. Application Exit
+    Proc->>Kernel: sched_process_exit
+    Kernel->>Map: Send PID via cw_close_events (RingBuf)
+    Map->Daemon: Listen to cw_close_events and wait for new events
+    Daemon->>Map: Remove PID from cw_allowed_pid
+```

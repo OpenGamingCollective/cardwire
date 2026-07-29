@@ -1,2 +1,8 @@
 [book]
 src = "docs"
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[output.html]
+additional-js = ["./docs/lib/mermaid/mermaid.min.js", "./docs/lib/mermaid/mermaid-init.js"]

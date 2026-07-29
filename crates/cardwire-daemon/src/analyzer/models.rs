@@ -8,7 +8,7 @@ use tokio::{
 
 use crate::analyzer::{
     dynamic_analysis::{
-        check_cardwire_allow, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ, get_app_id_wayland
+        check_env, check_fdo_app_id, check_for_flatpak_run, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland
     }, static_analysis
 };
 #[repr(C)]
@@ -155,16 +155,20 @@ impl CardwireAnalyzer {
             None => return,
         };
         if let Some(result) = self.evaluate_app(event.pid, &real_app_name).await
-            && result
+            && result.0
         {
-            info!(
-                "ALLOW: pid: {} process: {} in {}us",
-                event.pid,
-                &real_app_name,
-                time.elapsed().as_micros()
-            );
+            match result.1 {
+                0 => info!("FORCE: pid: {} process: {} ", event.pid, &real_app_name),
+                1 => info!(
+                    "ALLOW: pid: {} process: {} in {}us",
+                    event.pid,
+                    &real_app_name,
+                    time.elapsed().as_micros()
+                ),
+                _ => {}
+            }
             let mut pid_map = self.pid_map.write().await;
-            if let Err(e) = pid_map.insert(event.pid, 1, 0) {
+            if let Err(e) = pid_map.insert(event.pid, result.1, 0) {
                 warn!("Failed to insert into eBPF map: {}", e);
             }
         }
@@ -176,25 +180,31 @@ impl CardwireAnalyzer {
         }
     }
 
-    /// Default app are blocked, try to find if it's a game or a gpu intensive app
-    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<bool> {
+    /// Default app are blocked, try to find if it's a game or a gpu intensive app, the u8 is the
+    /// gpu id
+    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, u8)> {
         let path = format!("/proc/{}/environ", pid);
         let environ = match fs::read(path) {
             Ok(content) => content,
             Err(_) => return None,
         };
         // First check CARDWIRE_ALLOW, if  None continue
-        if let Some(allow) = check_cardwire_allow(&environ) {
-            return Some(allow);
+        if let Some(allow) = check_env("CARDWIRE_ALLOW", &environ) {
+            return Some((allow, 1));
         }
-        let xdg_list = self.xdg_list.read().await;
+        if let Some(value) = check_env("CARDWIRE_FORCE_DGPU", &environ) {
+            return Some((value, 0));
+        }
 
-        let mut result = check_fdo_app_id(comm, &xdg_list)
+        let switcheroo_support = desktop_supports_switcheroo(&environ);
+
+        let xdg_list = self.xdg_list.read().await;
+        let mut result = (!switcheroo_support && check_fdo_app_id(comm, &xdg_list))
             || check_steam_environ(&environ)
             || check_gpu_env(&environ);
         // if no result with environ file, read cmdline
         // The goal is to reduce unnecessary reads
-        if !result {
+        if !result && !switcheroo_support {
             let path_cmd = format!("/proc/{}/cmdline", pid);
             let cmdline = match fs::read_to_string(path_cmd) {
                 Ok(content) => content,
@@ -202,16 +212,7 @@ impl CardwireAnalyzer {
             };
             result = check_for_flatpak_run(&cmdline, &xdg_list);
         }
-        // reading map is slow, should be done if every test are false
-        if !result {
-            let path_map = format!("/proc/{}/map", pid);
-            let map = match fs::read(path_map) {
-                Ok(content) => content,
-                Err(_) => return None,
-            };
-            result = check_gamemode(&map);
-        }
-        Some(result)
+        Some((result, 1))
     }
 
     #[allow(dead_code)]

@@ -20,7 +20,7 @@ enum Desktop {
 
 impl Desktop {
     fn from_str(s: &str) -> Option<Self> {
-        match s {
+        match s.to_lowercase().as_str() {
             "niri" => Some(Desktop::Niri),
             "gnome" => Some(Desktop::Gnome),
             "plasma" => Some(Desktop::Plasma),
@@ -30,16 +30,32 @@ impl Desktop {
     }
 }
 
+pub fn desktop_supports_switcheroo(environ: &[u8]) -> bool {
+    let env_var = b"XDG_CURRENT_DESKTOP=";
+
+    for var in environ.split(|&b| b == 0) {
+        if var.starts_with(env_var) {
+            let value_bytes = &var[env_var.len()..];
+
+            let desktop = String::from_utf8_lossy(value_bytes).to_lowercase();
+
+            return desktop.contains("gnome")
+                || desktop.contains("kde")
+                || desktop.contains("plasma")
+                || desktop.contains("cinnamon")
+                || desktop.contains("xfce")
+                || desktop.contains("mate");
+        }
+    }
+
+    // Not found, or it's a WM like Sway/Hyprland
+    false
+}
+
 /// Read the proc `environ` file to find the `SteamAppId=` string
 /// used to identify both native and proton games
 pub fn check_steam_environ(environ: &[u8]) -> bool {
     environ.windows(11).any(|window| window == b"SteamAppId=")
-}
-
-/// Read the proc `maps` file to find the gamemodeauto.so
-pub fn check_gamemode(map: &[u8]) -> bool {
-    map.windows(18)
-        .any(|window| window == b"libgamemodeauto.so")
 }
 
 /// Check if the comm is in the xdg list
@@ -76,34 +92,28 @@ pub fn check_for_flatpak_run(cmdline: &str, xdg_list: &HashMap<String, bool>) ->
     false
 }
 
-pub fn check_cardwire_allow(environ: &[u8]) -> Option<bool> {
+pub fn check_env(env_var: &str, environ: &[u8]) -> Option<bool> {
+    let env_var = format!("{}=", env_var);
+    let env_var_len = env_var.len();
+
     for var in environ.split(|&b| b == 0) {
-        if var.starts_with(b"CARDWIRE_ALLOW=") {
-            if var.get(15) == Some(&b'1') {
-                return Some(true); // CARDWIRE_ALLOW=1
+        if var.starts_with(env_var.as_bytes()) {
+            if var.get(env_var_len) == Some(&b'1') {
+                return Some(true); // CARDWIRE_FORCE_DGPU=1
             } else {
-                return Some(false); // CARDWIRE_ALLOW=0
+                return Some(false); // CARDWIRE_FORCE_DGPU=0
             }
         }
     }
     // Not present
     None
 }
+
 pub fn check_gpu_env(environ: &[u8]) -> bool {
-    for var in environ.split(|&b| b == 0) {
-        if var.starts_with(b"DRI_PRIME=") {
-            if var.get(10) == Some(&b'1') {
-                return true; // DRI_PRIME=1
-            } else {
-                return false; // DRI_PRIME=0
-            }
-        } else if var.starts_with(b"__NV_PRIME_RENDER_OFFLOAD=") {
-            if var.get(26) == Some(&b'1') {
-                return true; // =1
-            } else {
-                return false; // = 0
-            }
-        }
+    if let Some(val) = check_env("DRI_PRIME", environ) {
+        return val;
+    } else if let Some(val) = check_env("__NV_PRIME_RENDER_OFFLOAD", environ) {
+        return val;
     }
     // Not present
     false
@@ -207,33 +217,6 @@ mod tests {
     }
 
     /*
-        check_gamemode
-    */
-
-    #[test]
-    fn test_check_gamemode_detects_library_in_maps() {
-        let map = b"/usr/lib/libgamemodeauto.so\n/usr/lib/libc.so";
-        assert!(check_gamemode(map));
-    }
-
-    #[test]
-    fn test_check_gamemode_returns_false_when_absent() {
-        let map = b"/usr/lib/libc.so.6\n/usr/lib/libm.so.6";
-        assert!(!check_gamemode(map));
-    }
-
-    #[test]
-    fn test_check_gamemode_returns_false_for_empty_input() {
-        assert!(!check_gamemode(b""));
-    }
-
-    #[test]
-    fn test_check_gamemode_rejects_partial_library_name() {
-        let map = b"libgamemodeaut.so";
-        assert!(!check_gamemode(map));
-    }
-
-    /*
         check_fdo_app_id
     */
 
@@ -323,37 +306,43 @@ mod tests {
     }
 
     /*
-        check_cardwire_allow
+        check_env
     */
 
     #[test]
-    fn test_check_cardwire_allow_returns_true_for_allow_1() {
+    fn test_check_env_returns_true_for_allow_1() {
         let environ = b"HOME=/home\0CARDWIRE_ALLOW=1\0DISPLAY=:0";
-        assert_eq!(check_cardwire_allow(environ), Some(true));
+        assert_eq!(check_env("CARDWIRE_ALLOW", environ), Some(true));
     }
 
     #[test]
-    fn test_check_cardwire_allow_returns_false_for_allow_0() {
+    fn test_check_env_returns_true_for_allow_1_dgpu() {
+        let environ = b"HOME=/home\0CARDWIRE_FORCE_DGPU=1\0DISPLAY=:0";
+        assert_eq!(check_env("CARDWIRE_FORCE_DGPU", environ), Some(true));
+    }
+
+    #[test]
+    fn test_check_env_returns_false_for_allow_0() {
         let environ = b"HOME=/home\0CARDWIRE_ALLOW=0\0DISPLAY=:0";
-        assert_eq!(check_cardwire_allow(environ), Some(false));
+        assert_eq!(check_env("CARDWIRE_ALLOW", environ), Some(false));
     }
 
     #[test]
-    fn test_check_cardwire_allow_returns_none_when_absent() {
+    fn test_check_env_returns_none_when_absent() {
         let environ = b"HOME=/home\0DISPLAY=:0";
-        assert_eq!(check_cardwire_allow(environ), None);
+        assert_eq!(check_env("CARDWIRE_ALLOW", environ), None);
     }
 
     #[test]
-    fn test_check_cardwire_allow_returns_none_for_empty_input() {
-        assert_eq!(check_cardwire_allow(b""), None);
+    fn test_check_env_returns_none_for_empty_input() {
+        assert_eq!(check_env("CARDWIRE_ALLOW", b""), None);
     }
 
     #[test]
-    fn test_check_cardwire_allow_returns_false_for_unexpected_value() {
+    fn test_check_env_returns_false_for_unexpected_value() {
         // "CARDWIRE_ALLOW=x" — value at index 15 is 'x', not '1'
         let environ = b"CARDWIRE_ALLOW=x";
-        assert_eq!(check_cardwire_allow(environ), Some(false));
+        assert_eq!(check_env("CARDWIRE_ALLOW", environ), Some(false));
     }
 
     /*
@@ -409,13 +398,5 @@ mod tests {
         assert!(Desktop::from_str("hyprland").is_none());
         assert!(Desktop::from_str("i3").is_none());
         assert!(Desktop::from_str("").is_none());
-    }
-
-    #[test]
-    fn test_desktop_from_str_is_case_sensitive() {
-        assert!(Desktop::from_str("Niri").is_none());
-        assert!(Desktop::from_str("GNOME").is_none());
-        assert!(Desktop::from_str("Plasma").is_none());
-        assert!(Desktop::from_str("COSMIC").is_none());
     }
 }

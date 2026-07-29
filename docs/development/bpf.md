@@ -2,80 +2,42 @@
 
 ## Introduction
 
-Cardwire use the Kernel eBPF + LSM features to block syscall to the dGPU
+Cardwire uses Linux eBPF along with Linux Security Modules (LSM) and Syscall tracepoints to intercept and block applications. By intercepting these operations directly in the kernel, Cardwire provides a fast and seamless blocking without needing to unload drivers or modify user applications/files.
 
-## List of used LSM
+## eBPF Hooks
 
-- lsm/file_open
-- lsm/inode_permission
-- lsm/inode_getattr
+Cardwire utilizes two main types of eBPF hooks:
 
-## List of used MAPS
+### 1. LSM Hooks
 
-**BLOCKED_RENDERID**
+LSM hooks are used to intercept and block permission checks or file openings on device files (like `/dev/dri/*`). This stops applications from accessing a GPU simply by checking file stats.
 
-- Used for the renderD minor
+- `lsm/file_open`: Intercepts the actual opening of blocked device files.
+- `lsm/inode_permission`: Prevents permissions checks on blocked devices.
+- `lsm/inode_getattr`: Prevents `stat()` calls on blocked devices.
 
-**BLOCKED_CARDID**
+### 2. Syscall Tracepoints
 
-- For the card minor
+Tracepoints are used to monitor process lifecycle and manipulate the directory listings applications see.
 
-**BLOCKED_PCI**
+- `tracepoint/sched/sched_process_exec`: In Smart mode, this signals the Cardwire daemon that a new process is starting so it can be analyzed.
+- `tracepoint/sched/sched_process_exit`: Signals when a process dies, cleaning up its entries in the allowed process maps.
+- `tp/syscalls/sys_enter_getdents64` and `sys_exit_getdents64`: Intercepts directory listings. This is the core magic behind dynamically hiding device files from applications.
 
-- For the PCI address
+## eBPF Maps
 
-**BLOCKED_PCI_FILES**
+The eBPF programs communicate with the Cardwire userspace daemon using several BPF maps:
 
-- For the list of blocked PCI files
+- **`cw_mode`**: Stores the current Cardwire mode (0=Integrated, 1=Hybrid, 2=Manual, 3=Smart).
+- **`cw_blocked_ino`**: A hash map containing the inodes of blocked DRM devices (`/dev/dri/cardX`, `/dev/dri/renderDX`). The value indicates the GPU ID (0 for iGPU, 1 for dGPU).
+- **`cw_exp_blk_ino`**: Contains inodes of blocked NVIDIA-specific files when `experimental_nvidia_block` is enabled.
+- **`cw_allowed_pid`**: Used in Smart mode. Contains the PIDs of applications that have been analyzed and allowed to use the dGPU. The stored value (`__u8`) is used to identify if PID is meant for iGPU(0) or dGPU(1)
+- **`cw_allowed_comm`**: A whitelist of process names (like `udev` or `pacman`) that bypass blocking entirely.
+- **`cw_daemon_pid`**: Cardwire's own PID so it doesn't block itself.
+- **`cw_exec_events`**, **`cw_close_events`**, **`cw_report_events`**: Ring buffers used to send process and block events back to userspace.
 
-**BLOCKED_NVIDIA_FILES**
+## Directory Hiding (`getdents64`)
 
-- For the list of blocked NVIDIA files
+Across all blocking modes (Integrated, Manual, Smart), Cardwire uses the `getdents64` syscall hooks to manipulate the contents of directories (like `/dev/dri/`) on the fly. 
 
-**SETTINGS**
-
-- For experimental_nvidia_block
-
-## Block list 
-
-### PCI files
-
-Files that get blocked when a gpu's PCI address is blocked:
-
-- config
-- current_link_speed
-- current_link_width
-- max_link_speed
-- max_link_width
-
-### NVIDIA files
-
-These files are only blocked when the `experimental_nvidia_block` setting is enabled
-
-- libGLX_nvidia.so.0
-- nvidia_icd.json
-- nvidia_icd.x86_64.json
-- nvidiactl
-
-/dev/nvidia? using the minor
-
-Example:
-
-```bash
-/dev/nvidia0
-```
-
-Will be blocked using the major `195` and the minor `0`
-
-### DRM
-
-DRM node (card + renderD) are blocked using their major + minor ID
-
-Example:
-
-```bash
-/dev/dri/card1
-/dev/dri/renderD128
-```
-
-Will be blocked using the major `226` and the minor `1` || `128`
+When an application calls `getdents64` to list available GPUs, the eBPF program `patch_dirent_if_found` loops through the directory entries in memory. If it spots an inode belonging to a blocked GPU, it overwrites the previous entry's length field, effectively "jumping over" the blocked device. To the application, the blocked GPU simply does not exist and is omitted from directory listings rather than causing an error.
