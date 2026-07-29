@@ -20,7 +20,7 @@ enum Desktop {
 
 impl Desktop {
     fn from_str(s: &str) -> Option<Self> {
-        match s {
+        match s.to_lowercase().as_str() {
             "niri" => Some(Desktop::Niri),
             "gnome" => Some(Desktop::Gnome),
             "plasma" => Some(Desktop::Plasma),
@@ -30,16 +30,32 @@ impl Desktop {
     }
 }
 
+pub fn desktop_supports_switcheroo(environ: &[u8]) -> bool {
+    let env_var = b"XDG_CURRENT_DESKTOP=";
+
+    for var in environ.split(|&b| b == 0) {
+        if var.starts_with(env_var) {
+            let value_bytes = &var[env_var.len()..];
+
+            let desktop = String::from_utf8_lossy(value_bytes).to_lowercase();
+
+            return desktop.contains("gnome")
+                || desktop.contains("kde")
+                || desktop.contains("plasma")
+                || desktop.contains("cinnamon")
+                || desktop.contains("xfce")
+                || desktop.contains("mate");
+        }
+    }
+
+    // Not found, or it's a WM like Sway/Hyprland
+    false
+}
+
 /// Read the proc `environ` file to find the `SteamAppId=` string
 /// used to identify both native and proton games
 pub fn check_steam_environ(environ: &[u8]) -> bool {
     environ.windows(11).any(|window| window == b"SteamAppId=")
-}
-
-/// Read the proc `maps` file to find the gamemodeauto.so
-pub fn check_gamemode(map: &[u8]) -> bool {
-    map.windows(18)
-        .any(|window| window == b"libgamemodeauto.so")
 }
 
 /// Check if the comm is in the xdg list
@@ -198,33 +214,6 @@ mod tests {
     fn test_check_steam_environ_detects_at_start_of_environ() {
         let environ = b"SteamAppId=999";
         assert!(check_steam_environ(environ));
-    }
-
-    /*
-        check_gamemode
-    */
-
-    #[test]
-    fn test_check_gamemode_detects_library_in_maps() {
-        let map = b"/usr/lib/libgamemodeauto.so\n/usr/lib/libc.so";
-        assert!(check_gamemode(map));
-    }
-
-    #[test]
-    fn test_check_gamemode_returns_false_when_absent() {
-        let map = b"/usr/lib/libc.so.6\n/usr/lib/libm.so.6";
-        assert!(!check_gamemode(map));
-    }
-
-    #[test]
-    fn test_check_gamemode_returns_false_for_empty_input() {
-        assert!(!check_gamemode(b""));
-    }
-
-    #[test]
-    fn test_check_gamemode_rejects_partial_library_name() {
-        let map = b"libgamemodeaut.so";
-        assert!(!check_gamemode(map));
     }
 
     /*
@@ -409,13 +398,5 @@ mod tests {
         assert!(Desktop::from_str("hyprland").is_none());
         assert!(Desktop::from_str("i3").is_none());
         assert!(Desktop::from_str("").is_none());
-    }
-
-    #[test]
-    fn test_desktop_from_str_is_case_sensitive() {
-        assert!(Desktop::from_str("Niri").is_none());
-        assert!(Desktop::from_str("GNOME").is_none());
-        assert!(Desktop::from_str("Plasma").is_none());
-        assert!(Desktop::from_str("COSMIC").is_none());
     }
 }

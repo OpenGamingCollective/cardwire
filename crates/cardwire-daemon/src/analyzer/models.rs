@@ -8,7 +8,7 @@ use tokio::{
 
 use crate::analyzer::{
     dynamic_analysis::{
-        check_env, check_fdo_app_id, check_for_flatpak_run, check_gamemode, check_gpu_env, check_steam_environ, get_app_id_wayland
+        check_env, check_fdo_app_id, check_for_flatpak_run, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland
     }, static_analysis
 };
 #[repr(C)]
@@ -195,29 +195,22 @@ impl CardwireAnalyzer {
         if let Some(value) = check_env("CARDWIRE_FORCE_DGPU", &environ) {
             return Some((value, 0));
         }
-        let xdg_list = self.xdg_list.read().await;
 
-        let mut result = check_fdo_app_id(comm, &xdg_list)
+        let switcheroo_support = desktop_supports_switcheroo(&environ);
+
+        let xdg_list = self.xdg_list.read().await;
+        let mut result = (!switcheroo_support && check_fdo_app_id(comm, &xdg_list))
             || check_steam_environ(&environ)
             || check_gpu_env(&environ);
         // if no result with environ file, read cmdline
         // The goal is to reduce unnecessary reads
-        if !result {
+        if !result && !switcheroo_support {
             let path_cmd = format!("/proc/{}/cmdline", pid);
             let cmdline = match fs::read_to_string(path_cmd) {
                 Ok(content) => content,
                 Err(_) => return None,
             };
             result = check_for_flatpak_run(&cmdline, &xdg_list);
-        }
-        // reading map is slow, should be done if every test are false
-        if !result {
-            let path_map = format!("/proc/{}/map", pid);
-            let map = match fs::read(path_map) {
-                Ok(content) => content,
-                Err(_) => return None,
-            };
-            result = check_gamemode(&map);
         }
         Some((result, 1))
     }

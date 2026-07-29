@@ -3,7 +3,7 @@ use crate::{
     analyzer::CardwireAnalyzer, core::{
         gpu::{self, GpuVendor, check_default_drm_class}, inode::exp_nvidia_inodes, pci::{self}
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
-        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes
+        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes, SwitcherooInterface
     }, tasks
 };
 use anyhow::{Context, Result};
@@ -32,6 +32,7 @@ pub struct DaemonManager {
     pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config_interface: ConfigInterface,
     pub debug_interface: DebugInterface,
+    pub switcheroo_interface: SwitcherooInterface,
     pub inner: DaemonInner,
 }
 
@@ -99,6 +100,7 @@ impl DaemonManager {
                 None,
                 Arc::clone(&power_tasks),
             )?,
+            switcheroo_interface: SwitcherooInterface::build(Arc::clone(&gpu_interfaces)),
             inner: DaemonInner {
                 mode_state: Arc::clone(&mode_state),
                 gpu_state: Arc::clone(&gpu_state),
