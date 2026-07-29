@@ -102,42 +102,26 @@ impl ModeInterface {
     /// restart the nvidia-powerd service using systemctl
     async fn restart_nvidia_powerd() {
         let service = "nvidia-powerd.service";
-        // Check if nvidia-powerd is present on the system
-        let found_nvidia_powerd = match Command::new("systemctl")
-            .arg("status")
+
+        // If present, try to restart it, else ignore it
+        match Command::new("systemctl")
+            .arg("restart")
             .arg(service)
-            .stderr(Stdio::null())
+            .stdout(Stdio::null())
             .status()
             .await
         {
-            // If no err, skip
-            Ok(status) => status.success(),
+            Ok(status) => {
+                if status.success() {
+                    info!("successfully restart nvidia-powerd.service");
+                } else {
+                    warn!("error restarting nvidia-powerd: {:?}", status.code())
+                }
+            }
             Err(err) => {
-                error!("error while trying to find nvidia-powerd: {}", err);
-                return;
+                error!("error while trying to restart nvidia-powerd: {}", err)
             }
         };
-
-        // If present, try to restart it, else ignore it
-        if found_nvidia_powerd {
-            match Command::new("systemctl")
-                .arg("restart")
-                .arg(service)
-                .status()
-                .await
-            {
-                Ok(status) => {
-                    if status.success() {
-                        info!("successfully restart nvidia-powerd.service");
-                    } else {
-                        warn!("error restarting nvidia-powerd: {:?}", status.code())
-                    }
-                }
-                Err(err) => {
-                    error!("error while trying to restart nvidia-powerd: {}", err)
-                }
-            };
-        }
     }
 }
 
