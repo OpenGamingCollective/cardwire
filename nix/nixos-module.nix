@@ -48,6 +48,12 @@ in
     services.dbus.packages = [ cfg.package ];
     # Cardwire package
     environment.systemPackages = [ cfg.package ];
+    # Shell completions
+    environment.pathsToLink = [
+      "/share/bash-completion"
+      "/share/fish"
+      "/share/zsh"
+    ];
     # systemd
     systemd.services.cardwired = {
       unitConfig = {
