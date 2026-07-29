@@ -103,10 +103,10 @@ impl ModeInterface {
     async fn restart_nvidia_powerd() {
         let service = "nvidia-powerd.service";
 
-        // If present, try to restart it, else ignore it
         match Command::new("systemctl")
             .arg("restart")
             .arg(service)
+            .arg("--no-block")
             .stdout(Stdio::null())
             .status()
             .await
