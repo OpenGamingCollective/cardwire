@@ -13,16 +13,19 @@ _(Having our own integration would've been better tbh)_
 ## Properties
 
 ### `HasDualGpu`
+
 Indicates whether the system has exactly two GPUs.
 - **Type:** `b` (boolean)
 - **Access:** Read
 
 ### `NumGPUs`
+
 The number of GPUs detected on the system.
 - **Type:** `u` (uint32)
 - **Access:** Read
 
 ### `GPUs`
+
 A list of all available GPUs and their configurations.
 - **Type:** `aa{sv}` (Array of dictionaries mapping strings to variants)
 - **Access:** Read
@@ -39,6 +42,7 @@ A list of all available GPUs and their configurations.
 The `Environment` property provides the exact environment variables the desktop environment should inject into the application when the user selects a specific GPU.
 
 ### `CARDWIRE_FORCE_DGPU=1`
+
 This is provided when the user selects the **Discrete GPU**. 
 
 When Cardwire detects this environment variable during the application's launch in Smart Mode, it does two things:
@@ -48,6 +52,7 @@ When Cardwire detects this environment variable during the application's launch 
 Hiding the iGPU ensures that the application is forced to use the discrete GPU, preventing issues where an application might get confused by seeing two GPUs and accidentally select the weaker one.
 
 ### `CARDWIRE_ALLOW=0`
+
 This is provided when the user selects the **Default/Integrated GPU**. 
 
 It explicitly tells Cardwire's Smart Mode to keep the dGPU blocked for this application, ensuring it runs solely on the integrated graphics to save power.

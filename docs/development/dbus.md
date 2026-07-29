@@ -5,7 +5,7 @@
 - **Bus Name:** `com.github.opengamingcollective.cardwire`
 
 > [!NOTE]
-> Cardwire also implements the SwitcherooControl interface for desktop environment integration. See [switcherooctl.md](switcherooctl.md) for details.
+> Cardwire also implements the SwitcherooControl interface for desktop environment integration. See [switcheroo.md](switcheroo.md) for details.
 
 ---
 
