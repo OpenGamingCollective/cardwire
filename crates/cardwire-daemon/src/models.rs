@@ -131,7 +131,15 @@ impl DaemonManager {
         // If it's the first time cardwired is launched, we need to populate the gpu state file
         self.populate_state_file().await?;
 
-        self.apply_mode_at_startup().await?;
+        // This one can fail on asus laptop when switching to integrated using the kernel attribute
+        if let Err(err) = self.apply_mode_at_startup(None).await {
+            error!(
+                "failed to apply mode at startup: {}, switching to manual...",
+                err
+            );
+            // 2 = manual
+            self.apply_mode_at_startup(Some(2)).await?
+        };
 
         Ok(())
     }
@@ -210,10 +218,14 @@ impl DaemonManager {
         }
         Ok(())
     }
-    async fn apply_mode_at_startup(&self) -> Result<()> {
-        let mode_to_apply = {
-            let mode = self.inner.mode_state.read().await;
-            Modes::into(mode.mode())
+    async fn apply_mode_at_startup(&self, mode: Option<u32>) -> Result<()> {
+        // If a mode is supplied as arg, use it, else read the internal state (from file)
+        let mode_to_apply = match mode {
+            Some(mode) => mode,
+            None => {
+                let mode = self.inner.mode_state.read().await;
+                Modes::into(mode.mode())
+            }
         };
         self.mode_interface
             .set_mode(mode_to_apply)
