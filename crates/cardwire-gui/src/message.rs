@@ -1,5 +1,5 @@
 use crate::{
-    helpers::GpuDevice, models::{DaemonSettings, LsofData, Mode, Page, PciDevice}, tray::{TrayAction, TrayConfig, TrayHandle}
+    gui_config::GuiConfig, helpers::GpuDevice, models::{DaemonSettings, LsofData, Mode, Page, PciDevice}, tray::{TrayAction, TrayHandle}
 };
 use std::collections::BTreeMap;
 
@@ -13,7 +13,7 @@ pub enum Message {
     UpdateStateSetting(bool),
     UpdateBatterySetting(bool),
     UpdateBatteryMode(Mode),
-    UpdateTrayConfig(TrayConfig),
+    UpdateGuiConfig(GuiConfig),
     TrayReady(TrayHandle),
     TrayAction(TrayAction),
     TrayUnavailable(String),

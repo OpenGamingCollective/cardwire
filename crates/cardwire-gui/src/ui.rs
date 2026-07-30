@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    helpers::GpuDevice, message::Message, models::{LsofData, MainState, Mode, Page, PciDevice, SettingState}, tray::TrayConfig
+    gui_config::{GuiConfig, PrimaryClickAction}, helpers::GpuDevice, message::Message, models::{LsofData, MainState, Mode, Page, PciDevice, SettingState}
 };
 
 // Custom macro for box theming, used by cards
@@ -507,59 +507,88 @@ pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Mes
     )
     .style(|_| box_theme!())
     .width(Fill);
-    let tray_settings = tray_setting_section(setting_state.tray_config);
+    let gui_settings = gui_setting_section(setting_state.gui_config.clone());
     col = col
         .push(nvidia_setting)
         .push(state_setting)
         .push(battery_setting)
         .push(battery_mode)
-        .push(tray_settings);
+        .push(gui_settings);
     col.into()
 }
 
-fn tray_setting_section(config: TrayConfig) -> Element<'static, Message> {
-    container(
-        column![
-            text("Tray Settings").size(20),
-            text("Choose the two modes toggled by primary-clicking the tray icon.")
-                .color(Color::from_rgb(0.6, 0.6, 0.6)),
-            row![
-                column![
-                    text("Start in tray"),
-                    text("Do not open the GUI when Cardwire starts. Takes effect next launch.")
-                        .size(13)
-                        .color(Color::from_rgb(0.6, 0.6, 0.6)),
-                ],
-                horizontal(),
-                toggler(config.start_in_tray).on_toggle(move |start_in_tray| {
-                    Message::UpdateTrayConfig(TrayConfig {
-                        start_in_tray,
-                        ..config
-                    })
-                }),
-            ]
-            .align_y(Alignment::Center),
-            row![
-                text("Toggle from:").width(Fixed(130.0)),
-                pick_list(Mode::VARIANTS, Some(config.toggle_from), move |mode| {
-                    Message::UpdateTrayConfig(config.with_toggle_from(mode))
-                },),
-            ]
-            .align_y(Alignment::Center),
-            row![
-                text("Toggle to:").width(Fixed(130.0)),
-                pick_list(Mode::VARIANTS, Some(config.toggle_to), move |mode| {
-                    Message::UpdateTrayConfig(config.with_toggle_to(mode))
-                },),
-            ]
-            .align_y(Alignment::Center),
+fn gui_setting_section(config: GuiConfig) -> Element<'static, Message> {
+    let start_in_tray_config = config.clone();
+    let action_config = config.clone();
+    let primary_click_mode_settings =
+        (config.primary_click_action == PrimaryClickAction::SwitchMode).then(|| {
+            Mode::VARIANTS.iter().copied().fold(
+                column![text("Modes to switch between:").size(16)].spacing(10),
+                |column, mode| {
+                    let mode_config = config.clone();
+                    let enabled = config.primary_click_modes.contains(&mode);
+                    let can_disable = config.primary_click_modes.len() > 1 || !enabled;
+
+                    column.push(
+                        row![
+                            text(mode.to_string()).width(Fixed(130.0)),
+                            toggler(enabled).on_toggle_maybe(can_disable.then_some(
+                                move |enabled| {
+                                    Message::UpdateGuiConfig(
+                                        mode_config.clone().with_primary_click_mode(mode, enabled),
+                                    )
+                                }
+                            ),),
+                        ]
+                        .align_y(Alignment::Center),
+                    )
+                },
+            )
+        });
+    let mut content = column![
+        text("GUI Settings").size(20),
+        text("Configure Cardwire's startup and tray icon behavior.")
+            .color(Color::from_rgb(0.6, 0.6, 0.6)),
+        row![
+            column![
+                text("Start in tray"),
+                text("Do not open the GUI when Cardwire starts. Takes effect next launch.")
+                    .size(13)
+                    .color(Color::from_rgb(0.6, 0.6, 0.6)),
+            ],
+            horizontal(),
+            toggler(config.start_in_tray).on_toggle(move |start_in_tray| {
+                Message::UpdateGuiConfig(GuiConfig {
+                    start_in_tray,
+                    ..start_in_tray_config.clone()
+                })
+            }),
         ]
-        .spacing(10),
-    )
-    .style(|_| box_theme!())
-    .width(Fill)
-    .padding(20)
-    .into()
+        .align_y(Alignment::Center),
+        row![
+            text("Primary click:").width(Fixed(130.0)),
+            pick_list(
+                PrimaryClickAction::VARIANTS,
+                Some(config.primary_click_action),
+                move |primary_click_action| Message::UpdateGuiConfig(GuiConfig {
+                    primary_click_action,
+                    ..action_config.clone()
+                }),
+            ),
+        ]
+        .align_y(Alignment::Center),
+    ]
+    .spacing(10);
+
+    if let Some(settings) = primary_click_mode_settings {
+        content = content.push(settings);
+    }
+
+    container(content)
+        .style(|_| box_theme!())
+        .width(Fill)
+        .padding(20)
+        .into()
 }
 
 pub fn pci_page<'a>(pci_list: &'a BTreeMap<String, PciDevice>) -> Element<'a, Message> {

@@ -1,4 +1,5 @@
 mod app;
+mod gui_config;
 mod helpers;
 mod message;
 mod models;

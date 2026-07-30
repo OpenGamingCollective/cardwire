@@ -5,7 +5,7 @@ use log::error;
 use std::collections::BTreeMap;
 
 use crate::{
-    helpers::{CardwireDbus, GpuDevice}, message::Message, models::{DaemonSettings, MainState, Mode, Page, PciDevice, SettingState}, tray::{self, TrayAction, TrayConfig, TrayHandle}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
+    gui_config::{GuiConfig, PrimaryClickAction}, helpers::{CardwireDbus, GpuDevice}, message::Message, models::{DaemonSettings, MainState, Mode, Page, PciDevice, SettingState}, tray::{self, TrayAction, TrayHandle}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
 };
 
 #[derive(Debug)]
@@ -25,14 +25,14 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> (Self, Task<Message>) {
-        let (tray_config, error) = match TrayConfig::load() {
+        let (gui_config, error) = match GuiConfig::load() {
             Ok(config) => (config, None),
             Err(error) => (
-                TrayConfig::default(),
-                Some(format!("Could not load tray settings: {error}")),
+                GuiConfig::default(),
+                Some(format!("Could not load GUI settings: {error}")),
             ),
         };
-        let (window_id, open_window) = if tray_config.start_in_tray {
+        let (window_id, open_window) = if gui_config.start_in_tray {
             (None, Task::none())
         } else {
             let (id, task) = window::open(window::Settings::default());
@@ -47,7 +47,7 @@ impl AppState {
             pci_list: BTreeMap::default(),
             main_state: MainState::default(),
             setting_state: SettingState {
-                tray_config,
+                gui_config,
                 ..SettingState::default()
             },
             window_id,
@@ -186,23 +186,28 @@ impl AppState {
                     },
                 );
             }
-            Message::UpdateTrayConfig(config) => return self.save_tray_config(config),
+            Message::UpdateGuiConfig(config) => return self.save_gui_config(config),
             Message::TrayReady(handle) => {
                 self.tray_handle = Some(handle);
                 self.tray_available = true;
             }
             Message::TrayAction(action) => match action {
-                TrayAction::ToggleConfiguredMode => {
-                    return match configured_tray_mode(
-                        self.main_state.current_mode,
-                        self.setting_state.tray_config,
-                    ) {
-                        Ok(mode) => self.update(Message::SetMode(mode)),
-                        Err(error) => {
-                            self.error = Some(error);
-                            Task::none()
+                TrayAction::PrimaryClick => {
+                    match self.setting_state.gui_config.primary_click_action {
+                        PrimaryClickAction::SwitchMode => {
+                            return match configured_primary_click_mode(
+                                self.main_state.current_mode,
+                                &self.setting_state.gui_config,
+                            ) {
+                                Ok(mode) => self.update(Message::SetMode(mode)),
+                                Err(error) => {
+                                    self.error = Some(error);
+                                    Task::none()
+                                }
+                            };
                         }
-                    };
+                        PrimaryClickAction::OpenGui => return self.open_or_focus_window(),
+                    }
                 }
                 TrayAction::SetMode(mode) => return self.update(Message::SetMode(mode)),
                 TrayAction::SetGpuBlock { id, blocked } => {
@@ -387,14 +392,14 @@ impl AppState {
         ])
     }
 
-    fn save_tray_config(&mut self, config: TrayConfig) -> Task<Message> {
+    fn save_gui_config(&mut self, config: GuiConfig) -> Task<Message> {
         match config.save() {
             Ok(()) => {
-                self.setting_state.tray_config = config;
-                self.info = Some("Tray settings saved".to_string());
+                self.setting_state.gui_config = config;
+                self.info = Some("GUI settings saved".to_string());
                 self.error = None;
             }
-            Err(error) => self.error = Some(format!("Could not save tray settings: {error}")),
+            Err(error) => self.error = Some(format!("Could not save GUI settings: {error}")),
         }
         Task::none()
     }
@@ -463,9 +468,12 @@ impl AppState {
     }
 }
 
-fn configured_tray_mode(current: Option<Mode>, config: TrayConfig) -> Result<Mode, String> {
+fn configured_primary_click_mode(
+    current: Option<Mode>,
+    config: &GuiConfig,
+) -> Result<Mode, String> {
     current
-        .map(|mode| config.next_mode(mode))
+        .map(|mode| config.next_primary_click_mode(mode))
         .ok_or_else(|| "Cardwire daemon is unavailable".to_string())
 }
 
@@ -478,16 +486,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tray_toggle_uses_the_configured_pair() {
+    fn primary_click_uses_the_configured_modes() {
         assert_eq!(
-            configured_tray_mode(Some(Mode::Integrated), TrayConfig::default()).unwrap(),
+            configured_primary_click_mode(Some(Mode::Integrated), &GuiConfig::default()).unwrap(),
             Mode::Hybrid
         );
     }
 
     #[test]
-    fn tray_toggle_rejects_an_offline_daemon() {
-        assert!(configured_tray_mode(None, TrayConfig::default()).is_err());
+    fn primary_click_rejects_an_offline_daemon() {
+        assert!(configured_primary_click_mode(None, &GuiConfig::default()).is_err());
     }
 
     #[test]
