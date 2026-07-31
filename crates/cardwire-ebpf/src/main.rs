@@ -124,6 +124,55 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
     unsafe { is_inode_blocked(&ctx, inode_ptr) }
 }
 
+#[lsm(hook = "inode_permission")]
+pub fn lsm_inode_permission(ctx: LsmContext) -> i32 {
+    match unsafe { try_inode_permission(ctx) } {
+        Ok(ret) => ret,
+        Err(ret) => ret,
+    }
+}
+
+unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
+    // If it's the daemon, we must exit
+    match is_cardwired() {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => {
+            // This error happen if either the array is not available or the index 0 of the array is
+            // empty
+            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            return ReturnCode::SUCCESS;
+        }
+    }
+
+    // If the mode is hybrid, we must exit
+    match unsafe { is_hybrid() } {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => {
+            // This error happen if either the array is not available or the index 0 of the array is
+            // empty
+            error!(&ctx, "EBPF is_hybrid() produced an error, exiting");
+            return ReturnCode::SUCCESS;
+        }
+    }
+
+    // Get a mutable ptr to the inode, in inode_permission it's the first argument
+    let inode_ptr: *mut inode = ctx.arg(0);
+
+    if inode_ptr.is_null() {
+        return ReturnCode::SUCCESS;
+    }
+
+    unsafe { is_inode_blocked(&ctx, inode_ptr) }
+}
+
 #[cfg(not(test))]
 #[panic_handler] // (3)
 fn panic(_info: &core::panic::PanicInfo) -> ! {
