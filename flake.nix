@@ -76,6 +76,7 @@
             (pkgs system).libGL
             (pkgs system).udev
           ];
+          LIBCLANG_PATH = "${(pkgs system).llvmPackages.libclang.lib}/lib";
           RUST_SRC_PATH = "${toolchainFor system}/lib/rustlib/src/rust/library";
           RUST_BACKTRACE = "1";
           shellHook = ''

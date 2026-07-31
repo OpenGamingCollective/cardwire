@@ -1,20 +1,14 @@
 use anyhow::Context;
-use aya::programs::{Xdp, XdpMode};
+use aya::{
+    Btf, programs::{Lsm, Xdp, XdpMode}
+};
 use aya_log::EbpfLogger;
 use clap::Parser;
 use log::{info, warn};
 use tokio::signal; // (1)
 
-#[derive(Debug, Parser)]
-struct Opt {
-    #[clap(short, long, default_value = "eth0")]
-    iface: String, // (2)
-}
-
 #[tokio::main] // (3)
 async fn main() -> Result<(), anyhow::Error> {
-    let opt = Opt::parse();
-
     env_logger::init();
 
     // This will include your eBPF object file as raw bytes at compile-time and load it at
@@ -45,11 +39,11 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     }
     // (6)
-    let program: &mut Xdp = bpf.program_mut("xdp_hello").unwrap().try_into()?;
-    program.load()?; // (7)
+    let program: &mut Lsm = bpf.program_mut("lsm_file_open").unwrap().try_into()?;
+    let btf = Btf::from_sys_fs()?;
+    program.load("file_open", &btf)?; // (7)
     // (8)
-    program.attach(&opt.iface, XdpMode::default())
-        .context("failed to attach the XDP program with default mode - try changing XdpMode::default() to XdpMode::Skb")?;
+    program.attach()?;
 
     let ctrl_c = signal::ctrl_c();
     info!("Waiting for Ctrl-C...");
