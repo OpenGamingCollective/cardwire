@@ -54,6 +54,12 @@ async fn main() -> Result<(), anyhow::Error> {
     // (8)
     program.attach()?;
 
+    let program: &mut Lsm = bpf.program_mut("lsm_inode_getattr").unwrap().try_into()?;
+    let btf = Btf::from_sys_fs()?;
+    program.load("inode_getattr", &btf)?; // (7)
+    // (8)
+    program.attach()?;
+
     let mut blocklist: HashMap<_, u64, u32> =
         HashMap::try_from(bpf.map_mut("CW_BLOCKED_INO").unwrap())?;
     if let Ok(_) = blocklist.insert(622, 1, 0) {
