@@ -1,5 +1,5 @@
 use aya_ebpf::{
-    macros::map, maps::{Array, HashMap}
+    btf_maps::RingBuf, macros::{btf_map, map}, maps::{Array, HashMap}
 };
 
 /*
@@ -67,3 +67,27 @@ pub static CW_FORCED_PID: HashMap<u32, u32> = HashMap::<u32, u32>::with_max_entr
 #[map]
 pub static CW_ALLOWED_COMM: HashMap<[u8; 16], u8> =
     HashMap::<[u8; 16], u8>::with_max_entries(1024, 0);
+
+#[repr(align(8))]
+pub struct ExecEvent {
+    pid: u64,
+}
+
+#[btf_map]
+pub static CW_EXEC_EVENTS: RingBuf<ExecEvent, 4096> = RingBuf::new();
+
+#[repr(align(8))]
+pub struct CloseEvent {
+    pid: u64,
+}
+
+#[btf_map]
+pub static CW_CLOSE_EVENTS: RingBuf<CloseEvent, 4096> = RingBuf::new();
+
+#[repr(align(8))]
+pub struct ReportEvent {
+    pid: u64,
+}
+
+#[btf_map]
+pub static CW_REPORT_EVENTS: RingBuf<ReportEvent, 4096> = RingBuf::new();
