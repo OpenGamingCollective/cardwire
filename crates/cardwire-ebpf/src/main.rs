@@ -27,6 +27,8 @@ mod vmlinux;
 
 mod helpers;
 
+mod maps;
+
 #[lsm(hook = "file_open")]
 pub fn lsm_file_open(ctx: LsmContext) -> i32 {
     match unsafe { try_file_open(ctx) } {

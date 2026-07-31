@@ -1,6 +1,8 @@
 use aya_ebpf::programs::LsmContext;
 
-use crate::vmlinux::{dentry, inode};
+use crate::{
+    maps::CW_BLOCKED_INO, vmlinux::{dentry, inode}
+};
 
 use crate::ENOENT;
 
@@ -17,8 +19,7 @@ pub unsafe fn is_device_blocked(ctx: &LsmContext, d: *mut dentry) -> Result<i32,
     let inode: u64 = unsafe { (*inode_ptr).i_ino };
 
     // Check if the inode is in the blocked list
-    let inode_blocked = 622 as u64;
-    if inode == inode_blocked {
+    if unsafe { CW_BLOCKED_INO.get(inode).is_some() } {
         info!(ctx, "inode blocked");
         return Ok(ENOENT);
     }

@@ -1,6 +1,6 @@
 use anyhow::Context;
 use aya::{
-    Btf, programs::{Lsm, Xdp, XdpMode}
+    Btf, maps::HashMap, programs::{Lsm, Xdp, XdpMode}
 };
 use aya_log::EbpfLogger;
 use clap::Parser;
@@ -44,6 +44,12 @@ async fn main() -> Result<(), anyhow::Error> {
     program.load("file_open", &btf)?; // (7)
     // (8)
     program.attach()?;
+
+    let mut blocklist: HashMap<_, u64, u32> =
+        HashMap::try_from(bpf.map_mut("CW_BLOCKED_INO").unwrap())?;
+    if let Ok(_) = blocklist.insert(622, 1, 0) {
+        info!("inserted /dev/dri/renderD128 into map!");
+    }
 
     let ctrl_c = signal::ctrl_c();
     info!("Waiting for Ctrl-C...");
