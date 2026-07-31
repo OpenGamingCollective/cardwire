@@ -1,25 +1,17 @@
-use std::{env, path::PathBuf, process::Command};
+use which::which;
 
+/// Building this crate has an undeclared dependency on the `bpf-linker` binary. This would be
+/// better expressed by [artifact-dependencies][bindeps] but issues such as
+/// https://github.com/rust-lang/cargo/issues/12385 make their use impractical for the time being.
+///
+/// This file implements an imperfect solution: it causes cargo to rebuild the crate whenever the
+/// mtime of `which bpf-linker` changes. Note that possibility that a new bpf-linker is added to
+/// $PATH ahead of the one used as the cache key still exists. Solving this in the general case
+/// would require rebuild-if-changed-env=PATH *and* rebuild-if-changed={every-directory-in-PATH}
+/// which would likely mean far too much cache invalidation.
+///
+/// [bindeps]: https://doc.rust-lang.org/nightly/cargo/reference/unstable.html?highlight=feature#artifact-dependencies
 fn main() {
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let out_path = PathBuf::from(out_dir).join("bpf.o");
-    let source_path = "src/c/bpf.c";
-    let status = Command::new("clang")
-        .args([
-            "-O2",
-            "-g",
-            "-target",
-            "bpf",
-            "-c",
-            source_path,
-            "-o",
-            out_path.to_str().unwrap(),
-        ])
-        .env("NIX_HARDENING_ENABLE", "")
-        .status()
-        .expect("Failed to execute clang");
-
-    if !status.success() {
-        panic!("Failed to compile BPF program");
-    }
+    let bpf_linker = which("bpf-linker").unwrap();
+    println!("cargo:rerun-if-changed={}", bpf_linker.to_str().unwrap());
 }

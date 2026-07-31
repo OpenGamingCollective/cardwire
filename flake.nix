@@ -34,6 +34,7 @@
           tc.rustfmt
           tc.clippy
           tc.rust-src
+          tc.llvm-tools-preview
         ];
     in
     {
@@ -75,9 +76,12 @@
             (pkgs system).libGL
             (pkgs system).udev
           ];
-          RUST_SRC_PATH = "${(fenixpkgs system).stable.rust-src}/lib/rustlib/src/rust/library";
+          RUST_SRC_PATH = "${toolchainFor system}/lib/rustlib/src/rust/library";
           RUST_BACKTRACE = "1";
-          inherit (self.checks.${system}.pre-commit-check) shellHook;
+          shellHook = ''
+            export PATH="$HOME/.cargo/bin:$PATH"
+            ${self.checks.${system}.pre-commit-check.shellHook}
+          '';
         };
       });
       nixosModules.default = import ./nix/nixos-module.nix self;
