@@ -7,7 +7,7 @@ use aya_ebpf::{
 use aya_log_ebpf::{error, info, warn};
 
 use crate::{
-    helpers::{is_cardwired, is_dentry_blocked, is_hybrid}, vmlinux::{dentry, file, inode}
+    helpers::{is_cardwired, is_hybrid, is_inode_blocked}, vmlinux::{dentry, file, inode}
 };
 
 #[allow(
@@ -114,7 +114,14 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
         return ReturnCode::SUCCESS;
     }
 
-    unsafe { is_dentry_blocked(&ctx, d) }
+    // Get a mutable ptr to the inode
+    let inode_ptr: *mut inode = unsafe { (*d).d_inode };
+
+    if inode_ptr.is_null() {
+        return ReturnCode::SUCCESS;
+    }
+
+    unsafe { is_inode_blocked(&ctx, inode_ptr) }
 }
 
 #[cfg(not(test))]
