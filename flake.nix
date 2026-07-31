@@ -2,7 +2,7 @@
   description = "Cardwire, a GPU manager for laptop and workstation";
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    fenix.url = "github:nix-community/fenix";
+    fenix.url = "github:nix-community/fenix/monthly";
     git-hooks.url = "github:cachix/git-hooks.nix";
   };
   outputs =
@@ -24,14 +24,14 @@
         system:
         let
           tc = (fenixpkgs system).toolchainOf {
-            channel = "1.95.0";
-            sha256 = "sha256-gh/xTkxKHL4eiRXzWv8KP7vfjSk61Iq48x47BEDFgfk=";
+            channel = "nightly";
+            sha256 = "sha256-sM1tAacgPuCH5jppuiSQi1DM/LDe228PX/4SBDmsfG0=";
           };
         in
         (fenixpkgs system).combine [
           tc.cargo
           tc.rustc
-          (fenixpkgs system).latest.rustfmt
+          tc.rustfmt
           tc.clippy
           tc.rust-src
         ];
