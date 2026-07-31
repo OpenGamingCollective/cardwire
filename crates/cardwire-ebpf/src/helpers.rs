@@ -8,17 +8,10 @@ use crate::ReturnCode;
 
 use aya_log_ebpf::info;
 
-/// Verify if the dentry's inode is inside CW_BLOCKED_INO or not
+/// Verify if the inode is inside CW_BLOCKED_INO or not
 #[inline(always)]
-pub unsafe fn is_dentry_blocked(ctx: &LsmContext, d: *mut dentry) -> Result<i32, i32> {
-    // Get a mutable ptr to the inode
-    let inode_ptr: *mut inode = unsafe { (*d).d_inode };
-
-    if inode_ptr.is_null() {
-        return ReturnCode::SUCCESS;
-    }
-
-    let inode: u64 = unsafe { (*inode_ptr).i_ino };
+pub unsafe fn is_inode_blocked(ctx: &LsmContext, i_ptr: *mut inode) -> Result<i32, i32> {
+    let inode: u64 = unsafe { (*i_ptr).i_ino };
 
     let mut blocked: bool = false;
 
