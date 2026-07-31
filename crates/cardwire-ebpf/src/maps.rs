@@ -20,6 +20,13 @@ pub static CW_DAEMON_PID: Array<u32> = Array::<u32>::with_max_entries(1, 0);
 pub static CW_MODE: Array<u8> = Array::<u8>::with_max_entries(1, 0);
 
 /*
+    A single entry array containing cardwired exp_nvidia setting
+    0 - Exp_nvidia_setting
+*/
+#[map]
+pub static CW_SETTINGS: HashMap<u8, bool> = HashMap::<u8, bool>::with_max_entries(255, 0);
+
+/*
    Map used to store blocked inodes sent from userspace
    Key = Inode
    Value = associated GPU
