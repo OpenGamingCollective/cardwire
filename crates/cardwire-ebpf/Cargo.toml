@@ -8,5 +8,12 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-thiserror.workspace = true
-aya.workspace = true
+aya-ebpf.workspace = true
+aya-log-ebpf.workspace = true
+
+[[bin]]
+name = "cardwire-ebpf"
+path = "src/main.rs"
+
+[build-dependencies]
+which.workspace = true
