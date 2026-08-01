@@ -23,6 +23,12 @@ pub struct CloseEvent {
     pub pid: u32,
 }
 
+#[derive(Debug, Copy, Clone)]
+enum PidType {
+    Allowed,
+    Forced,
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ReportEvent {
@@ -36,6 +42,7 @@ pub struct CardwireAnalyzer {
     close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     report_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
+    forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
     #[allow(dead_code)]
     xdg_folders: Vec<PathBuf>,
@@ -48,6 +55,7 @@ impl CardwireAnalyzer {
         let close_ring = blocker.get_close_ring()?;
         let report_ring = blocker.get_report_ring()?;
         let pid_map = blocker.get_pid_map()?;
+        let forced_map = blocker.get_forced_pid_map()?;
 
         let exec_ring = AsyncFd::new(exec_ring)?;
         let close_ring = AsyncFd::new(close_ring)?;
@@ -56,6 +64,7 @@ impl CardwireAnalyzer {
         // Now Rwlock -> Arc
         let exec_ring = Arc::new(Mutex::new(exec_ring));
         let pid_map = Arc::new(RwLock::new(pid_map));
+        let forced_map = Arc::new(RwLock::new(forced_map));
         let close_ring = Arc::new(Mutex::new(close_ring));
         let report_ring = Arc::new(Mutex::new(report_ring));
         let xdg_result = static_analysis::get_fdo_apps().await?;
@@ -66,6 +75,7 @@ impl CardwireAnalyzer {
             close_ring,
             report_ring,
             pid_map,
+            forced_map,
             xdg_list,
             xdg_folders,
         })
@@ -158,18 +168,25 @@ impl CardwireAnalyzer {
             && result.0
         {
             match result.1 {
-                0 => info!("FORCE: pid: {} process: {} ", event.pid, real_app_name),
-                1 => info!(
-                    "ALLOW: pid: {} process: {} in {}us",
-                    event.pid,
-                    real_app_name,
-                    time.elapsed().as_micros()
-                ),
-                _ => {}
-            }
-            let mut pid_map = self.pid_map.write().await;
-            if let Err(e) = pid_map.insert(event.pid, result.1 as u32, 0) {
-                warn!("Failed to insert into eBPF map: {}", e);
+                PidType::Forced => {
+                    info!("FORCE: pid: {} process: {} ", event.pid, real_app_name);
+                    let mut forced_map = self.forced_map.write().await;
+                    if let Err(e) = forced_map.insert(event.pid, 1, 0) {
+                        warn!("Failed to insert into eBPF map: {}", e);
+                    }
+                }
+                PidType::Allowed => {
+                    info!(
+                        "ALLOW: pid: {} process: {} in {}us",
+                        event.pid,
+                        real_app_name,
+                        time.elapsed().as_micros()
+                    );
+                    let mut pid_map = self.pid_map.write().await;
+                    if let Err(e) = pid_map.insert(event.pid, result.1 as u32, 0) {
+                        warn!("Failed to insert into eBPF map: {}", e);
+                    }
+                }
             }
         }
     }
@@ -182,7 +199,7 @@ impl CardwireAnalyzer {
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app, the u8 is the
     /// gpu id
-    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, u8)> {
+    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, PidType)> {
         let path = format!("/proc/{}/environ", pid);
         let environ = match fs::read(path) {
             Ok(content) => content,
@@ -190,10 +207,10 @@ impl CardwireAnalyzer {
         };
         // First check CARDWIRE_ALLOW, if  None continue
         if let Some(allow) = check_env("CARDWIRE_ALLOW", &environ) {
-            return Some((allow, 1));
+            return Some((allow, PidType::Allowed));
         }
         if let Some(value) = check_env("CARDWIRE_FORCE_DGPU", &environ) {
-            return Some((value, 0));
+            return Some((value, PidType::Forced));
         }
 
         let switcheroo_support = desktop_supports_switcheroo(&environ);
@@ -212,7 +229,7 @@ impl CardwireAnalyzer {
             };
             result = check_for_flatpak_run(&cmdline, &xdg_list);
         }
-        Some((result, 1))
+        Some((result, PidType::Allowed))
     }
 
     #[allow(dead_code)]

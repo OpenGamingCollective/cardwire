@@ -62,10 +62,12 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
             return true;
         }
 
+        // 0 = iGPU
+        // 1 = dGPU
         if *mode == SMART {
             let ppid = match get_task_ppid() {
                 Some(ppid) => ppid,
-                None => break 'end,
+                None => u32::MAX,
             };
 
             // We need to check if the map contains the pid
@@ -73,15 +75,18 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
             // gpu(hybrid) laptops
 
             // First we try with the pid
-            if unsafe { CW_ALLOWED_PID.get(pid).is_some() }
-                || unsafe { CW_ALLOWED_PID.get(ppid).is_some() }
+            if unsafe { CW_ALLOWED_PID.get(&pid).is_some() }
+                || unsafe { CW_ALLOWED_PID.get(&ppid).is_some() }
             {
                 // We got a match, pid is allowed !
                 break 'end;
             }
 
             // If we are here, the pid AND the ppid are not in the allowed map, check the FORCED map
-            if let Some(pid_gpu_id) = unsafe { CW_FORCED_PID.get(pid) } {
+            let forced_gpu_id =
+                unsafe { CW_FORCED_PID.get(&pid).or_else(|| CW_FORCED_PID.get(&ppid)) };
+
+            if let Some(pid_gpu_id) = forced_gpu_id {
                 // We match the ino_gpu_id with the pid_gpu_id
                 // If they match, that means the ino is owned by the said GPU id, and we want to
                 // force the process to use said GPU id
@@ -102,6 +107,23 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
                     }
                 }
             }
+
+            // Check if inode gpu id matches 0, the iGPU.
+            // iGPU should always be 0
+            if ino_gpu_id == 0 {
+                // allow the iGPU
+                break 'end;
+            }
+
+            // only send if Some
+            if let Some(mut ring_buf) = CW_REPORT_EVENTS.reserve(0) {
+                let event: ReportEvent = ReportEvent { pid };
+                // write to the map
+                ring_buf.write(event);
+                // submit
+                ring_buf.submit(0);
+            };
+
             // End of smart mode check, block if it didnt get allowed earlier
             return true;
         }
