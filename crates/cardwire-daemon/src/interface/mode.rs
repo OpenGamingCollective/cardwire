@@ -214,29 +214,58 @@ impl ModeInterface {
         cards: &BTreeSet<u32>,
         restore_departed: bool,
     ) -> fdo::Result<()> {
+        enum RequiredGpuUpdate {
+            Unblock { capture_state: bool },
+            Restore(bool),
+            None,
+        }
+
         let snapshot_active = self.latest_mode.lock().await.is_some();
-        let mut gpu_list = self.gpu_list.write().await;
-        for gpu in gpu_list.values_mut() {
-            let required = cards.contains(gpu.device.card());
-            if required {
+        let updates = {
+            let gpu_list = self.gpu_list.read().await;
+            let mut updates = Vec::with_capacity(gpu_list.len());
+            for gpu in gpu_list.values() {
+                let required = cards.contains(gpu.device.card());
                 let was_required = gpu.external_display_required();
-                gpu.set_external_display_required(true);
-                if snapshot_active && !was_required && gpu.latest_state().await.is_none() {
-                    gpu.set_latest_state(Some(gpu.gpu_blocked().await?)).await;
-                }
-                gpu.unblock_gpu().await?;
-            } else if restore_departed
-                && gpu.external_display_required()
-                && let Some(blocked) = gpu.latest_state().await
-            {
-                if blocked && !gpu.device.is_default() {
-                    gpu.block_gpu(1).await?;
+                let latest_state = gpu.latest_state().await;
+                let update = if required {
+                    gpu.set_external_display_required(true);
+                    RequiredGpuUpdate::Unblock {
+                        capture_state: snapshot_active && !was_required && latest_state.is_none(),
+                    }
+                } else if restore_departed && was_required {
+                    if let Some(blocked) = latest_state {
+                        RequiredGpuUpdate::Restore(blocked)
+                    } else {
+                        gpu.set_external_display_required(false);
+                        RequiredGpuUpdate::None
+                    }
                 } else {
+                    gpu.set_external_display_required(false);
+                    RequiredGpuUpdate::None
+                };
+                updates.push((gpu.clone(), update));
+            }
+            updates
+        };
+
+        for (mut gpu, update) in updates {
+            match update {
+                RequiredGpuUpdate::Unblock { capture_state } => {
+                    if capture_state {
+                        gpu.set_latest_state(Some(gpu.gpu_blocked().await?)).await;
+                    }
                     gpu.unblock_gpu().await?;
                 }
-                gpu.set_external_display_required(false);
-            } else {
-                gpu.set_external_display_required(false);
+                RequiredGpuUpdate::Restore(blocked) => {
+                    if blocked && !gpu.device.is_default() {
+                        gpu.block_gpu(1).await?;
+                    } else {
+                        gpu.unblock_gpu().await?;
+                    }
+                    gpu.set_external_display_required(false);
+                }
+                RequiredGpuUpdate::None => {}
             }
         }
         Ok(())
@@ -250,9 +279,16 @@ impl ModeInterface {
         };
 
         let changed = if mode == Modes::Manual {
-            let mut gpu_list = self.gpu_list.write().await;
-            for gpu in gpu_list.values_mut() {
-                if let Some(blocked) = gpu.latest_state().await {
+            let states = {
+                let gpu_list = self.gpu_list.read().await;
+                let mut states = Vec::with_capacity(gpu_list.len());
+                for gpu in gpu_list.values() {
+                    states.push((gpu.clone(), gpu.latest_state().await));
+                }
+                states
+            };
+            for (mut gpu, latest_state) in states {
+                if let Some(blocked) = latest_state {
                     if blocked && !gpu.device.is_default() {
                         gpu.block_gpu(1).await?;
                     } else {
@@ -535,7 +571,7 @@ impl ModeInterface {
         let _transition = self.transition_lock.lock().await;
         self.set_mode_value_locked(mode, false).await?;
         self.clear_external_display_snapshot_locked().await;
-        if mode == Modes::Manual && self.external_display_auto_switch_enabled() {
+        if self.external_display_auto_switch_enabled() {
             let cards = self.required_external_cards().await?;
             if !cards.is_empty() {
                 self.apply_external_display_cards_locked(&cards, false)
