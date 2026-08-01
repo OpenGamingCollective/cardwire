@@ -138,17 +138,21 @@ pub fn exp_nvidia_inodes() -> Result<Vec<u64>> {
     ];
 
     for path in VULKAN_PATHS {
-        let has_nvidia = fs::read_dir(path)
-            .map(|entries| {
-                entries.filter_map(|e| e.ok()).any(|entry| {
-                    let name = entry.file_name();
-                    name == "nvidia_icd.json" || name == "nvidia_icd.x86_64.json"
-                })
-            })
-            .unwrap_or(false);
+        let Ok(entries) = fs::read_dir(path) else {
+            continue;
+        };
 
-        if has_nvidia && let Ok(metadata) = fs::metadata(path) {
-            inodes.push(metadata.ino());
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+
+            if (name == "nvidia_icd.json"
+                || name == "nvidia_icd.x86_64.json"
+                || name == "nvidia_icd.i686.json")
+                && let Ok(metadata) = fs::metadata(entry.path())
+                && metadata.is_file()
+            {
+                inodes.push(metadata.ino());
+            }
         }
     }
 
