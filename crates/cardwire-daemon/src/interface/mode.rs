@@ -103,25 +103,45 @@ impl ModeInterface {
     async fn restart_nvidia_powerd() {
         let service = "nvidia-powerd.service";
 
-        match Command::new("systemctl")
-            .arg("restart")
+        let enabled = match Command::new("systemctl")
+            .arg("is-enabled")
             .arg(service)
-            .arg("--no-block")
-            .stdout(Stdio::null())
-            .status()
+            .output()
             .await
         {
-            Ok(status) => {
-                if status.success() {
-                    info!("successfully restart nvidia-powerd.service");
+            Ok(output) => {
+                if let Ok(output_str) = str::from_utf8(&output.stdout) {
+                    output_str.contains("enabled")
                 } else {
-                    warn!("error restarting nvidia-powerd: {:?}", status.code())
+                    false
                 }
             }
             Err(err) => {
-                error!("error while trying to restart nvidia-powerd: {}", err)
+                error!("error while trying to detect nvidia-powerd: {}", err);
+                return;
             }
         };
+        if enabled {
+            match Command::new("systemctl")
+                .arg("restart")
+                .arg(service)
+                .arg("--no-block")
+                .stdout(Stdio::null())
+                .status()
+                .await
+            {
+                Ok(status) => {
+                    if status.success() {
+                        info!("successfully restart nvidia-powerd.service");
+                    } else {
+                        warn!("error restarting nvidia-powerd: {:?}", status.code())
+                    }
+                }
+                Err(err) => {
+                    error!("error while trying to restart nvidia-powerd: {}", err)
+                }
+            };
+        }
     }
 }
 
