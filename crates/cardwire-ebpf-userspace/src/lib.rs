@@ -41,25 +41,25 @@ impl EbpfBlocker {
             program.attach().map_err(CardwireEbpfError::aya)?;
         }
 
-        //let exec_program: &mut TracePoint = ebpf
-        //    .program_mut("trace_exec")
-        //    .ok_or_else(|| CardwireEbpfError::missing_lsm("trace_exec"))?
-        //    .try_into()
-        //    .map_err(CardwireEbpfError::aya)?;
-        //exec_program.load().map_err(CardwireEbpfError::aya)?;
-        //exec_program
-        //    .attach("sched", "sched_process_exec")
-        //    .map_err(CardwireEbpfError::aya)?;
-        //
-        //let close_program: &mut TracePoint = ebpf
-        //    .program_mut("trace_process_exit")
-        //    .ok_or_else(|| CardwireEbpfError::missing_lsm("trace_process_exit"))?
-        //    .try_into()
-        //    .map_err(CardwireEbpfError::aya)?;
-        //close_program.load().map_err(CardwireEbpfError::aya)?;
-        //close_program
-        //    .attach("sched", "sched_process_exit")
-        //    .map_err(CardwireEbpfError::aya)?;
+        let exec_program: &mut TracePoint = ebpf
+            .program_mut("tracepoint_sched_process_exec")
+            .ok_or_else(|| CardwireEbpfError::missing_lsm("tracepoint_sched_process_exec"))?
+            .try_into()
+            .map_err(CardwireEbpfError::aya)?;
+        exec_program.load().map_err(CardwireEbpfError::aya)?;
+        exec_program
+            .attach("sched", "sched_process_exec")
+            .map_err(CardwireEbpfError::aya)?;
+
+        let close_program: &mut TracePoint = ebpf
+            .program_mut("tracepoint_sched_process_exit")
+            .ok_or_else(|| CardwireEbpfError::missing_lsm("tracepoint_sched_process_exit"))?
+            .try_into()
+            .map_err(CardwireEbpfError::aya)?;
+        close_program.load().map_err(CardwireEbpfError::aya)?;
+        close_program
+            .attach("sched", "sched_process_exit")
+            .map_err(CardwireEbpfError::aya)?;
         // to hide files
         let cardwire_sys_enter_getdents64: &mut TracePoint = ebpf
             .program_mut("tracepoint_enter_getdents64")

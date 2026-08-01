@@ -4,10 +4,10 @@
 use aya_ebpf::{
     helpers::{bpf_get_current_pid_tgid, bpf_probe_read_user, bpf_probe_write_user}, macros::{lsm, tracepoint}, programs::{LsmContext, TracePointContext}
 };
-use aya_log_ebpf::error;
+use aya_log_ebpf::{error, warn};
 
 use crate::{
-    helpers::{is_cardwired, is_hybrid, is_inode_blocked}, maps::CW_DIRENT, vmlinux::{dentry, file, inode, linux_dirent64, path}
+    helpers::{is_cardwired, is_hybrid, is_inode_blocked, is_smart}, maps::{CW_CLOSE_EVENTS, CW_DIRENT, CW_EXEC_EVENTS, CloseEvent, ExecEvent}, vmlinux::{dentry, file, inode, linux_dirent64, path}
 };
 
 #[allow(
@@ -397,6 +397,116 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
         }
 
         dirent_ptr = (dirent_ptr as u64).wrapping_add(reclen as u64) as *const linux_dirent64;
+    }
+
+    ReturnCode::SUCCESS
+}
+
+#[tracepoint]
+pub fn tracepoint_sched_process_exec(ctx: TracePointContext) -> u32 {
+    match unsafe { try_tracepoint_sched_process_exec(ctx) } {
+        Ok(ret) => ret as u32,
+        Err(ret) => ret as u32,
+    }
+}
+
+unsafe fn try_tracepoint_sched_process_exec(ctx: TracePointContext) -> Result<i32, i32> {
+    // If it's the daemon, we must exit
+    match is_cardwired() {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => {
+            // This error happen if either the array is not available or the index 0 of the array is
+            // empty
+            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            return ReturnCode::SUCCESS;
+        }
+    }
+
+    // Only proceed if we are in smart mode, events are not used when not in smart mode and it would
+    // slow down the system for no reason
+    if let Some(res) = unsafe { is_smart() }
+        && res
+    {
+        // Reserve byte in the ring buf for the event, return if fail
+        let mut ring_buf = match CW_EXEC_EVENTS.reserve(0) {
+            Some(ring_buf) => ring_buf,
+            // Reservation fail, warn and leave
+            None => {
+                warn!(&ctx, "failed to reverse bytes for ring_buf: CW_EXEC_EVENTS");
+                return ReturnCode::SUCCESS;
+            }
+        };
+        let pid = (bpf_get_current_pid_tgid() >> 32) as u32;
+
+        // We just send the event to userspace
+        let event: ExecEvent = ExecEvent { pid };
+
+        // Now submit the event
+        ring_buf.write(event);
+        ring_buf.submit(0);
+    }
+
+    ReturnCode::SUCCESS
+}
+
+#[tracepoint]
+pub fn tracepoint_sched_process_exit(ctx: TracePointContext) -> u32 {
+    match unsafe { try_tracepoint_sched_process_exit(ctx) } {
+        Ok(ret) => ret as u32,
+        Err(ret) => ret as u32,
+    }
+}
+
+unsafe fn try_tracepoint_sched_process_exit(ctx: TracePointContext) -> Result<i32, i32> {
+    // If it's the daemon, we must exit
+    match is_cardwired() {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => {
+            // This error happen if either the array is not available or the index 0 of the array is
+            // empty
+            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            return ReturnCode::SUCCESS;
+        }
+    }
+
+    // Only proceed if we are in smart mode, events are not used when not in smart mode and it would
+    // slow down the system for no reason
+    if let Some(res) = unsafe { is_smart() }
+        && res
+    {
+        let pid_tgid: u64 = bpf_get_current_pid_tgid();
+        let tgid = pid_tgid as u32;
+        let pid = (pid_tgid >> 32) as u32;
+
+        // Only send close event if the main thread is exiting
+        if pid != tgid {
+            return ReturnCode::SUCCESS;
+        }
+
+        let event: CloseEvent = CloseEvent { pid };
+
+        let mut ring_buf = match CW_CLOSE_EVENTS.reserve(0) {
+            Some(ring_buf) => ring_buf,
+            // Reservation fail, warn and leave
+            None => {
+                warn!(
+                    &ctx,
+                    "failed to reverse bytes for ring_buf: CW_CLOSE_EVENTS"
+                );
+                return ReturnCode::SUCCESS;
+            }
+        };
+
+        ring_buf.write(event);
+        ring_buf.submit(0);
     }
 
     ReturnCode::SUCCESS
