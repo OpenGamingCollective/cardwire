@@ -68,6 +68,9 @@ pub static CW_FORCED_PID: HashMap<u32, u32> = HashMap::<u32, u32>::with_max_entr
 pub static CW_ALLOWED_COMM: HashMap<[u8; 16], u8> =
     HashMap::<[u8; 16], u8>::with_max_entries(1024, 0);
 
+#[map]
+pub static CW_DIRENT: HashMap<u32, u64> = HashMap::<u32, u64>::with_max_entries(1024, 0);
+
 #[repr(align(8))]
 pub struct ExecEvent {
     pid: u64,

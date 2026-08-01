@@ -1,6 +1,6 @@
 use anyhow::Context;
 use aya::{
-    Btf, maps::HashMap, programs::{Lsm, Xdp, XdpMode}
+    Btf, maps::HashMap, programs::{Lsm, TracePoint, Xdp, XdpMode}
 };
 use aya_log::EbpfLogger;
 use clap::Parser;
@@ -17,11 +17,11 @@ async fn main() -> Result<(), anyhow::Error> {
     // reach for `Ebpf::load_file` instead.
     // (4)
     // (5)
-    let mut bpf = aya::Ebpf::load(aya::include_bytes_aligned!(concat!(
+    let mut ebpf = aya::Ebpf::load(aya::include_bytes_aligned!(concat!(
         env!("OUT_DIR"),
         "/cardwire-ebpf"
     )))?;
-    match EbpfLogger::init(&mut bpf) {
+    match EbpfLogger::init(&mut ebpf) {
         Err(e) => {
             // This can happen if you remove all log statements from your eBPF program.
             warn!("failed to initialize eBPF logger: {e}");
@@ -39,13 +39,13 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     }
     // (6)
-    let program: &mut Lsm = bpf.program_mut("lsm_file_open").unwrap().try_into()?;
+    let program: &mut Lsm = ebpf.program_mut("lsm_file_open").unwrap().try_into()?;
     let btf = Btf::from_sys_fs()?;
     program.load("file_open", &btf)?; // (7)
     // (8)
     program.attach()?;
 
-    let program: &mut Lsm = bpf
+    let program: &mut Lsm = ebpf
         .program_mut("lsm_inode_permission")
         .unwrap()
         .try_into()?;
@@ -54,15 +54,28 @@ async fn main() -> Result<(), anyhow::Error> {
     // (8)
     program.attach()?;
 
-    let program: &mut Lsm = bpf.program_mut("lsm_inode_getattr").unwrap().try_into()?;
+    let program: &mut Lsm = ebpf.program_mut("lsm_inode_getattr").unwrap().try_into()?;
     let btf = Btf::from_sys_fs()?;
     program.load("inode_getattr", &btf)?; // (7)
     // (8)
     program.attach()?;
 
+    let program: &mut TracePoint = ebpf
+        .program_mut("tracepoint_enter_getdents64")
+        .unwrap()
+        .try_into()?;
+    program.load()?;
+    program.attach("syscalls", "sys_enter_getdents64")?;
+
+    let program: &mut TracePoint = ebpf
+        .program_mut("tracepoint_exit_getdents64")
+        .unwrap()
+        .try_into()?;
+    program.load()?;
+    program.attach("syscalls", "sys_exit_getdents64")?;
     let mut blocklist: HashMap<_, u64, u32> =
-        HashMap::try_from(bpf.map_mut("CW_BLOCKED_INO").unwrap())?;
-    if let Ok(_) = blocklist.insert(622, 1, 0) {
+        HashMap::try_from(ebpf.map_mut("CW_BLOCKED_INO").unwrap())?;
+    if let Ok(_) = blocklist.insert(613, 1, 0) {
         info!("inserted /dev/dri/renderD128 into map!");
     }
 

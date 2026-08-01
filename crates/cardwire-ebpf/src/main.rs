@@ -2,12 +2,12 @@
 #![no_main]
 
 use aya_ebpf::{
-    helpers::{bpf_get_current_comm, bpf_get_current_pid_tgid}, macros::lsm, programs::LsmContext
+    helpers::{bpf_get_current_pid_tgid, bpf_probe_read_user, bpf_probe_write_user}, macros::{lsm, tracepoint}, programs::{LsmContext, TracePointContext}
 };
-use aya_log_ebpf::{error, info, warn};
+use aya_log_ebpf::error;
 
 use crate::{
-    helpers::{is_cardwired, is_hybrid, is_inode_blocked}, vmlinux::{dentry, file, inode, path}
+    helpers::{is_cardwired, is_hybrid, is_inode_blocked}, maps::CW_DIRENT, vmlinux::{dentry, file, inode, linux_dirent64, path}
 };
 
 #[allow(
@@ -120,8 +120,12 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
     if inode_ptr.is_null() {
         return ReturnCode::SUCCESS;
     }
+    let inode: u64 = unsafe { (*inode_ptr).i_ino };
 
-    unsafe { is_inode_blocked(&ctx, inode_ptr) }
+    match unsafe { is_inode_blocked(inode) } {
+        true => ReturnCode::ENOENT,
+        false => ReturnCode::SUCCESS,
+    }
 }
 
 #[lsm(hook = "inode_permission")]
@@ -169,8 +173,12 @@ unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
     if inode_ptr.is_null() {
         return ReturnCode::SUCCESS;
     }
+    let inode: u64 = unsafe { (*inode_ptr).i_ino };
 
-    unsafe { is_inode_blocked(&ctx, inode_ptr) }
+    match unsafe { is_inode_blocked(inode) } {
+        true => ReturnCode::ENOENT,
+        false => ReturnCode::SUCCESS,
+    }
 }
 
 #[lsm(hook = "inode_getattr")]
@@ -226,8 +234,172 @@ unsafe fn try_inode_getattr(ctx: LsmContext) -> Result<i32, i32> {
     if inode_ptr.is_null() {
         return ReturnCode::SUCCESS;
     }
+    let inode: u64 = unsafe { (*inode_ptr).i_ino };
 
-    unsafe { is_inode_blocked(&ctx, inode_ptr) }
+    match unsafe { is_inode_blocked(inode) } {
+        true => ReturnCode::ENOENT,
+        false => ReturnCode::SUCCESS,
+    }
+}
+
+#[tracepoint]
+pub fn tracepoint_enter_getdents64(ctx: TracePointContext) -> u32 {
+    match unsafe { try_tracepoint_enter_getdents64(ctx) } {
+        Ok(ret) => ret as u32,
+        Err(ret) => ret as u32,
+    }
+}
+
+unsafe fn try_tracepoint_enter_getdents64(ctx: TracePointContext) -> Result<i32, i32> {
+    // If it's the daemon, we must exit
+    match is_cardwired() {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => {
+            // This error happen if either the array is not available or the index 0 of the array is
+            // empty
+            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            return ReturnCode::SUCCESS;
+        }
+    }
+
+    // If the mode is hybrid, we must exit
+    match unsafe { is_hybrid() } {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => {
+            // This error happen if either the array is not available or the index 0 of the array is
+            // empty
+            error!(&ctx, "EBPF is_hybrid() produced an error, exiting");
+            return ReturnCode::SUCCESS;
+        }
+    }
+
+    // Arg 0 is the fd
+    // Arg 1 is the linux_dirent
+    // Arg 2 is the count
+    const DIRP_OFFSET: usize = 24;
+
+    let pid = bpf_get_current_pid_tgid() as u32;
+
+    let dirp_ptr: u64 = unsafe { ctx.read_at(DIRP_OFFSET)? };
+
+    CW_DIRENT.insert(pid, dirp_ptr, 0)?;
+
+    ReturnCode::SUCCESS
+}
+
+#[tracepoint]
+pub fn tracepoint_exit_getdents64(ctx: TracePointContext) -> u32 {
+    match unsafe { try_tracepoint_exit_getdents64(ctx) } {
+        Ok(ret) => ret as u32,
+        Err(ret) => ret as u32,
+    }
+}
+
+unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, i32> {
+    // If it's the daemon, we must exit
+    match is_cardwired() {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => {
+            // This error happen if either the array is not available or the index 0 of the array is
+            // empty
+            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            return ReturnCode::SUCCESS;
+        }
+    }
+
+    // If the mode is hybrid, we must exit
+    match unsafe { is_hybrid() } {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => {
+            // This error happen if either the array is not available or the index 0 of the array is
+            // empty
+            error!(&ctx, "EBPF is_hybrid() produced an error, exiting");
+            return ReturnCode::SUCCESS;
+        }
+    }
+
+    let pid = bpf_get_current_pid_tgid() as u32;
+    let dirent_ptr = match unsafe { CW_DIRENT.get(pid) } {
+        Some(ptr) => *ptr as *const linux_dirent64,
+        None => return ReturnCode::SUCCESS,
+    };
+
+    let retval = match unsafe { ctx.read_at::<i64>(16) } {
+        Ok(ret) => ret as u64,
+        Err(_) => return ReturnCode::SUCCESS,
+    };
+
+    if retval == 0 || retval > 32768 {
+        return ReturnCode::SUCCESS;
+    }
+
+    // Buffer end = base + bytes written
+    let base = dirent_ptr as u64;
+    let end = base.wrapping_add(retval);
+
+    let mut dirent_ptr = dirent_ptr;
+    let mut prev_ptr: u64 = 0;
+    let mut prev_reclen: u16 = 0;
+    for _ in 0..512 {
+        // Check before reading
+        if (dirent_ptr as u64).wrapping_add(core::mem::size_of::<linux_dirent64>() as u64) > end {
+            break;
+        }
+
+        let dirent = match unsafe { bpf_probe_read_user(dirent_ptr) } {
+            Ok(dirent) => dirent,
+            Err(_) => break,
+        };
+
+        let reclen = dirent.d_reclen;
+
+        // Malformed
+        if reclen == 0 || reclen > 512 {
+            break;
+        }
+
+        let blocked = unsafe { is_inode_blocked(dirent.d_ino) };
+        if blocked {
+            // We can't hide the first entry
+            if prev_ptr != 0 {
+                let new_reclen = prev_reclen.wrapping_add(reclen);
+
+                let reclen_ptr = (prev_ptr.wrapping_add(16)) as *mut u16;
+                match unsafe { bpf_probe_write_user(reclen_ptr, &new_reclen) } {
+                    Ok(_) => {}
+                    Err(err) => {
+                        error!(&ctx, "failed to write new reclen {}", err);
+                        break;
+                    }
+                };
+
+                prev_reclen = new_reclen;
+            }
+        } else {
+            prev_ptr = dirent_ptr as u64;
+            prev_reclen = reclen;
+        }
+
+        dirent_ptr = (dirent_ptr as u64).wrapping_add(reclen as u64) as *const linux_dirent64;
+    }
+
+    ReturnCode::SUCCESS
 }
 
 #[cfg(not(test))]
