@@ -169,7 +169,10 @@ impl ConfigInterface {
                 .external_display_auto_switch
                 .store(previous_auto_switch, Ordering::Relaxed);
             if changed {
-                let _ = self.mode_interface.set_mode_value(previous_mode, false).await;
+                let _ = self
+                    .mode_interface
+                    .set_mode_value(previous_mode, false)
+                    .await;
             }
             return Err(err);
         }
