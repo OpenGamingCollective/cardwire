@@ -7,7 +7,7 @@ use crate::{
     }, tasks
 };
 use anyhow::{Context, Result};
-use cardwire_ebpf::{EbpfBlocker, EbpfSettings};
+use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
 use log::error;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, task};

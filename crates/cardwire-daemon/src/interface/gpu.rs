@@ -11,7 +11,7 @@ use crate::{
         }, pci::PciDevice
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
-use cardwire_ebpf::EbpfBlocker;
+use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{error, info, warn};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface, object_server::SignalEmitter};
@@ -55,8 +55,8 @@ impl GpuInterface {
 }
 
 impl GpuInterface {
-    /// block the gpu, 1 = dGPU, 0 = iGPU
-    pub async fn block_gpu(&mut self, value: u8) -> fdo::Result<()> {
+    /// block the gpu, value = gpu key
+    pub async fn block_gpu(&mut self, value: u32) -> fdo::Result<()> {
         let mut blocker = self.blocker.write().await;
         let pci_list = self.pci_list.read().await;
         // First block the card id
