@@ -36,7 +36,7 @@
 **Properties:**
 
 - **`Mode`**
-  Controls Cardwire's current applied mode
+  Controls the Cardwire's Mode
   - **Type:** `u`
   - **Access:** Read/Write
   - **Emits:** `PropertiesChanged` on change
