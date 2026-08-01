@@ -72,24 +72,27 @@ pub static CW_ALLOWED_COMM: HashMap<[u8; 16], u8> =
 pub static CW_DIRENT: HashMap<u32, u64> = HashMap::<u32, u64>::with_max_entries(1024, 0);
 
 #[repr(align(8))]
+#[allow(dead_code)]
 pub struct ExecEvent {
-    pid: u64,
+    pub pid: u32,
 }
 
 #[btf_map]
 pub static CW_EXEC_EVENTS: RingBuf<ExecEvent, 4096> = RingBuf::new();
 
 #[repr(align(8))]
+#[allow(dead_code)]
 pub struct CloseEvent {
-    pid: u64,
+    pub pid: u32,
 }
 
 #[btf_map]
 pub static CW_CLOSE_EVENTS: RingBuf<CloseEvent, 4096> = RingBuf::new();
 
 #[repr(align(8))]
+#[allow(dead_code)]
 pub struct ReportEvent {
-    pid: u64,
+    pub pid: u32,
 }
 
 #[btf_map]
