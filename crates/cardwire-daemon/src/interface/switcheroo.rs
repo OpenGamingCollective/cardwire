@@ -37,7 +37,7 @@ impl SwitcherooInterface {
     pub async fn gpus(&self) -> Vec<HashMap<&'static str, OwnedValue>> {
         let mut vec: Vec<HashMap<&str, OwnedValue>> = Vec::new();
         let gpu_list = self.gpu_list.read().await;
-        for (_, gpu) in gpu_list.iter() {
+        for gpu in gpu_list.values() {
             let mut dict = HashMap::new();
 
             // The name (s)

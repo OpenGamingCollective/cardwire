@@ -39,7 +39,7 @@ pub async fn watch_power_state(
 
         // Skip if unknown powerstate
         if new_power_state == PowerState::Unknown {
-            warn!("power state couldn't be read: {}", &new_power_state_str);
+            warn!("power state couldn't be read: {}", new_power_state_str);
             continue;
         }
         if power_state != new_power_state {
