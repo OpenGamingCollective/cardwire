@@ -6,6 +6,8 @@
 
 A GPU manager for Linux using eBPF LSM hooks to block GPUs
 
+![Cardwire GUI screenshot](./assets/com.github.opengamingcollective.cardwire.screenshot.png)
+
 Creator and Main maintainer: @luytan
 
 # Disclaimer
@@ -29,18 +31,16 @@ When a GPU is "blocked," the eBPF program returns `-ENOENT` for any syscall targ
 _Note: X11 is not supported. Cardwire requires Wayland._
 
 ## Community projects:
-_for issues related to these projects, please report to their respective repo_
 
+_for issues related to these projects, please report to their respective repo_
 
 GNOME extension (by Moxuz):
 https://extensions.gnome.org/extension/9919/cardwire-gpu-toggle/
-
 
 ## Discord
 
 Need help or have a question about Cardwire? Join us on the OGC Discord:
 https://discord.gg/4K2pZ6abQm
-
 
 ## Credits
 
