@@ -145,7 +145,7 @@ impl CardwireDbus {
             | DaemonSettings::ExternalDisplayAutoSwitch => {
                 proxy.set_property(&setting.to_string(), state).await
             }
-            DaemonSettings::BattAutoSwitchMode | DaemonSettings::ExternalDisplayAutoSwitchMode => {
+            DaemonSettings::BattAutoSwitchMode => {
                 if let Some(mode_to_apply) = mode_opt {
                     println!("setting mode: {:?}", mode_to_apply as u32);
                     proxy

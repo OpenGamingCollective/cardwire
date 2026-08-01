@@ -173,13 +173,13 @@ async fn restore_mode_after_settle(
         return;
     }
 
-    info!("external display topology settled; applying the configured restore mode");
+    info!("external display topology settled; restoring the previous mode and GPU state");
     if apply_automatic_mode(mode, interface, false).await {
         state.last_connected = Some(false);
     } else {
         state.restore.defer(Instant::now(), false);
         warn!(
-            "configured mode restoration failed; retrying in {} seconds",
+            "previous mode and GPU state restoration failed; retrying in {} seconds",
             DISPLAY_RESTORE_QUIET_PERIOD.as_secs()
         );
     }

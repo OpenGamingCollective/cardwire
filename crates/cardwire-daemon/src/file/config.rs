@@ -17,7 +17,6 @@ pub struct CardwireConfig {
     battery_auto_switch: bool,
     battery_auto_switch_mode: Modes,
     external_display_auto_switch: bool,
-    external_display_auto_switch_mode: Modes,
 }
 impl Default for CardwireConfig {
     fn default() -> Self {
@@ -27,7 +26,6 @@ impl Default for CardwireConfig {
             battery_auto_switch: false,
             battery_auto_switch_mode: Modes::Hybrid,
             external_display_auto_switch: false,
-            external_display_auto_switch_mode: Modes::Integrated,
         }
     }
 }
@@ -39,7 +37,6 @@ impl CardwireConfig {
         battery_auto_switch: bool,
         battery_auto_switch_mode: Modes,
         external_display_auto_switch: bool,
-        external_display_auto_switch_mode: Modes,
     ) -> CardwireConfig {
         CardwireConfig {
             auto_apply_gpu_state,
@@ -47,7 +44,6 @@ impl CardwireConfig {
             battery_auto_switch,
             battery_auto_switch_mode,
             external_display_auto_switch,
-            external_display_auto_switch_mode,
         }
     }
     /// Read TOML config file and return it's settings as a struct
@@ -94,9 +90,6 @@ impl CardwireConfig {
     pub fn external_display_auto_switch(&self) -> bool {
         self.external_display_auto_switch
     }
-    pub fn external_display_auto_switch_mode(&self) -> Modes {
-        self.external_display_auto_switch_mode
-    }
 }
 
 #[cfg(test)]
@@ -112,21 +105,16 @@ mod tests {
         assert!(!config.battery_auto_switch());
         assert_eq!(config.battery_auto_switch_mode(), Modes::Hybrid);
         assert!(!config.external_display_auto_switch());
-        assert_eq!(
-            config.external_display_auto_switch_mode(),
-            Modes::Integrated
-        );
     }
 
     #[test]
     fn test_cardwire_config_build_values() {
-        let config = CardwireConfig::new(false, true, true, Modes::Smart, true, Modes::Manual);
+        let config = CardwireConfig::new(false, true, true, Modes::Smart, true);
         assert!(!config.auto_apply_gpu_state());
         assert!(config.experimental_nvidia_block());
         assert!(config.battery_auto_switch());
         assert_eq!(config.battery_auto_switch_mode(), Modes::Smart);
         assert!(config.external_display_auto_switch());
-        assert_eq!(config.external_display_auto_switch_mode(), Modes::Manual);
     }
 
     #[test]
@@ -148,10 +136,6 @@ mod tests {
             parsed.external_display_auto_switch(),
             config.external_display_auto_switch()
         );
-        assert_eq!(
-            parsed.external_display_auto_switch_mode(),
-            config.external_display_auto_switch_mode()
-        );
     }
 
     #[test]
@@ -165,10 +149,6 @@ mod tests {
         assert!(!parsed.battery_auto_switch());
         assert_eq!(parsed.battery_auto_switch_mode(), Modes::Hybrid);
         assert!(!parsed.external_display_auto_switch());
-        assert_eq!(
-            parsed.external_display_auto_switch_mode(),
-            Modes::Integrated
-        );
     }
 
     #[test]
@@ -186,7 +166,6 @@ experimental_nvidia_block = true
 battery_auto_switch = true
 battery_auto_switch_mode = "smart"
 external_display_auto_switch = true
-external_display_auto_switch_mode = "smart"
 "#;
         let parsed: CardwireConfig = toml::from_str(toml_str).unwrap();
         assert!(!parsed.auto_apply_gpu_state());
@@ -194,6 +173,5 @@ external_display_auto_switch_mode = "smart"
         assert!(parsed.battery_auto_switch());
         assert_eq!(parsed.battery_auto_switch_mode(), Modes::Smart);
         assert!(parsed.external_display_auto_switch());
-        assert_eq!(parsed.external_display_auto_switch_mode(), Modes::Smart);
     }
 }

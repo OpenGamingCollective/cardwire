@@ -89,7 +89,6 @@ pub struct SettingState {
     pub battery_checked: bool,
     pub battery_mode: Option<Mode>,
     pub external_display_checked: bool,
-    pub external_display_mode: Option<Mode>,
     pub gui_config: crate::gui_config::GuiConfig,
 }
 
@@ -100,7 +99,6 @@ pub enum DaemonSettings {
     BattAutoSwitch,
     BattAutoSwitchMode,
     ExternalDisplayAutoSwitch,
-    ExternalDisplayAutoSwitchMode,
 }
 
 impl Display for DaemonSettings {
@@ -112,9 +110,6 @@ impl Display for DaemonSettings {
             DaemonSettings::BattAutoSwitchMode => write!(f, "BatteryAutoSwitchMode"),
             DaemonSettings::ExternalDisplayAutoSwitch => {
                 write!(f, "ExternalDisplayAutoSwitch")
-            }
-            DaemonSettings::ExternalDisplayAutoSwitchMode => {
-                write!(f, "ExternalDisplayAutoSwitchMode")
             }
         }
     }

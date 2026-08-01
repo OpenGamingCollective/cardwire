@@ -157,21 +157,16 @@ cardwire config battery-auto-switch-mode hybrid
 
 ### External Display Auto Switch
 
-Cardwire can switch to hybrid when an external display is connected to a port that is wired
-directly to the dedicated GPU.
+Cardwire can automatically make a dedicated GPU available when an external display is connected
+to a port wired directly to it. In Manual mode, Cardwire stays in Manual and temporarily unblocks
+only the required GPU. In other modes it switches to Hybrid. After disconnect, the previous mode
+and GPU states are restored unless you selected a mode or GPU state manually in the meantime.
 
 This feature is disabled by default. Enable or disable it with:
 
 ```bash
 cardwire config external-display-auto-switch true
 cardwire config external-display-auto-switch false
-```
-
-The mode restored after disconnect defaults to integrated and can be set to any Cardwire mode:
-
-```bash
-cardwire config external-display-auto-switch-mode
-cardwire config external-display-auto-switch-mode smart
 ```
 
 ### Auto Apply Gpu State

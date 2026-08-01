@@ -138,8 +138,6 @@ trait CardwireConfig {
     fn battery_auto_switch_mode(&self) -> zbus::Result<u32>;
     #[zbus(property)]
     fn external_display_auto_switch(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn external_display_auto_switch_mode(&self) -> zbus::Result<u32>;
 }
 
 fn config_sub() -> Subscription<Message> {
@@ -167,26 +165,12 @@ fn config_sub() -> Subscription<Message> {
                 proxy.receive_battery_auto_switch_mode_changed().await;
             let mut config_external_display =
                 proxy.receive_external_display_auto_switch_changed().await;
-            let mut config_external_display_mode = proxy
-                .receive_external_display_auto_switch_mode_changed()
-                .await;
             if let Ok(state) = proxy.external_display_auto_switch().await {
                 let _ = output
                     .send(Message::FetchedSetting(Ok((
                         DaemonSettings::ExternalDisplayAutoSwitch,
                         Some(state),
                         None,
-                    ))))
-                    .await;
-            }
-            if let Ok(mode) = proxy.external_display_auto_switch_mode().await
-                && let Some(mode) = Mode::from_repr(mode)
-            {
-                let _ = output
-                    .send(Message::FetchedSetting(Ok((
-                        DaemonSettings::ExternalDisplayAutoSwitchMode,
-                        None,
-                        Some(mode),
                     ))))
                     .await;
             }
@@ -241,17 +225,6 @@ fn config_sub() -> Subscription<Message> {
                                 DaemonSettings::ExternalDisplayAutoSwitch,
                                 Some(new_state),
                                 None,
-                            )))).await;
-                        }
-                    },
-                    Some(change) = config_external_display_mode.next() => {
-                        if let Ok(new_mode) = change.get().await
-                            && let Some(mode) = Mode::from_repr(new_mode)
-                        {
-                            let _ = output.send(Message::FetchedSetting(Ok((
-                                DaemonSettings::ExternalDisplayAutoSwitchMode,
-                                None,
-                                Some(mode),
                             )))).await;
                         }
                     },

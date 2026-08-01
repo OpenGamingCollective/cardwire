@@ -19,7 +19,6 @@ pub struct ConfigMemory {
     pub battery_auto_switch: Arc<AtomicBool>,
     pub battery_auto_switch_mode: Arc<AtomicU32>,
     pub external_display_auto_switch: Arc<AtomicBool>,
-    pub external_display_auto_switch_mode: Arc<AtomicU32>,
 }
 impl ConfigMemory {
     /// build a ConfigMemory from CardwireConfig
@@ -33,16 +32,12 @@ impl ConfigMemory {
         ));
         let external_display_auto_switch =
             Arc::new(AtomicBool::new(user_config.external_display_auto_switch()));
-        let external_display_auto_switch_mode = Arc::new(AtomicU32::new(
-            user_config.external_display_auto_switch_mode().into(),
-        ));
         ConfigMemory {
             auto_apply_gpu_state,
             experimental_nvidia_block,
             battery_auto_switch,
             battery_auto_switch_mode,
             external_display_auto_switch,
-            external_display_auto_switch_mode,
         }
     }
 }
@@ -95,13 +90,6 @@ impl ConfigInterface {
         Ok(self
             .config
             .external_display_auto_switch
-            .load(Ordering::Relaxed))
-    }
-    #[zbus(property)]
-    pub async fn external_display_auto_switch_mode(&self) -> fdo::Result<u32> {
-        Ok(self
-            .config
-            .external_display_auto_switch_mode
             .load(Ordering::Relaxed))
     }
 
@@ -167,38 +155,34 @@ impl ConfigInterface {
             self.config
                 .external_display_auto_switch
                 .store(previous_auto_switch, Ordering::Relaxed);
-            if changed {
-                let rollback_res = self
+            if state
+                && !previous_auto_switch
+                && let Err(rollback_err) = self
                     .mode_interface
-                    .set_mode_value(previous_mode, false)
-                    .await;
-                if let Err(rollback_err) = rollback_res {
-                    warn!(
-                        "failed to restore mode value during config save rollback: {rollback_err}"
-                    );
+                    .restore_external_display_snapshot()
+                    .await
+            {
+                warn!(
+                    "failed to restore display state during config save rollback: {rollback_err}"
+                );
+                if changed
+                    && let Err(mode_err) = self
+                        .mode_interface
+                        .set_mode_value(previous_mode, false)
+                        .await
+                {
+                    warn!("failed to restore mode value during config save rollback: {mode_err}");
                 }
             }
             return Err(err);
+        }
+        if !state {
+            self.mode_interface.cancel_external_display_snapshot().await;
         }
         self.mode_interface
             .emit_mode_change(&interface, changed)
             .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        Ok(())
-    }
-    #[zbus(property)]
-    pub async fn set_external_display_auto_switch_mode(&self, mode: u32) -> fdo::Result<()> {
-        Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
-        let previous = self
-            .config
-            .external_display_auto_switch_mode
-            .swap(mode, Ordering::Relaxed);
-        if let Err(err) = self.save_to_file().await {
-            self.config
-                .external_display_auto_switch_mode
-                .store(previous, Ordering::Relaxed);
-            return Err(err);
-        }
         Ok(())
     }
     /// Save the daemon's configuration to cardwire.toml
@@ -214,12 +198,6 @@ impl ConfigInterface {
             self.config
                 .external_display_auto_switch
                 .load(Ordering::Relaxed),
-            Modes::try_from(
-                self.config
-                    .external_display_auto_switch_mode
-                    .load(Ordering::Relaxed),
-            )
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?,
         );
         match config.save_config().await {
             Ok(_) => Ok(()),
@@ -250,20 +228,11 @@ mod tests {
         assert!(!memory.experimental_nvidia_block.load(Ordering::Relaxed));
         assert!(!memory.battery_auto_switch.load(Ordering::Relaxed));
         assert!(!memory.external_display_auto_switch.load(Ordering::Relaxed));
-        assert_eq!(
-            Modes::try_from(
-                memory
-                    .external_display_auto_switch_mode
-                    .load(Ordering::Relaxed)
-            )
-            .unwrap(),
-            Modes::Integrated
-        );
     }
 
     #[test]
     fn test_config_memory_build_from_custom_config() {
-        let config = CardwireConfig::new(false, true, true, Modes::Smart, true, Modes::Manual);
+        let config = CardwireConfig::new(false, true, true, Modes::Smart, true);
         let memory = ConfigMemory::build(config);
         assert!(!memory.auto_apply_gpu_state.load(Ordering::Relaxed));
         assert!(memory.experimental_nvidia_block.load(Ordering::Relaxed));
@@ -271,15 +240,6 @@ mod tests {
         let mode_val = memory.battery_auto_switch_mode.load(Ordering::Relaxed);
         assert_eq!(Modes::try_from(mode_val).unwrap(), Modes::Smart);
         assert!(memory.external_display_auto_switch.load(Ordering::Relaxed));
-        assert_eq!(
-            Modes::try_from(
-                memory
-                    .external_display_auto_switch_mode
-                    .load(Ordering::Relaxed)
-            )
-            .unwrap(),
-            Modes::Manual
-        );
     }
 
     #[test]

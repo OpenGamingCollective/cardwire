@@ -38,17 +38,7 @@ in
         external_display_auto_switch = mkOption {
           type = types.bool;
           default = false;
-          description = "Switch to hybrid mode for displays connected to dGPU-only ports";
-        };
-        external_display_auto_switch_mode = mkOption {
-          type = types.enum [
-            "integrated"
-            "hybrid"
-            "manual"
-            "smart"
-          ];
-          default = "integrated";
-          description = "Mode restored after the last dGPU-owned display disconnects";
+          description = "Automatically make GPUs available for displays connected to dGPU-only ports";
         };
       };
     };

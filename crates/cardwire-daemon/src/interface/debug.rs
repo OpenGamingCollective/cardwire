@@ -88,6 +88,13 @@ impl DebugInterface {
             && let Some(object_server) = &self.object_server
         {
             info!("pci list changed, refreshing the internal gpu list");
+            let mut external_display_state = BTreeMap::new();
+            for gpu in gpu_interfaces.values() {
+                external_display_state.insert(
+                    gpu.device.pci().pci_address().to_string(),
+                    (gpu.latest_state().await, gpu.external_display_required()),
+                );
+            }
             // Overwrite old list
             *pci_list = new_pci_list.clone();
             drop(pci_list); // drop lock to prevent deadlocks when blocking
@@ -119,6 +126,13 @@ impl DebugInterface {
                 )
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
+                if let Some((latest_state, required)) =
+                    external_display_state.get(gpu.device.pci().pci_address())
+                {
+                    gpu.set_latest_state(*latest_state).await;
+                    gpu.set_external_display_required(*required);
+                }
+
                 gpu_interfaces.insert(id, gpu);
             }
             if let Err(err) = check_default_drm_class(&mut gpu_interfaces) {
@@ -132,14 +146,15 @@ impl DebugInterface {
                 .load(std::sync::atomic::Ordering::Relaxed);
 
             for gpu in gpu_interfaces.values_mut() {
-                let should_block = match mode {
-                    Modes::Integrated | Modes::Smart => !gpu.device.is_default(),
-                    Modes::Hybrid => false,
-                    Modes::Manual => {
-                        let state = self.gpu_state.read().await;
-                        state.gpu_block_state(gpu.device.pci.pci_address()) && config
-                    }
-                };
+                let should_block = !gpu.external_display_required()
+                    && match mode {
+                        Modes::Integrated | Modes::Smart => !gpu.device.is_default(),
+                        Modes::Hybrid => false,
+                        Modes::Manual => {
+                            let state = self.gpu_state.read().await;
+                            state.gpu_block_state(gpu.device.pci.pci_address()) && config
+                        }
+                    };
 
                 if should_block {
                     info!(

@@ -511,28 +511,13 @@ pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Mes
         row![
             column![
                 text!("External display auto-switch"),
-                text("Use Hybrid for displays connected to dGPU-only ports.")
+                text("Use the required GPU for displays connected to dGPU-only ports.")
                     .size(13)
                     .color(Color::from_rgb(0.6, 0.6, 0.6)),
             ],
             horizontal(),
             toggler(setting_state.external_display_checked)
                 .on_toggle(Message::UpdateExternalDisplaySetting),
-        ]
-        .align_y(Alignment::Center)
-        .padding(10),
-    )
-    .style(|_| box_theme!())
-    .width(Fill);
-    let external_display_mode = container(
-        row![
-            text!("Mode after disconnect: "),
-            horizontal(),
-            pick_list(
-                Mode::VARIANTS,
-                setting_state.external_display_mode,
-                Message::UpdateExternalDisplayMode
-            ),
         ]
         .align_y(Alignment::Center)
         .padding(10),
@@ -546,7 +531,6 @@ pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Mes
         .push(battery_setting)
         .push(battery_mode)
         .push(external_display_setting)
-        .push(external_display_mode)
         .push(gui_settings);
     col.into()
 }
