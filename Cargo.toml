@@ -7,8 +7,12 @@ members = [
     "crates/cardwire-ebpf-userspace",
     "crates/cardwire-gui",
 ]
-exclude = [
-    "crates/cardwire-ebpf",
+
+default-members = [
+    "crates/cardwire-daemon",
+    "crates/cardwire-cli",
+    "crates/cardwire-ebpf-userspace",
+    "crates/cardwire-gui",
 ]
 
 [workspace.package]

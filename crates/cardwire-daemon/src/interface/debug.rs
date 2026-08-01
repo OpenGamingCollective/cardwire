@@ -3,7 +3,7 @@ use crate::{
         gpu::{self, check_default_drm_class}, pci::{self, DbusPciDevice, PciDevice}
     }, tasks::watch_power_state
 };
-use cardwire_ebpf::EbpfBlocker;
+use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{info, warn};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, task};

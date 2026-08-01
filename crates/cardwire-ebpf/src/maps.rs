@@ -20,7 +20,7 @@ pub static CW_DAEMON_PID: Array<u32> = Array::<u32>::with_max_entries(1, 0);
 pub static CW_MODE: Array<u8> = Array::<u8>::with_max_entries(1, 0);
 
 /*
-    A single entry array containing cardwired exp_nvidia setting
+    Hashmap containing cardwired exp_nvidia setting
     0 - Exp_nvidia_setting
 */
 #[map]
@@ -37,7 +37,7 @@ pub static CW_BLOCKED_INO: HashMap<u64, u32> = HashMap::<u64, u32>::with_max_ent
 /*
    Map used to store blocked inodes from exp_nvidia
    Key = Inode
-   Value = associated GPU
+   Value = 0, not used because exp files can be shared by multiple devices (nvidiactl)
 */
 #[map]
 pub static CW_EXP_BLK_INO: HashMap<u64, u32> = HashMap::<u64, u32>::with_max_entries(4096, 0);

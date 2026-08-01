@@ -22,7 +22,3 @@ anyhow = { workspace = true }
 aya-build = { workspace = true }
 cargo_metadata = { workspace = true }
 cardwire-ebpf = { path = "../cardwire-ebpf" }
-
-[[bin]]
-name = "cardwire-ebpf-userspace"
-path = "src/main.rs"

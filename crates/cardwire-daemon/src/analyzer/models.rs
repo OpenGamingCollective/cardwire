@@ -1,5 +1,5 @@
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
-use cardwire_ebpf::EbpfBlocker;
+use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{debug, info, warn};
 use std::{collections::HashMap, fs, path::PathBuf, ptr, sync::Arc};
 use tokio::{

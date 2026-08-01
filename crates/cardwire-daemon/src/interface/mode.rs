@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::Result;
 use aya::maps::HashMap as AyaHashMap;
-use cardwire_ebpf::EbpfBlocker;
+use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt, process::Stdio, sync::Arc};
@@ -169,17 +169,17 @@ impl ModeInterface {
                     return Err(fdo::Error::NotSupported(error_message.to_string()));
                 }
                 // Loop to find the non default gpu and block it,
-                for gpu in gpu_list.values_mut() {
+                for (id, gpu) in gpu_list.iter_mut() {
                     if !gpu.device.is_default() {
                         if mode == Modes::Integrated || mode == Modes::Smart {
                             // Here we block the dGPU
-                            gpu.block_gpu(1).await?;
+                            gpu.block_gpu(*id as u32).await?;
                         } else {
                             gpu.unblock_gpu().await?;
                         }
-                    } else if mode == Modes::Smart {
+                    } else if mode == Modes::Smart && gpu.device.is_default() {
                         // push default gpu (iGPU) into the blocked inode map for tracking only
-                        gpu.block_gpu(0).await?;
+                        gpu.block_gpu(*id as u32).await?;
                     } else {
                         // clear
                         gpu.unblock_gpu().await?;
@@ -195,7 +195,7 @@ impl ModeInterface {
                     .auto_apply_gpu_state
                     .load(std::sync::atomic::Ordering::Relaxed);
                 let gpu_state = self.gpu_state.read().await;
-                for (_, gpu) in gpu_list.iter_mut() {
+                for (id, gpu) in gpu_list.iter_mut() {
                     if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && config {
                         if gpu.device.is_default() {
                             // For safety, warn and unblock if default
@@ -206,7 +206,7 @@ impl ModeInterface {
                             gpu.unblock_gpu().await?;
                         } else {
                             info!("blocking: {} ", gpu.device.pci().pci_address());
-                            gpu.block_gpu(1).await?;
+                            gpu.block_gpu(*id as u32).await?;
                         }
                     } else {
                         gpu.unblock_gpu().await?;

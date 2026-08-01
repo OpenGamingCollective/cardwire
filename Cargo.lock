@@ -635,7 +635,7 @@ version = "0.11.1"
 dependencies = [
  "anyhow",
  "aya",
- "cardwire-ebpf",
+ "cardwire-ebpf-userspace",
  "env_logger",
  "freedesktop-desktop-entry",
  "log",
