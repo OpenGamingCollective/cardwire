@@ -135,7 +135,14 @@ impl ModeInterface {
     async fn set_mode_value_locked(&self, mode: Modes, force_apply: bool) -> fdo::Result<bool> {
         let previous_mode = self.current_mode_value().await;
         if force_apply || mode != previous_mode {
-            self.apply_mode(mode).await?;
+            if let Err(err) = self.apply_mode(mode).await {
+                if let Err(rollback_err) = self.apply_mode(previous_mode).await {
+                    warn!(
+                        "failed to restore previous mode ({previous_mode}) after apply_mode error: {rollback_err}"
+                    );
+                }
+                return Err(err);
+            }
             let mut state = self.mode_state.write().await;
             if let Err(err) = state.save_state(mode).await {
                 warn!("mode couldn't be saved to state: {err}");

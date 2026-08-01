@@ -168,10 +168,15 @@ impl ConfigInterface {
                 .external_display_auto_switch
                 .store(previous_auto_switch, Ordering::Relaxed);
             if changed {
-                let _ = self
+                if let Err(rollback_err) = self
                     .mode_interface
                     .set_mode_value(previous_mode, false)
-                    .await;
+                    .await
+                {
+                    warn!(
+                        "failed to restore mode value during config save rollback: {rollback_err}"
+                    );
+                }
             }
             return Err(err);
         }
@@ -184,10 +189,17 @@ impl ConfigInterface {
     #[zbus(property)]
     pub async fn set_external_display_auto_switch_mode(&self, mode: u32) -> fdo::Result<()> {
         Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
-        self.config
+        let previous = self
+            .config
             .external_display_auto_switch_mode
-            .store(mode, Ordering::Relaxed);
-        self.save_to_file().await
+            .swap(mode, Ordering::Relaxed);
+        if let Err(err) = self.save_to_file().await {
+            self.config
+                .external_display_auto_switch_mode
+                .store(previous, Ordering::Relaxed);
+            return Err(err);
+        }
+        Ok(())
     }
     /// Save the daemon's configuration to cardwire.toml
     pub async fn save_to_file(&self) -> fdo::Result<()> {
