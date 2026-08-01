@@ -179,13 +179,13 @@ impl DaemonManager {
         let gpus_list = self.inner.gpu_list.read().await;
         let mut blocker = self.inner.blocker.write().await;
         // Only block if the device has a Nvidia gpu
-        for gpu in gpus_list.values() {
+        for (id, gpu) in gpus_list.iter() {
             if gpu.device.gpu_vendor() == GpuVendor::Nvidia
                 && let Ok(inodes) = exp_nvidia_inodes()
                 && !inodes.is_empty()
             {
                 for inode in inodes {
-                    if let Err(err) = blocker.block_exp_inode(inode) {
+                    if let Err(err) = blocker.block_exp_inode(inode, *id as u32) {
                         error!("failed to block nvidia's file {}: {}", inode, err);
                     }
                 }

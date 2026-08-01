@@ -163,7 +163,7 @@ impl EbpfBlocker {
         }
     }
 
-    pub fn block_exp_inode(&mut self, inode: u64) -> CardwireEbpfResult<()> {
+    pub fn block_exp_inode(&mut self, inode: u64, value: u32) -> CardwireEbpfResult<()> {
         // Also insert hardcoded values for now
         let mut inode_map: HashMap<_, u64, u32> = HashMap::try_from(
             self.ebpf
@@ -172,7 +172,7 @@ impl EbpfBlocker {
         )
         .map_err(CardwireEbpfError::aya)?;
         inode_map
-            .insert(inode, 0, 0)
+            .insert(inode, value, 0)
             .map_err(CardwireEbpfError::aya)?;
         Ok(())
     }
