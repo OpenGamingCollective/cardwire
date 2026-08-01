@@ -168,11 +168,11 @@ impl ConfigInterface {
                 .external_display_auto_switch
                 .store(previous_auto_switch, Ordering::Relaxed);
             if changed {
-                if let Err(rollback_err) = self
+                let rollback_res = self
                     .mode_interface
                     .set_mode_value(previous_mode, false)
-                    .await
-                {
+                    .await;
+                if let Err(rollback_err) = rollback_res {
                     warn!(
                         "failed to restore mode value during config save rollback: {rollback_err}"
                     );
