@@ -1,24 +1,17 @@
-use aya_ebpf::{helpers::bpf_get_current_pid_tgid, programs::LsmContext};
+use aya_ebpf::helpers::bpf_get_current_pid_tgid;
 
 use crate::{
-    CardwiredSetting, DAEMON_INDEX, HYBRID, INTEGRATED, MANUAL, MODE_INDEX, SMART, maps::{CW_BLOCKED_INO, CW_DAEMON_PID, CW_EXP_BLK_INO, CW_MODE, CW_SETTINGS}, vmlinux::{dentry, inode}
+    CardwiredSetting, DAEMON_INDEX, HYBRID, INTEGRATED, MANUAL, MODE_INDEX, SMART, maps::{CW_BLOCKED_INO, CW_DAEMON_PID, CW_EXP_BLK_INO, CW_MODE, CW_SETTINGS}
 };
-
-use crate::ReturnCode;
-
-use aya_log_ebpf::info;
 
 /// Verify if the inode is inside CW_BLOCKED_INO or not
 #[inline(always)]
-pub unsafe fn is_inode_blocked(ctx: &LsmContext, i_ptr: *mut inode) -> Result<i32, i32> {
-    let inode: u64 = unsafe { (*i_ptr).i_ino };
-
+pub unsafe fn is_inode_blocked(inode: u64) -> bool {
     let mut blocked: bool = false;
 
     'inode_check: {
         // Check if the inode is in the blocked list
         if unsafe { CW_BLOCKED_INO.get(inode).is_some() } {
-            info!(ctx, "inode blocked");
             blocked = true;
             break 'inode_check;
         }
@@ -43,14 +36,14 @@ pub unsafe fn is_inode_blocked(ctx: &LsmContext, i_ptr: *mut inode) -> Result<i3
         };
         if *mode == INTEGRATED || *mode == MANUAL {
             // if integrated/manual, just block
-            return ReturnCode::ENOENT;
+            return true;
         }
         if *mode == SMART {
             // TODO: in a future PR
         }
     }
 
-    ReturnCode::SUCCESS
+    false
 }
 
 /// Verify if the proc is cardwired, returns None if the map fails
