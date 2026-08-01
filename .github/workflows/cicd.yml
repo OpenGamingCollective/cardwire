@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       run_nix_vm: ${{ steps.files.outputs.run_nix_vm }}
-      run_c_checks: ${{ steps.files.outputs.run_c_checks }}
       run_rust_checks: ${{ steps.files.outputs.run_rust_checks }}
       run_mdbook_check: ${{ steps.files.outputs.run_mdbook_check }}
     steps:
@@ -29,30 +28,24 @@ jobs:
 
             const needsVMTest = !isDraft && files.some(file => 
               file.endsWith('.rs') || 
-              file.endsWith('.c') || 
               file.includes('.nix') ||
               file.includes('flake.lock') ||
               file.includes('Cargo.toml') || 
               file.includes('Cargo.lock')
             );
 
-            const needsCFormatCheck = files.some(file => 
-              file.endsWith('.c')
-            );
-            
             const needsMdBookCheck = files.some(file => 
               file.startsWith('docs/')
             );
 
             const needsRustQuality = files.some(file => 
-              file.endsWith('.rs')
+              file.endsWith('.rs') ||
+              file.includes('Cargo.toml') || 
+              file.includes('Cargo.lock')
             );
 
             if (needsVMTest) {
               core.setOutput('run_nix_vm', 'true');
-            }
-            if (needsCFormatCheck) {
-              core.setOutput('run_c_checks', 'true');
             }
             if (needsRustQuality) {
               core.setOutput('run_rust_checks', 'true');
@@ -74,10 +67,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config gcc-multilib
-      - uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
+      - name: Install Nightly Rust (for aya-ebpf)
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+      - name: Install Stable Rust
+        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
         with:
           components: clippy
-      - uses: auguwu/clippy-action@9817d076b82df0194935be9db6154c56ac07b317 # 1.5.0
+      - name: Install bpf-linker
+        uses: taiki-e/install-action@v2
+        with:
+          tool: bpf-linker
+      - name: Clippy Workspace
+        uses: auguwu/clippy-action@9817d076b82df0194935be9db6154c56ac07b317 # 1.5.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           check-args: --locked --all-targets --all-features
@@ -93,9 +96,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config gcc-multilib
-      - uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff
+      - name: Install Nightly Rust (for aya-ebpf)
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+      - name: Install Stable Rust
+        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
+      - name: Install bpf-linker
+        uses: taiki-e/install-action@v2
+        with:
+          tool: bpf-linker
       - name: Test code
-        run: cargo test --all
+        run: cargo test
   rust-format:
     name: Rust Format
     runs-on: ubuntu-latest
@@ -115,19 +127,9 @@ jobs:
         uses: reviewdog/action-suggester@2558ba17e65a9039e73764a73009fc05fef28a46 # v1.24.3
         with:
           tool_name: rustfmt
-  c-format:
-    name: C Format
-    runs-on: ubuntu-latest
-    needs: [prepare]
-    if: needs.prepare.outputs.run_c_checks == 'true'
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install clang-format
-        run: sudo apt-get update && sudo apt-get install -y clang-format
-      - run: clang-format --dry-run --Werror -i ./crates/cardwire-ebpf/src/c/*
   vm-test:
     runs-on: ubuntu-latest
-    needs: [prepare, rust-lint, rust-format, c-format]
+    needs: [prepare, rust-lint, rust-test, rust-format]
     if: ${{ !failure() && !cancelled() && needs.prepare.outputs.run_nix_vm == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
