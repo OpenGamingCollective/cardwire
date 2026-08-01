@@ -229,16 +229,25 @@ impl DaemonManager {
             res
         }
     }
-    pub fn monitor_udev_future(
+    pub fn monitor_udev_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
+        let debug_int = self.debug_interface.clone();
+        async move {
+            let res = tasks::monitor_pci_changes(debug_int).await;
+            if let Err(ref e) = res {
+                error!("monitor_udev task failed: {}", e);
+            }
+            res
+        }
+    }
+    pub fn monitor_display_future(
         &self,
         mode_interface: InterfaceRef<ModeInterface>,
     ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
-        let debug_int = self.debug_interface.clone();
         let mode = self.mode_interface.clone();
         async move {
-            let res = tasks::monitor_hardware_changes(debug_int, mode, mode_interface).await;
+            let res = tasks::monitor_display_changes(mode, mode_interface).await;
             if let Err(ref e) = res {
-                error!("monitor_udev task failed: {}", e);
+                error!("monitor_display task failed: {}", e);
             }
             res
         }
