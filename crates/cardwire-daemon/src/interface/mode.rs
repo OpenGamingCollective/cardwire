@@ -1,17 +1,19 @@
 //! Define the mode dbus
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{GpuInterface, config::ConfigMemory}
+    core::gpu::connected_external_drm_cards, file::{CardwireGpuState, CardwireModeState}, interface::{GpuInterface, config::ConfigMemory}
 };
 use anyhow::Result;
 use aya::maps::HashMap as AyaHashMap;
 use cardwire_ebpf::EbpfBlocker;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt, process::Stdio, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet}, fmt, process::Stdio, sync::{Arc, atomic::Ordering}
+};
 use tokio::{
     process::Command, sync::{Mutex, RwLock}, task
 };
-use zbus::{fdo, interface};
+use zbus::{fdo, interface, object_server::InterfaceRef};
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -68,9 +70,18 @@ pub struct ModeInterface {
     gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     config: Arc<ConfigMemory>,
     mode_map: Arc<Mutex<AyaHashMap<aya::maps::MapData, u8, u8>>>,
+    transition_lock: Arc<Mutex<()>>,
 }
 
 impl ModeInterface {
+    fn select_external_display_mode(connected: bool, restore_mode: Modes) -> Modes {
+        if connected {
+            Modes::Hybrid
+        } else {
+            restore_mode
+        }
+    }
+
     pub async fn build(
         mode_state: Arc<RwLock<CardwireModeState>>,
         gpu_state: Arc<RwLock<CardwireGpuState>>,
@@ -87,7 +98,155 @@ impl ModeInterface {
             gpu_list,
             config,
             mode_map,
+            transition_lock: Arc::new(Mutex::new(())),
         })
+    }
+
+    async fn required_external_cards(&self) -> fdo::Result<BTreeSet<u32>> {
+        let connected_cards = connected_external_drm_cards().map_err(|err| {
+            fdo::Error::Failed(format!("failed to read DRM connector state: {err}"))
+        })?;
+        let gpu_list = self.gpu_list.read().await;
+        Ok(gpu_list
+            .values()
+            .filter(|gpu| !gpu.device.is_default() && connected_cards.contains(gpu.device.card()))
+            .map(|gpu| *gpu.device.card())
+            .collect())
+    }
+
+    async fn notify_drm_change(cards: &BTreeSet<u32>) {
+        for card in cards {
+            let path = format!("/sys/class/drm/card{card}/uevent");
+            if let Err(err) = tokio::fs::write(&path, "change\n").await {
+                warn!("failed to replay DRM change event through {path}: {err}");
+            }
+        }
+    }
+
+    async fn current_mode_value(&self) -> Modes {
+        self.mode_state.read().await.mode()
+    }
+
+    async fn set_mode_value(&self, mode: Modes, force_apply: bool) -> fdo::Result<bool> {
+        let _transition = self.transition_lock.lock().await;
+        self.set_mode_value_locked(mode, force_apply).await
+    }
+
+    async fn set_mode_value_locked(&self, mode: Modes, force_apply: bool) -> fdo::Result<bool> {
+        let previous_mode = self.current_mode_value().await;
+        if force_apply || mode != previous_mode {
+            self.apply_mode(mode).await?;
+            let mut state = self.mode_state.write().await;
+            if let Err(err) = state.save_state(mode).await {
+                warn!("mode couldn't be saved to state: {err}");
+            }
+        }
+        Ok(mode != previous_mode)
+    }
+
+    pub fn external_display_auto_switch_enabled(&self) -> bool {
+        self.config
+            .external_display_auto_switch
+            .load(Ordering::Relaxed)
+    }
+
+    fn external_display_restore_mode(&self) -> fdo::Result<Modes> {
+        Modes::try_from(
+            self.config
+                .external_display_auto_switch_mode
+                .load(Ordering::Relaxed),
+        )
+        .map_err(|err| fdo::Error::Failed(err.to_string()))
+    }
+
+    pub async fn required_external_display_connected(&self) -> fdo::Result<bool> {
+        self.required_external_cards()
+            .await
+            .map(|cards| !cards.is_empty())
+    }
+
+    async fn external_display_target_mode(&self, connected: bool) -> fdo::Result<Modes> {
+        let restore_mode = self.external_display_restore_mode()?;
+        Ok(Self::select_external_display_mode(connected, restore_mode))
+    }
+
+    pub async fn apply_external_display_mode(&self, connected: bool) -> fdo::Result<bool> {
+        let _transition = self.transition_lock.lock().await;
+        if !self.external_display_auto_switch_enabled() {
+            return Ok(false);
+        }
+        let cards = if connected {
+            self.required_external_cards().await?
+        } else {
+            BTreeSet::new()
+        };
+        let mode = self.external_display_target_mode(connected).await?;
+        let changed = self.set_mode_value_locked(mode, false).await?;
+        if connected && changed {
+            Self::notify_drm_change(&cards).await;
+        }
+        Ok(changed)
+    }
+
+    pub async fn external_display_setting_changed(&self, enabled: bool) -> fdo::Result<bool> {
+        let _transition = self.transition_lock.lock().await;
+        let was_enabled = self.external_display_auto_switch_enabled();
+        self.config
+            .external_display_auto_switch
+            .store(enabled, Ordering::Relaxed);
+        if !enabled || was_enabled {
+            return Ok(false);
+        }
+
+        let res = async {
+            let cards = self.required_external_cards().await?;
+            let connected = !cards.is_empty();
+            let mode = self.external_display_target_mode(connected).await?;
+            let changed = self.set_mode_value_locked(mode, false).await?;
+            if connected && changed {
+                Self::notify_drm_change(&cards).await;
+            }
+            Ok(changed)
+        }
+        .await;
+
+        if res.is_err() {
+            self.config
+                .external_display_auto_switch
+                .store(was_enabled, Ordering::Relaxed);
+        }
+
+        res
+    }
+
+    pub async fn emit_mode_change(
+        &self,
+        interface: &InterfaceRef<ModeInterface>,
+        changed: bool,
+    ) -> zbus::Result<()> {
+        if changed {
+            self.mode_changed(interface.signal_emitter()).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn apply_at_startup(&self) -> fdo::Result<()> {
+        let (mode, connected_cards) = if self.external_display_auto_switch_enabled() {
+            let cards = self.required_external_cards().await?;
+            let mode = self.external_display_target_mode(!cards.is_empty()).await?;
+            (mode, cards)
+        } else {
+            (self.current_mode_value().await, BTreeSet::new())
+        };
+        self.set_mode_value(mode, true).await?;
+        if !connected_cards.is_empty() {
+            Self::notify_drm_change(&connected_cards).await;
+        }
+        Ok(())
+    }
+
+    pub async fn apply_startup_fallback(&self) -> fdo::Result<()> {
+        self.set_mode_value(Modes::Manual, true).await.map(|_| ())
     }
 
     /// set the mode in the `cardwire_mode` bpf map
@@ -154,7 +313,17 @@ impl ModeInterface {
     pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
         // Valide inputs and turn into a Modes
         let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
-        let mut current_mode = self.mode_state.write().await;
+        self.set_mode_value(mode, false).await?;
+        Ok(())
+    }
+    #[zbus(property)]
+    pub(crate) async fn mode(&self) -> fdo::Result<u32> {
+        Ok(self.current_mode_value().await.into())
+    }
+}
+
+impl ModeInterface {
+    async fn apply_mode(&self, mode: Modes) -> fdo::Result<()> {
         let mut gpu_list = self.gpu_list.write().await;
         match mode {
             // Integrated/Hybrid/Smart only works on laptop with two gpus, will refuse if the
@@ -217,19 +386,11 @@ impl ModeInterface {
 
         // Now update the hashmap value to let the bpf know the new mode
         self.update_mode_bpf_map(mode).await?;
-        if let Err(e) = current_mode.save_state(mode).await {
-            warn!("mode couldn't be saved to config: {e}");
-        }
         // try to restart nvidia-powerd, if error just ignore it
         task::spawn(ModeInterface::restart_nvidia_powerd());
 
         info!("Switched to {}", mode);
         Ok(())
-    }
-    #[zbus(property)]
-    pub(crate) async fn mode(&self) -> fdo::Result<u32> {
-        let current_mode = self.mode_state.read().await;
-        Ok(Modes::into(current_mode.mode()))
     }
 }
 
@@ -294,5 +455,24 @@ mod tests {
         assert_eq!(json, "\"integrated\"");
         let json = serde_json::to_string(&Modes::Hybrid).unwrap();
         assert_eq!(json, "\"hybrid\"");
+    }
+
+    #[test]
+    fn external_display_target_uses_hybrid_until_disconnect() {
+        for restore_mode in [
+            Modes::Integrated,
+            Modes::Hybrid,
+            Modes::Manual,
+            Modes::Smart,
+        ] {
+            assert_eq!(
+                ModeInterface::select_external_display_mode(true, restore_mode),
+                Modes::Hybrid
+            );
+            assert_eq!(
+                ModeInterface::select_external_display_mode(false, restore_mode),
+                restore_mode
+            );
+        }
     }
 }

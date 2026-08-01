@@ -4,11 +4,13 @@ use std::{
     }
 };
 
-use crate::{file::CardwireConfig, interface::Modes};
+use crate::{
+    file::CardwireConfig, interface::{ModeInterface, Modes}
+};
 use cardwire_ebpf::{EbpfBlocker, EbpfSettings};
 use log::warn;
 use tokio::sync::RwLock;
-use zbus::{fdo, interface};
+use zbus::{ObjectServer, fdo, interface};
 
 // Use a custom Config struct instead of CarwireConfig to allow more control over the settings
 pub struct ConfigMemory {
@@ -16,6 +18,8 @@ pub struct ConfigMemory {
     pub experimental_nvidia_block: Arc<AtomicBool>,
     pub battery_auto_switch: Arc<AtomicBool>,
     pub battery_auto_switch_mode: Arc<AtomicU32>,
+    pub external_display_auto_switch: Arc<AtomicBool>,
+    pub external_display_auto_switch_mode: Arc<AtomicU32>,
 }
 impl ConfigMemory {
     /// build a ConfigMemory from CardwireConfig
@@ -27,11 +31,18 @@ impl ConfigMemory {
         let battery_auto_switch_mode = Arc::new(AtomicU32::new(
             user_config.battery_auto_switch_mode().into(),
         ));
+        let external_display_auto_switch =
+            Arc::new(AtomicBool::new(user_config.external_display_auto_switch()));
+        let external_display_auto_switch_mode = Arc::new(AtomicU32::new(
+            user_config.external_display_auto_switch_mode().into(),
+        ));
         ConfigMemory {
             auto_apply_gpu_state,
             experimental_nvidia_block,
             battery_auto_switch,
             battery_auto_switch_mode,
+            external_display_auto_switch,
+            external_display_auto_switch_mode,
         }
     }
 }
@@ -40,13 +51,19 @@ impl ConfigMemory {
 pub struct ConfigInterface {
     config: Arc<ConfigMemory>,
     blocker: Arc<RwLock<EbpfBlocker>>,
+    mode_interface: ModeInterface,
 }
 impl ConfigInterface {
     pub fn build(
         config: Arc<ConfigMemory>,
         blocker: Arc<RwLock<EbpfBlocker>>,
+        mode_interface: ModeInterface,
     ) -> anyhow::Result<ConfigInterface> {
-        Ok(Self { config, blocker })
+        Ok(Self {
+            config,
+            blocker,
+            mode_interface,
+        })
     }
 }
 
@@ -72,6 +89,20 @@ impl ConfigInterface {
     pub async fn battery_auto_switch_mode(&self) -> fdo::Result<u32> {
         let mode = self.config.battery_auto_switch_mode.load(Ordering::Relaxed);
         Ok(mode)
+    }
+    #[zbus(property)]
+    pub async fn external_display_auto_switch(&self) -> fdo::Result<bool> {
+        Ok(self
+            .config
+            .external_display_auto_switch
+            .load(Ordering::Relaxed))
+    }
+    #[zbus(property)]
+    pub async fn external_display_auto_switch_mode(&self) -> fdo::Result<u32> {
+        Ok(self
+            .config
+            .external_display_auto_switch_mode
+            .load(Ordering::Relaxed))
     }
 
     // setters
@@ -107,11 +138,41 @@ impl ConfigInterface {
     }
     #[zbus(property)]
     pub async fn set_battery_auto_switch_mode(&self, mode: u32) -> fdo::Result<()> {
+        Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
         self.config
             .battery_auto_switch_mode
             .store(mode, Ordering::Relaxed);
         self.save_to_file().await?;
         Ok(())
+    }
+    #[zbus(property)]
+    pub async fn set_external_display_auto_switch(
+        &self,
+        state: bool,
+        #[zbus(object_server)] object_server: &ObjectServer,
+    ) -> fdo::Result<()> {
+        let changed = self
+            .mode_interface
+            .external_display_setting_changed(state)
+            .await?;
+        self.save_to_file().await?;
+        let interface = object_server
+            .interface::<_, ModeInterface>("/com/github/opengamingcollective/cardwire")
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        self.mode_interface
+            .emit_mode_change(&interface, changed)
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        Ok(())
+    }
+    #[zbus(property)]
+    pub async fn set_external_display_auto_switch_mode(&self, mode: u32) -> fdo::Result<()> {
+        Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
+        self.config
+            .external_display_auto_switch_mode
+            .store(mode, Ordering::Relaxed);
+        self.save_to_file().await
     }
     /// Save the daemon's configuration to cardwire.toml
     pub async fn save_to_file(&self) -> fdo::Result<()> {
@@ -123,6 +184,15 @@ impl ConfigInterface {
             self.config.battery_auto_switch.load(Ordering::Relaxed),
             Modes::try_from(self.config.battery_auto_switch_mode.load(Ordering::Relaxed))
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?,
+            self.config
+                .external_display_auto_switch
+                .load(Ordering::Relaxed),
+            Modes::try_from(
+                self.config
+                    .external_display_auto_switch_mode
+                    .load(Ordering::Relaxed),
+            )
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?,
         );
         match config.save_config().await {
             Ok(_) => Ok(()),
@@ -152,17 +222,37 @@ mod tests {
         assert!(memory.auto_apply_gpu_state.load(Ordering::Relaxed));
         assert!(!memory.experimental_nvidia_block.load(Ordering::Relaxed));
         assert!(!memory.battery_auto_switch.load(Ordering::Relaxed));
+        assert!(!memory.external_display_auto_switch.load(Ordering::Relaxed));
+        assert_eq!(
+            Modes::try_from(
+                memory
+                    .external_display_auto_switch_mode
+                    .load(Ordering::Relaxed)
+            )
+            .unwrap(),
+            Modes::Integrated
+        );
     }
 
     #[test]
     fn test_config_memory_build_from_custom_config() {
-        let config = CardwireConfig::new(false, true, true, Modes::Smart);
+        let config = CardwireConfig::new(false, true, true, Modes::Smart, true, Modes::Manual);
         let memory = ConfigMemory::build(config);
         assert!(!memory.auto_apply_gpu_state.load(Ordering::Relaxed));
         assert!(memory.experimental_nvidia_block.load(Ordering::Relaxed));
         assert!(memory.battery_auto_switch.load(Ordering::Relaxed));
         let mode_val = memory.battery_auto_switch_mode.load(Ordering::Relaxed);
         assert_eq!(Modes::try_from(mode_val).unwrap(), Modes::Smart);
+        assert!(memory.external_display_auto_switch.load(Ordering::Relaxed));
+        assert_eq!(
+            Modes::try_from(
+                memory
+                    .external_display_auto_switch_mode
+                    .load(Ordering::Relaxed)
+            )
+            .unwrap(),
+            Modes::Manual
+        );
     }
 
     #[test]

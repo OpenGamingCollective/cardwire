@@ -106,12 +106,10 @@ fn mode_sub() -> Subscription<Message> {
             }
             let mut mode_stream = proxy.receive_mode_changed().await;
             while let Some(change) = mode_stream.next().await {
-                if let Ok(new_mode) = change.get().await {
-                    let mode_into_enum = Mode::from_repr(new_mode);
-
-                    if let Some(mode) = mode_into_enum {
-                        let _ = output.send(Message::FetchedMode(Ok(mode))).await;
-                    }
+                if let Ok(new_mode) = change.get().await
+                    && let Some(mode) = Mode::from_repr(new_mode)
+                {
+                    let _ = output.send(Message::FetchedMode(Ok(mode))).await;
                 }
             }
             let _ = output
@@ -138,6 +136,10 @@ trait CardwireConfig {
     fn battery_auto_switch(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn battery_auto_switch_mode(&self) -> zbus::Result<u32>;
+    #[zbus(property)]
+    fn external_display_auto_switch(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn external_display_auto_switch_mode(&self) -> zbus::Result<u32>;
 }
 
 fn config_sub() -> Subscription<Message> {
@@ -163,6 +165,31 @@ fn config_sub() -> Subscription<Message> {
             let mut config_switch_battery = proxy.receive_battery_auto_switch_changed().await;
             let mut config_switch_battery_mode =
                 proxy.receive_battery_auto_switch_mode_changed().await;
+            let mut config_external_display =
+                proxy.receive_external_display_auto_switch_changed().await;
+            let mut config_external_display_mode = proxy
+                .receive_external_display_auto_switch_mode_changed()
+                .await;
+            if let Ok(state) = proxy.external_display_auto_switch().await {
+                let _ = output
+                    .send(Message::FetchedSetting(Ok((
+                        DaemonSettings::ExternalDisplayAutoSwitch,
+                        Some(state),
+                        None,
+                    ))))
+                    .await;
+            }
+            if let Ok(mode) = proxy.external_display_auto_switch_mode().await
+                && let Some(mode) = Mode::from_repr(mode)
+            {
+                let _ = output
+                    .send(Message::FetchedSetting(Ok((
+                        DaemonSettings::ExternalDisplayAutoSwitchMode,
+                        None,
+                        Some(mode),
+                    ))))
+                    .await;
+            }
             loop {
                 select! {
                     // Exp nvidia block
@@ -206,6 +233,26 @@ fn config_sub() -> Subscription<Message> {
                                     Some(mode),
                                 )))).await;
                             }
+                        }
+                    },
+                    Some(change) = config_external_display.next() => {
+                        if let Ok(new_state) = change.get().await {
+                            let _ = output.send(Message::FetchedSetting(Ok((
+                                DaemonSettings::ExternalDisplayAutoSwitch,
+                                Some(new_state),
+                                None,
+                            )))).await;
+                        }
+                    },
+                    Some(change) = config_external_display_mode.next() => {
+                        if let Ok(new_mode) = change.get().await
+                            && let Some(mode) = Mode::from_repr(new_mode)
+                        {
+                            let _ = output.send(Message::FetchedSetting(Ok((
+                                DaemonSettings::ExternalDisplayAutoSwitchMode,
+                                None,
+                                Some(mode),
+                            )))).await;
                         }
                     },
                 }

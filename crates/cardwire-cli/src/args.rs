@@ -111,6 +111,16 @@ pub enum ConfigAction {
         #[arg(help = "Value to set")]
         set: Option<CliMode>,
     },
+    #[command(about = "Get or set automatic Hybrid mode for dGPU-owned displays")]
+    ExternalDisplayAutoSwitch {
+        #[arg(help = "Value to set")]
+        set: Option<bool>,
+    },
+    #[command(about = "Get or set the mode restored after external-display disconnect")]
+    ExternalDisplayAutoSwitchMode {
+        #[arg(help = "Value to set")]
+        set: Option<CliMode>,
+    },
     #[command(about = "Save current configuration to file")]
     Save,
 }
@@ -237,6 +247,40 @@ mod tests {
             Commands::Config { action } => match action {
                 ConfigAction::AutoApplyGpuState { set } => assert_eq!(set, Some(true)),
                 _ => panic!("expected AutoApplyGpuState"),
+            },
+            _ => panic!("expected Config command"),
+        }
+    }
+
+    #[test]
+    fn test_args_parse_external_display_auto_switch() {
+        let args =
+            Args::try_parse_from(["cardwire", "config", "external-display-auto-switch", "true"])
+                .unwrap();
+        match args.command {
+            Commands::Config { action } => match action {
+                ConfigAction::ExternalDisplayAutoSwitch { set } => assert_eq!(set, Some(true)),
+                _ => panic!("expected ExternalDisplayAutoSwitch"),
+            },
+            _ => panic!("expected Config command"),
+        }
+    }
+
+    #[test]
+    fn test_args_parse_external_display_auto_switch_mode() {
+        let args = Args::try_parse_from([
+            "cardwire",
+            "config",
+            "external-display-auto-switch-mode",
+            "smart",
+        ])
+        .unwrap();
+        match args.command {
+            Commands::Config { action } => match action {
+                ConfigAction::ExternalDisplayAutoSwitchMode { set } => {
+                    assert!(matches!(set, Some(CliMode::Smart)))
+                }
+                _ => panic!("expected ExternalDisplayAutoSwitchMode"),
             },
             _ => panic!("expected Config command"),
         }

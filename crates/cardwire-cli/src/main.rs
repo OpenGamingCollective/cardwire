@@ -221,6 +221,51 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
+            ConfigAction::ExternalDisplayAutoSwitch { set } => {
+                if let Some(val) = set {
+                    if let Err(e) = client.set_external_display_auto_switch(val).await {
+                        handle_error(e.into());
+                    } else {
+                        println!("ExternalDisplayAutoSwitch set to {}", val);
+                    }
+                } else {
+                    match client.get_external_display_auto_switch().await {
+                        Ok(val) => println!("ExternalDisplayAutoSwitch: {}", val),
+                        Err(e) => handle_error(e),
+                    }
+                }
+            }
+            ConfigAction::ExternalDisplayAutoSwitchMode { set } => {
+                if let Some(val) = set {
+                    let mode_u32 = match val {
+                        CliMode::Integrated => 0,
+                        CliMode::Hybrid => 1,
+                        CliMode::Manual => 2,
+                        CliMode::Smart => 3,
+                    };
+                    match client
+                        .set_external_display_auto_switch_mode(&mode_u32)
+                        .await
+                    {
+                        Ok(_) => println!("External display restore mode set to {}", val),
+                        Err(e) => handle_error(e.into()),
+                    }
+                } else {
+                    match client.get_external_display_auto_switch_mode().await {
+                        Ok(response) => {
+                            let response = match response {
+                                0 => CliMode::Integrated,
+                                1 => CliMode::Hybrid,
+                                2 => CliMode::Manual,
+                                3 => CliMode::Smart,
+                                _ => CliMode::Manual,
+                            };
+                            println!("ExternalDisplayAutoSwitchMode: {}", response)
+                        }
+                        Err(e) => handle_error(e),
+                    }
+                }
+            }
             ConfigAction::Save => {
                 if let Err(e) = client.save_to_file().await {
                     handle_error(e);

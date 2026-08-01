@@ -68,7 +68,12 @@ async fn main() -> Result<()> {
     spawn_dbus_api(object_server, &mut daemon).await?;
     // Spawn background tasks
     task::spawn(daemon.battery_switch_future());
-    task::spawn(daemon.monitor_udev_future());
+    let mode_interface = object_server
+        .interface::<_, crate::interface::ModeInterface>(
+            "/com/github/opengamingcollective/cardwire",
+        )
+        .await?;
+    task::spawn(daemon.monitor_udev_future(mode_interface));
     task::spawn(daemon.run_analyzer());
     info!("Daemon started succesfully");
     pending::<()>().await;

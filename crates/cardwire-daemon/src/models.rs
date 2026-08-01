@@ -3,7 +3,7 @@ use crate::{
     analyzer::CardwireAnalyzer, core::{
         gpu::{self, GpuVendor, check_default_drm_class}, inode::exp_nvidia_inodes, pci::{self}
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
-        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes, SwitcherooInterface
+        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, SwitcherooInterface
     }, tasks
 };
 use anyhow::{Context, Result};
@@ -12,13 +12,12 @@ use log::error;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, task};
 use zbus::{
-    fdo::{self}, interface
+    fdo::{self}, interface, object_server::InterfaceRef
 };
 
 /// Contain the variable used by the daemon in daemon.rs
 #[derive(Clone)]
 pub struct DaemonInner {
-    pub mode_state: Arc<RwLock<CardwireModeState>>,
     pub gpu_state: Arc<RwLock<CardwireGpuState>>,
     pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config: Arc<ConfigMemory>,
@@ -76,19 +75,22 @@ impl DaemonManager {
         let gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>> =
             Arc::new(RwLock::new(gpu_interfaces_map));
 
+        let mode_interface = ModeInterface::build(
+            Arc::clone(&mode_state),
+            Arc::clone(&gpu_state),
+            Arc::clone(&gpu_interfaces),
+            Arc::clone(&user_config),
+            Arc::clone(&blocker),
+        )
+        .await?;
+
         Ok(Self {
-            mode_interface: ModeInterface::build(
-                Arc::clone(&mode_state),
-                Arc::clone(&gpu_state),
-                Arc::clone(&gpu_interfaces),
-                Arc::clone(&user_config),
-                Arc::clone(&blocker),
-            )
-            .await?,
+            mode_interface: mode_interface.clone(),
             gpu_interfaces: Arc::clone(&gpu_interfaces),
             config_interface: ConfigInterface::build(
                 Arc::clone(&user_config),
                 Arc::clone(&blocker),
+                mode_interface,
             )?,
             debug_interface: DebugInterface::build(
                 Arc::clone(&mode_state),
@@ -102,7 +104,6 @@ impl DaemonManager {
             )?,
             switcheroo_interface: SwitcherooInterface::build(Arc::clone(&gpu_interfaces)),
             inner: DaemonInner {
-                mode_state: Arc::clone(&mode_state),
                 gpu_state: Arc::clone(&gpu_state),
                 gpu_list: Arc::clone(&gpu_interfaces),
                 config: Arc::clone(&user_config),
@@ -132,13 +133,12 @@ impl DaemonManager {
         self.populate_state_file().await?;
 
         // This one can fail on asus laptop when switching to integrated using the kernel attribute
-        if let Err(err) = self.apply_mode_at_startup(None).await {
+        if let Err(err) = self.mode_interface.apply_at_startup().await {
             error!(
                 "failed to apply mode at startup: {}, switching to manual...",
                 err
             );
-            // 2 = manual
-            self.apply_mode_at_startup(Some(2)).await?
+            self.mode_interface.apply_startup_fallback().await?
         };
 
         Ok(())
@@ -218,31 +218,6 @@ impl DaemonManager {
         }
         Ok(())
     }
-    async fn apply_mode_at_startup(&self, mode_arg: Option<u32>) -> Result<()> {
-        // If a mode is supplied as arg, use it, else read the internal state (from file)
-        let mode_to_apply = match mode_arg {
-            Some(mode) => mode,
-            None => {
-                let mode_lock = self.inner.mode_state.read().await;
-                Modes::into(mode_lock.mode())
-            }
-        };
-        // store the result to return it later
-        let res = self
-            .mode_interface
-            .set_mode(mode_to_apply)
-            .await
-            .map_err(|err| err.into());
-        // If a mode was supplied as arg and we can convert u32 -> Modes, we bring back the user
-        // configured mode
-        if mode_arg.is_some()
-            && let Ok(mode_var) = Modes::try_from(mode_to_apply)
-        {
-            let mut mode_lock = self.inner.mode_state.write().await;
-            mode_lock.save_state(mode_var).await?;
-        }
-        res
-    }
     pub fn battery_switch_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let auto_switch = Arc::clone(&self.inner.config.battery_auto_switch);
         let auto_switch_mode = Arc::clone(&self.inner.config.battery_auto_switch_mode);
@@ -254,10 +229,14 @@ impl DaemonManager {
             res
         }
     }
-    pub fn monitor_udev_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
+    pub fn monitor_udev_future(
+        &self,
+        mode_interface: InterfaceRef<ModeInterface>,
+    ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let debug_int = self.debug_interface.clone();
+        let mode = self.mode_interface.clone();
         async move {
-            let res = tasks::monitor_pci_changes(debug_int).await;
+            let res = tasks::monitor_hardware_changes(debug_int, mode, mode_interface).await;
             if let Err(ref e) = res {
                 error!("monitor_udev task failed: {}", e);
             }

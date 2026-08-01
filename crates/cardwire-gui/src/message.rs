@@ -13,6 +13,8 @@ pub enum Message {
     UpdateStateSetting(bool),
     UpdateBatterySetting(bool),
     UpdateBatteryMode(Mode),
+    UpdateExternalDisplaySetting(bool),
+    UpdateExternalDisplayMode(Mode),
     UpdateGuiConfig(GuiConfig),
     TrayReady(TrayHandle),
     TrayAction(TrayAction),

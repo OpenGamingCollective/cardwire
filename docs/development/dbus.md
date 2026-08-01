@@ -36,7 +36,7 @@
 **Properties:**
 
 - **`Mode`**
-  Controls the Cardwire's Mode
+  Controls Cardwire's current applied mode
   - **Type:** `u`
   - **Access:** Read/Write
   - **Emits:** `PropertiesChanged` on change
@@ -70,6 +70,17 @@
 - **`ExperimentalNvidiaBlock`**
   Toggles the experimental blocking for NVIDIA GPU, only works if the system has exactly 1 Nvidia GPU
   - **Type:** `b`
+  - **Access:** Read/Write
+
+- **`ExternalDisplayAutoSwitch`**
+  Switches to Hybrid when an external display is connected to a dGPU-owned DRM connector, then
+  restores `ExternalDisplayAutoSwitchMode` after disconnect.
+  - **Type:** `b`
+  - **Access:** Read/Write
+
+- **`ExternalDisplayAutoSwitchMode`**
+  Controls which mode is restored after the last dGPU-owned external display disconnects.
+  - **Type:** `u`
   - **Access:** Read/Write
 
 ### Debug
