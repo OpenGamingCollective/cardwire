@@ -1,5 +1,5 @@
 use aya_ebpf::helpers::{
-    bpf_get_current_pid_tgid, bpf_probe_read_kernel, generated::{bpf_get_current_task, bpf_get_task_stack}
+    bpf_get_current_pid_tgid, bpf_probe_read_kernel, generated::bpf_get_current_task
 };
 
 use crate::{
