@@ -149,6 +149,7 @@ pub fn exp_nvidia_inodes() -> Result<Vec<u64>> {
                 || name == "nvidia_icd.x86_64.json"
                 || name == "nvidia_icd.i686.json")
                 && let Ok(metadata) = fs::metadata(entry.path())
+                && metadata.is_file()
             {
                 inodes.push(metadata.ino());
             }
