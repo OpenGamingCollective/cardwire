@@ -188,14 +188,18 @@ impl ModeInterface {
         Ok(changed)
     }
 
-    pub async fn external_display_setting_changed(&self, enabled: bool) -> fdo::Result<bool> {
+    pub async fn external_display_setting_changed(
+        &self,
+        enabled: bool,
+    ) -> fdo::Result<(bool, Modes)> {
         let _transition = self.transition_lock.lock().await;
+        let previous_mode = self.current_mode_value().await;
         let was_enabled = self.external_display_auto_switch_enabled();
         self.config
             .external_display_auto_switch
             .store(enabled, Ordering::Relaxed);
         if !enabled || was_enabled {
-            return Ok(false);
+            return Ok((false, previous_mode));
         }
 
         let res = async {
@@ -206,7 +210,7 @@ impl ModeInterface {
             if connected && changed {
                 Self::notify_drm_change(&cards).await;
             }
-            Ok(changed)
+            Ok((changed, previous_mode))
         }
         .await;
 

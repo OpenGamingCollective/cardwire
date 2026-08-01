@@ -155,12 +155,11 @@ impl ConfigInterface {
             .interface::<_, ModeInterface>("/com/github/opengamingcollective/cardwire")
             .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        let previous_mode = self.mode_interface.current_mode_value().await;
         let previous_auto_switch = self
             .config
             .external_display_auto_switch
             .load(Ordering::Relaxed);
-        let changed = self
+        let (changed, previous_mode) = self
             .mode_interface
             .external_display_setting_changed(state)
             .await?;
