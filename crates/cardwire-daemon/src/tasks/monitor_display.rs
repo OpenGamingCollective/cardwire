@@ -185,9 +185,9 @@ async fn restore_mode_after_settle(
     }
 }
 
-pub async fn monitor_display_changes(
-    mode: ModeInterface,
-    mode_interface: InterfaceRef<ModeInterface>,
+async fn run_display_monitor(
+    mode: &ModeInterface,
+    mode_interface: &InterfaceRef<ModeInterface>,
 ) -> zbus::Result<()> {
     let drm_monitor = udev::MonitorBuilder::new()?.match_subsystem("drm")?;
     let drm_fd = AsyncFd::new(drm_monitor.listen()?)?;
@@ -220,8 +220,8 @@ pub async fn monitor_display_changes(
                 if reconcile {
                     tokio::time::sleep(DISPLAY_DEBOUNCE).await;
                     reconcile_display_topology(
-                        &mode,
-                        &mode_interface,
+                        mode,
+                        mode_interface,
                         &mut display_state,
                         true,
                     )
@@ -230,16 +230,31 @@ pub async fn monitor_display_changes(
             }
             _ = retry.tick() => {
                 reconcile_display_topology(
-                    &mode,
-                    &mode_interface,
+                    mode,
+                    mode_interface,
                     &mut display_state,
                     false,
                 )
                 .await;
             }
             _ = tokio::time::sleep_until(restore_deadline), if display_state.restore.is_pending() => {
-                restore_mode_after_settle(&mode, &mode_interface, &mut display_state).await;
+                restore_mode_after_settle(mode, mode_interface, &mut display_state).await;
             }
+        }
+    }
+}
+
+pub async fn monitor_display_changes(
+    mode: ModeInterface,
+    mode_interface: InterfaceRef<ModeInterface>,
+) -> zbus::Result<()> {
+    loop {
+        if let Err(err) = run_display_monitor(&mode, &mode_interface).await {
+            warn!(
+                "display monitor task exited with error: {err}; retrying in {} seconds",
+                RETRY_INTERVAL.as_secs()
+            );
+            tokio::time::sleep(RETRY_INTERVAL).await;
         }
     }
 }

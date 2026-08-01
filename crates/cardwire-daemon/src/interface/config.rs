@@ -151,15 +151,28 @@ impl ConfigInterface {
         state: bool,
         #[zbus(object_server)] object_server: &ObjectServer,
     ) -> fdo::Result<()> {
-        let changed = self
-            .mode_interface
-            .external_display_setting_changed(state)
-            .await?;
-        self.save_to_file().await?;
         let interface = object_server
             .interface::<_, ModeInterface>("/com/github/opengamingcollective/cardwire")
             .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        let previous_mode = self.mode_interface.current_mode_value().await;
+        let previous_auto_switch = self
+            .config
+            .external_display_auto_switch
+            .load(Ordering::Relaxed);
+        let changed = self
+            .mode_interface
+            .external_display_setting_changed(state)
+            .await?;
+        if let Err(err) = self.save_to_file().await {
+            self.config
+                .external_display_auto_switch
+                .store(previous_auto_switch, Ordering::Relaxed);
+            if changed {
+                let _ = self.mode_interface.set_mode_value(previous_mode, false).await;
+            }
+            return Err(err);
+        }
         self.mode_interface
             .emit_mode_change(&interface, changed)
             .await

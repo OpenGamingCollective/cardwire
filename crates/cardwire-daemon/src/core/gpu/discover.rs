@@ -369,7 +369,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> 
 
     let default = stats
         .iter()
-        .max_by_key(|&(_, stats)| default_gpu_rank(stats))
+        .max_by_key(|&(&id, stats)| (default_gpu_rank(stats), std::cmp::Reverse(id)))
         .unzip();
 
     for (id, gpu) in &mut *gpu_list {

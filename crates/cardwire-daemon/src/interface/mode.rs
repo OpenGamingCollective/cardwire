@@ -123,11 +123,11 @@ impl ModeInterface {
         }
     }
 
-    async fn current_mode_value(&self) -> Modes {
+    pub async fn current_mode_value(&self) -> Modes {
         self.mode_state.read().await.mode()
     }
 
-    async fn set_mode_value(&self, mode: Modes, force_apply: bool) -> fdo::Result<bool> {
+    pub async fn set_mode_value(&self, mode: Modes, force_apply: bool) -> fdo::Result<bool> {
         let _transition = self.transition_lock.lock().await;
         self.set_mode_value_locked(mode, force_apply).await
     }
@@ -232,9 +232,16 @@ impl ModeInterface {
 
     pub async fn apply_at_startup(&self) -> fdo::Result<()> {
         let (mode, connected_cards) = if self.external_display_auto_switch_enabled() {
-            let cards = self.required_external_cards().await?;
-            let mode = self.external_display_target_mode(!cards.is_empty()).await?;
-            (mode, cards)
+            match self.required_external_cards().await {
+                Ok(cards) => {
+                    let mode = self.external_display_target_mode(!cards.is_empty()).await?;
+                    (mode, cards)
+                }
+                Err(err) => {
+                    warn!("failed to read external card topology at startup: {err}");
+                    (self.current_mode_value().await, BTreeSet::new())
+                }
+            }
         } else {
             (self.current_mode_value().await, BTreeSet::new())
         };
