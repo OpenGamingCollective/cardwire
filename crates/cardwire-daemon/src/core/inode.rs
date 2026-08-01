@@ -145,10 +145,10 @@ pub fn exp_nvidia_inodes() -> Result<Vec<u64>> {
         for entry in entries.flatten() {
             let name = entry.file_name();
 
-            if name == "nvidia_icd.json" || name == "nvidia_icd.x86_64.json" {
-                if let Ok(metadata) = fs::metadata(entry.path()) {
-                    inodes.push(metadata.ino());
-                }
+            if (name == "nvidia_icd.json" || name == "nvidia_icd.x86_64.json")
+                && let Ok(metadata) = fs::metadata(entry.path())
+            {
+                inodes.push(metadata.ino());
             }
         }
     }
