@@ -12,7 +12,6 @@ const STATE_PATH: &str = "/var/lib/cardwire";
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub struct CardwireModeState {
-    // The current mode applied by Cardwire.
     mode: Modes,
 }
 impl Default for CardwireModeState {
@@ -52,7 +51,7 @@ impl CardwireModeState {
     pub fn mode(&self) -> Modes {
         self.mode
     }
-    /// Save the current mode into the daemon and to the mode_state.json file.
+    /// Save the new mode into the daemon and to the mode_state.json file
     pub async fn save_state(&mut self, new_mode: Modes) -> anyhow::Result<()> {
         // Save to daemon state
         self.mode = new_mode;
