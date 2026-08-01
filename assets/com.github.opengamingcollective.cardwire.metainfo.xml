@@ -10,9 +10,9 @@
   <summary>A GPU Manager for linux that uses eBPF LSM hooks to block GPUs</summary>
 
   <screenshots>
-    <screenshot type="default"><image>
-      https://github.com/OpenGamingCollective/cardwire/blob/metainfo-screenshot/assets/com.github.opengamingcollective.cardwire.screenshot.png
-    </image></screenshot>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/OpenGamingCollective/cardwire/metainfo-screenshot/assets/com.github.opengamingcollective.cardwire.screenshot.png</image>
+    </screenshot>
   </screenshots>
 
   <description>
