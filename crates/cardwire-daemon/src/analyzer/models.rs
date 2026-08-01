@@ -35,7 +35,7 @@ pub struct CardwireAnalyzer {
     exec_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     report_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
-    pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u8>>>,
+    pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
     #[allow(dead_code)]
     xdg_folders: Vec<PathBuf>,
@@ -168,7 +168,7 @@ impl CardwireAnalyzer {
                 _ => {}
             }
             let mut pid_map = self.pid_map.write().await;
-            if let Err(e) = pid_map.insert(event.pid, result.1, 0) {
+            if let Err(e) = pid_map.insert(event.pid, result.1 as u32, 0) {
                 warn!("Failed to insert into eBPF map: {}", e);
             }
         }

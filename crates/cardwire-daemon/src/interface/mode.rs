@@ -3,7 +3,7 @@ use crate::{
     file::{CardwireGpuState, CardwireModeState}, interface::{GpuInterface, config::ConfigMemory}
 };
 use anyhow::Result;
-use aya::maps::HashMap as AyaHashMap;
+use aya::maps::Array as AyaArray;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -67,7 +67,7 @@ pub struct ModeInterface {
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     config: Arc<ConfigMemory>,
-    mode_map: Arc<Mutex<AyaHashMap<aya::maps::MapData, u8, u8>>>,
+    mode_map: Arc<Mutex<AyaArray<aya::maps::MapData, u8>>>,
 }
 
 impl ModeInterface {
@@ -79,7 +79,7 @@ impl ModeInterface {
         blocker: Arc<RwLock<EbpfBlocker>>,
     ) -> Result<ModeInterface> {
         let mut blocker = blocker.write().await;
-        let mode_map: aya::maps::HashMap<aya::maps::MapData, u8, u8> = blocker.get_mode_map()?;
+        let mode_map: aya::maps::Array<aya::maps::MapData, u8> = blocker.get_mode_map()?;
         let mode_map = Arc::new(Mutex::new(mode_map));
         Ok(ModeInterface {
             mode_state,
@@ -95,7 +95,7 @@ impl ModeInterface {
         let mut mode_map = self.mode_map.lock().await;
         let mode: u32 = Modes::into(mode);
         mode_map
-            .insert(0, mode as u8, 0)
+            .set(0, mode as u8, 0)
             .map_err(|err| fdo::Error::Failed(err.to_string()))
     }
 
