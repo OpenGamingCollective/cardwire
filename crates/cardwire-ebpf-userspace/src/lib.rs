@@ -5,6 +5,7 @@ pub use crate::errors::{CardwireEbpfError, CardwireEbpfResult};
 use aya::{
     Btf, Ebpf, maps::{Array, HashMap, MapError, RingBuf}, programs::{Lsm, TracePoint}
 };
+use log::info;
 
 pub enum EbpfSettings {
     ExperimentalNvidia,
@@ -61,8 +62,8 @@ impl EbpfBlocker {
         //    .map_err(CardwireEbpfError::aya)?;
         // to hide files
         let cardwire_sys_enter_getdents64: &mut TracePoint = ebpf
-            .program_mut("cardwire_sys_enter_getdents64")
-            .ok_or_else(|| CardwireEbpfError::missing_lsm("cardwire_sys_enter_getdents64"))?
+            .program_mut("tracepoint_enter_getdents64")
+            .ok_or_else(|| CardwireEbpfError::missing_lsm("tracepoint_enter_getdents64"))?
             .try_into()
             .map_err(CardwireEbpfError::aya)?;
 
@@ -75,8 +76,8 @@ impl EbpfBlocker {
             .map_err(CardwireEbpfError::aya)?;
         // to hide files
         let cardwire_sys_exit_getdents64: &mut TracePoint = ebpf
-            .program_mut("cardwire_sys_exit_getdents64")
-            .ok_or_else(|| CardwireEbpfError::missing_lsm("cardwire_sys_exit_getdents64"))?
+            .program_mut("tracepoint_exit_getdents64")
+            .ok_or_else(|| CardwireEbpfError::missing_lsm("try_tracepoint_exit_getdents64"))?
             .try_into()
             .map_err(CardwireEbpfError::aya)?;
 
@@ -99,6 +100,7 @@ impl EbpfBlocker {
                 .ok_or_else(|| CardwireEbpfError::missing_map("CW_DAEMON_PID"))?,
         )
         .map_err(CardwireEbpfError::aya)?;
+        info!("inserting: {} into map", pid);
         array_map.set(0, pid, 0).map_err(CardwireEbpfError::aya)?;
         Ok(())
     }
@@ -163,7 +165,7 @@ impl EbpfBlocker {
 
     pub fn block_exp_inode(&mut self, inode: u64) -> CardwireEbpfResult<()> {
         // Also insert hardcoded values for now
-        let mut inode_map: HashMap<_, u64, u8> = HashMap::try_from(
+        let mut inode_map: HashMap<_, u64, u32> = HashMap::try_from(
             self.ebpf
                 .map_mut("CW_EXP_BLK_INO")
                 .ok_or_else(|| CardwireEbpfError::missing_map("CW_EXP_BLK_INO"))?,
@@ -227,21 +229,21 @@ impl EbpfBlocker {
         let ring_buf: RingBuf<aya::maps::MapData> = RingBuf::try_from(map).unwrap();
         Ok(ring_buf)
     }
-    pub fn get_pid_map(&mut self) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u8>> {
+    pub fn get_pid_map(&mut self) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u32>> {
         let map = self.ebpf.take_map("CW_ALLOWED_PID").unwrap();
-        let map: HashMap<aya::maps::MapData, u32, u8> = HashMap::try_from(map).unwrap();
+        let map: HashMap<aya::maps::MapData, u32, u32> = HashMap::try_from(map).unwrap();
         Ok(map)
     }
     pub fn get_forced_pid_map(
         &mut self,
-    ) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u8>> {
+    ) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u32>> {
         let map = self.ebpf.take_map("CW_FORCED_PID").unwrap();
-        let map: HashMap<aya::maps::MapData, u32, u8> = HashMap::try_from(map).unwrap();
+        let map: HashMap<aya::maps::MapData, u32, u32> = HashMap::try_from(map).unwrap();
         Ok(map)
     }
-    pub fn get_mode_map(&mut self) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u8, u8>> {
+    pub fn get_mode_map(&mut self) -> CardwireEbpfResult<Array<aya::maps::MapData, u8>> {
         let map = self.ebpf.take_map("CW_MODE").unwrap();
-        let map: HashMap<aya::maps::MapData, u8, u8> = HashMap::try_from(map).unwrap();
+        let map: Array<aya::maps::MapData, u8> = Array::try_from(map).unwrap();
         Ok(map)
     }
 }

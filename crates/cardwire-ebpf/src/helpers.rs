@@ -49,7 +49,7 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
 /// Verify if the proc is cardwired, returns None if the map fails
 #[inline(always)]
 pub fn is_cardwired() -> Option<bool> {
-    let proc_pid = bpf_get_current_pid_tgid() as u32;
+    let proc_pid = (bpf_get_current_pid_tgid() >> 32) as u32;
     match CW_DAEMON_PID.get(DAEMON_INDEX) {
         Some(pid) => Some(proc_pid == *pid),
         None => None,

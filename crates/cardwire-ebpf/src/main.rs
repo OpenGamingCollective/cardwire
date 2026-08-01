@@ -65,7 +65,7 @@ const SMART: u8 = 3;
 //  sched_process_exit, if false skip in these hooks
 
 #[lsm(hook = "file_open")]
-pub fn lsm_file_open(ctx: LsmContext) -> i32 {
+pub fn file_open(ctx: LsmContext) -> i32 {
     match unsafe { try_file_open(ctx) } {
         Ok(ret) => ret,
         Err(ret) => ret,
@@ -129,7 +129,7 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
 }
 
 #[lsm(hook = "inode_permission")]
-pub fn lsm_inode_permission(ctx: LsmContext) -> i32 {
+pub fn inode_permission(ctx: LsmContext) -> i32 {
     match unsafe { try_inode_permission(ctx) } {
         Ok(ret) => ret,
         Err(ret) => ret,
@@ -182,7 +182,7 @@ unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
 }
 
 #[lsm(hook = "inode_getattr")]
-pub fn lsm_inode_getattr(ctx: LsmContext) -> i32 {
+pub fn inode_getattr(ctx: LsmContext) -> i32 {
     match unsafe { try_inode_getattr(ctx) } {
         Ok(ret) => ret,
         Err(ret) => ret,
@@ -286,7 +286,7 @@ unsafe fn try_tracepoint_enter_getdents64(ctx: TracePointContext) -> Result<i32,
     // Arg 2 is the count
     const DIRP_OFFSET: usize = 24;
 
-    let pid = bpf_get_current_pid_tgid() as u32;
+    let pid = (bpf_get_current_pid_tgid() >> 32) as u32;
 
     let dirp_ptr: u64 = unsafe { ctx.read_at(DIRP_OFFSET)? };
 
@@ -334,7 +334,7 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
         }
     }
 
-    let pid = bpf_get_current_pid_tgid() as u32;
+    let pid = (bpf_get_current_pid_tgid() >> 32) as u32;
     let dirent_ptr = match unsafe { CW_DIRENT.get(pid) } {
         Some(ptr) => *ptr as *const linux_dirent64,
         None => return ReturnCode::SUCCESS,
