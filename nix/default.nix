@@ -58,6 +58,9 @@ in
       install -Dm444 ./assets/cardwire-gui.desktop \
          $out/share/applications/cardwire-gui.desktop
 
+      install -Dm444 ./assets/com.github.opengamingcollective.cardwire.metainfo.xml \
+	 $out/share/metainfo/com.github.opengamingcollective.cardwire.metainfo.xml
+
       for icon in ./assets/icons/*.svg; do
         install -Dm444 "$icon" "$out/share/icons/hicolor/scalable/apps/$(basename "$icon")"
       done
