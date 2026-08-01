@@ -170,9 +170,9 @@ fn gpu_cards(
                 Color::from_rgb(0.9, 0.9, 0.9)
             };
             let title_text = if gpu.default {
-                format!("★ GPU {} ({})", id, &gpu.name)
+                format!("★ GPU {} ({})", id, gpu.name)
             } else {
-                format!("GPU {} ({})", id, &gpu.name)
+                format!("GPU {} ({})", id, gpu.name)
             };
 
             let is_open = open_dropdown == Some(*id);

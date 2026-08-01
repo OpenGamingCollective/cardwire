@@ -95,7 +95,7 @@ impl DebugInterface {
             let mut power_tasks = self.power_tasks.write().await;
 
             // get rid of the old gpu api and the old tasks
-            for (id, _) in gpu_interfaces.iter() {
+            for id in gpu_interfaces.keys() {
                 let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
                 let _ = object_server.remove::<GpuInterface, &str>(&path).await;
                 // if task is present, abort

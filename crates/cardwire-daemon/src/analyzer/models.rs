@@ -132,7 +132,7 @@ impl CardwireAnalyzer {
                                 task::spawn(async move {
                                     if let Some(app_id) = get_app_id_wayland(event.pid).await {
                                         // use dGPU term instead of GPU, smart mode is only avaible on hybrid setups
-                                        info!("{}[{}] tried to access the dGPU (blocked by cardwire)", &app_id, event.pid);
+                                        info!("{}[{}] tried to access the dGPU (blocked by cardwire)", app_id, event.pid);
                                     }
                                 });
                             }
@@ -158,11 +158,11 @@ impl CardwireAnalyzer {
             && result.0
         {
             match result.1 {
-                0 => info!("FORCE: pid: {} process: {} ", event.pid, &real_app_name),
+                0 => info!("FORCE: pid: {} process: {} ", event.pid, real_app_name),
                 1 => info!(
                     "ALLOW: pid: {} process: {} in {}us",
                     event.pid,
-                    &real_app_name,
+                    real_app_name,
                     time.elapsed().as_micros()
                 ),
                 _ => {}

@@ -179,7 +179,7 @@ impl DaemonManager {
         let gpus_list = self.inner.gpu_list.read().await;
         let mut blocker = self.inner.blocker.write().await;
         // Only block if the device has a Nvidia gpu
-        for (_, gpu) in gpus_list.iter() {
+        for gpu in gpus_list.values() {
             if gpu.device.gpu_vendor() == GpuVendor::Nvidia
                 && let Ok(inodes) = exp_nvidia_inodes()
                 && !inodes.is_empty()
@@ -212,7 +212,7 @@ impl DaemonManager {
         let mut state = self.inner.gpu_state.write().await;
         let default: bool = state.is_default_state();
         if default {
-            for (_, gpu) in gpus_list.iter() {
+            for gpu in gpus_list.values() {
                 state.save_state(&gpu.device, false).await?;
             }
         }
