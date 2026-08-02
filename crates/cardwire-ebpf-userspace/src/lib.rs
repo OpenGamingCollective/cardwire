@@ -32,7 +32,12 @@ impl EbpfBlocker {
 
         let btf = Btf::from_sys_fs().map_err(CardwireEbpfError::aya)?;
 
-        let load_list: [&str; 3] = ["file_open", "inode_permission", "inode_getattr"];
+        let load_list: [&str; 4] = [
+            "file_open",
+            "inode_permission",
+            "inode_getattr",
+            "file_ioctl",
+        ];
         for entity in load_list {
             let program: &mut Lsm = ebpf
                 .program_mut(entity)
