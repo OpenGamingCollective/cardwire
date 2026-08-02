@@ -193,23 +193,25 @@ impl GpuInterface {
     pub async fn gpu_blocked(&self) -> fdo::Result<bool> {
         let blocker = self.blocker.read().await;
 
+        let gpu_id = self.id;
+
         let card = match card_to_inode(*self.device.card()) {
-            Ok(inode) => blocker.is_inode_blocked(inode).into_fdo()?,
+            Ok(inode) => blocker.is_inode_blocked(inode, gpu_id).into_fdo()?,
             Err(err) => return Err(err).into_fdo(),
         };
         let render = match render_to_inode(*self.device.render()) {
-            Ok(inode) => blocker.is_inode_blocked(inode).into_fdo()?,
+            Ok(inode) => blocker.is_inode_blocked(inode, gpu_id).into_fdo()?,
             Err(err) => return Err(err).into_fdo(),
         };
         let pci = match single_pci_to_inode(self.device.pci.pci_address()) {
-            Ok(inode) => blocker.is_inode_blocked(inode).into_fdo()?,
+            Ok(inode) => blocker.is_inode_blocked(inode, gpu_id).into_fdo()?,
             Err(err) => return Err(err).into_fdo(),
         };
         let nvidia = match self.device.nvidia_minor() {
             // GPU is nvidia
             Some(minor) => {
                 if let Ok(inode) = nvidia_to_inode(*minor) {
-                    blocker.is_inode_blocked(inode).into_fdo()?
+                    blocker.is_inode_blocked(inode, gpu_id).into_fdo()?
                 } else {
                     false
                 }

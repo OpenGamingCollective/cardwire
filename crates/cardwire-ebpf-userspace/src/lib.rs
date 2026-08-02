@@ -146,7 +146,7 @@ impl EbpfBlocker {
         }
     }
 
-    pub fn is_inode_blocked(&self, inode: u64) -> CardwireEbpfResult<bool> {
+    pub fn is_inode_blocked(&self, inode: u64, value: u32) -> CardwireEbpfResult<bool> {
         // Also insert hardcoded values for now
         let inode_map: HashMap<_, u64, u32> = HashMap::try_from(
             self.ebpf
@@ -155,9 +155,8 @@ impl EbpfBlocker {
         )
         .map_err(CardwireEbpfError::aya)?;
         match inode_map.get(&inode, 0) {
-            // 1 = dGPU, 0 = iGPU, if the inode is in the map it means the dGPU is meant to be
-            // blocked so true
-            Ok(value) => Ok(value == 1),
+            // if value (gpu key associed to inode) = our func value
+            Ok(map_value) => Ok(value == map_value),
             Err(MapError::KeyNotFound) => Ok(false),
             Err(err) => Err(CardwireEbpfError::aya(err)),
         }
