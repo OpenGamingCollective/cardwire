@@ -176,21 +176,41 @@ impl ModeInterface {
     ) -> zbus::Result<()> {
         if changed {
             self.mode_changed(interface.signal_emitter()).await?;
+            self.requested_mode_changed(interface.signal_emitter())
+                .await?;
         }
         Ok(())
     }
 
-    /// Shared reference to the GPU list, used by display-detection helpers in the tasks module.
-    pub(crate) fn gpu_list(&self) -> &Arc<RwLock<BTreeMap<usize, GpuInterface>>> {
-        &self.gpu_list
+    /// Resolve the target effective mode and DRM card for a requested mode.
+    pub(crate) async fn detect_display_target(
+        &self,
+        requested: Modes,
+    ) -> fdo::Result<(Modes, Option<u32>)> {
+        crate::tasks::detect_external_display_target(&self.gpu_list, &self.config, requested).await
     }
 
-    /// Shared reference to the runtime configuration memory.
-    pub(crate) fn config(&self) -> &Arc<ConfigMemory> {
-        &self.config
+    /// Atomically reconcile the effective mode with the current display topology.
+    pub async fn reconcile_effective_mode(&self) -> fdo::Result<(bool, Modes, Modes, Option<u32>)> {
+        let _transition = self.transition.lock().await;
+        let requested = self.requested_mode_value().await;
+        let (target, card) = match self.detect_display_target(requested).await {
+            Ok(res) => res,
+            Err(err) => {
+                warn!("failed to read external display topology: {err}");
+                (requested, None)
+            }
+        };
+        let previous = *self.effective_mode.read().await;
+        if target != previous {
+            self.apply_mode(target).await?;
+            *self.effective_mode.write().await = target;
+        }
+        Ok((target != previous, requested, target, card))
     }
 
     /// Apply an effective mode without persisting it to mode_state.
+    #[allow(dead_code)]
     pub async fn effective_set_mode(&self, target: Modes, force: bool) -> fdo::Result<bool> {
         let _transition = self.transition.lock().await;
         let previous = *self.effective_mode.read().await;
@@ -204,9 +224,13 @@ impl ModeInterface {
     /// Apply and persist a user-requested mode.
     pub async fn set_requested_mode(&self, requested: Modes) -> fdo::Result<()> {
         let _transition = self.transition.lock().await;
-        let (target, _card) =
-            crate::tasks::detect_external_display_target(&self.gpu_list, &self.config, requested)
-                .await?;
+        let (target, _card) = match self.detect_display_target(requested).await {
+            Ok(res) => res,
+            Err(err) => {
+                warn!("failed to read external display topology: {err}");
+                (requested, None)
+            }
+        };
         let previous = *self.effective_mode.read().await;
         if target != previous {
             self.apply_mode(target).await?;
@@ -219,13 +243,7 @@ impl ModeInterface {
     /// Apply mode at daemon startup.
     pub async fn apply_mode_at_startup(&self, requested: Modes, force: bool) -> fdo::Result<()> {
         let _transition = self.transition.lock().await;
-        let (target, _card) = match crate::tasks::detect_external_display_target(
-            &self.gpu_list,
-            &self.config,
-            requested,
-        )
-        .await
-        {
+        let (target, _card) = match self.detect_display_target(requested).await {
             Ok(target) => target,
             Err(err) => {
                 warn!("failed to read external display topology at startup: {err}");
@@ -318,9 +336,14 @@ impl ModeInterface {
 impl ModeInterface {
     /// Set the user-requested GPU mode over D-Bus and persist it to state file.
     #[zbus(property)]
-    pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
+    pub(crate) async fn set_mode(
+        &self,
+        mode: u32,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+    ) -> fdo::Result<()> {
         let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
         self.set_requested_mode(mode).await?;
+        self.requested_mode_changed(&emitter).await?;
         Ok(())
     }
 
