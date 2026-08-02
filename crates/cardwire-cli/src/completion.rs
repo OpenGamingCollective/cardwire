@@ -24,16 +24,18 @@ complete -c cardwire -f -n '__fish_seen_subcommand_from gpu; and test (count (co
 complete -c cardwire -f -n '__fish_seen_subcommand_from gpu; and test (count (commandline -opc)) -ge 3' -a " '--block'\t'Block a specific gpu' '--unblock'\t'Unblock a specific gpu' '--lsof'\t'List open files on the GPU' '--power'\t'Get GPU power state' "
 
 # config <action>
-complete -c cardwire -f -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from auto-apply-gpu-state experimental-nvidia-block battery-auto-switch battery-auto-switch-mode save' -a 'auto-apply-gpu-state' -d 'Get or set AutoApplyGpuState'
-complete -c cardwire -f -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from auto-apply-gpu-state experimental-nvidia-block battery-auto-switch battery-auto-switch-mode save' -a 'experimental-nvidia-block' -d 'Get or set ExperimentalNvidiaBlock'
-complete -c cardwire -f -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from auto-apply-gpu-state experimental-nvidia-block battery-auto-switch battery-auto-switch-mode save' -a 'battery-auto-switch' -d 'Get or set BatteryAutoSwitch'
-complete -c cardwire -f -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from auto-apply-gpu-state experimental-nvidia-block battery-auto-switch battery-auto-switch-mode save' -a 'battery-auto-switch-mode' -d 'Get or set BatteryAutoSwitchMode'
-complete -c cardwire -f -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from auto-apply-gpu-state experimental-nvidia-block battery-auto-switch battery-auto-switch-mode save' -a 'save' -d 'Save current configuration to file'
+complete -c cardwire -f -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from auto-apply-gpu-state experimental-nvidia-block battery-auto-switch battery-auto-switch-mode external-display-auto-switch save' -a 'auto-apply-gpu-state' -d 'Get or set AutoApplyGpuState'
+complete -c cardwire -f -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from auto-apply-gpu-state experimental-nvidia-block battery-auto-switch battery-auto-switch-mode external-display-auto-switch save' -a 'experimental-nvidia-block' -d 'Get or set ExperimentalNvidiaBlock'
+complete -c cardwire -f -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from auto-apply-gpu-state experimental-nvidia-block battery-auto-switch battery-auto-switch-mode external-display-auto-switch save' -a 'battery-auto-switch' -d 'Get or set BatteryAutoSwitch'
+complete -c cardwire -f -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from auto-apply-gpu-state experimental-nvidia-block battery-auto-switch battery-auto-switch-mode external-display-auto-switch save' -a 'battery-auto-switch-mode' -d 'Get or set BatteryAutoSwitchMode'
+complete -c cardwire -f -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from auto-apply-gpu-state experimental-nvidia-block battery-auto-switch battery-auto-switch-mode external-display-auto-switch save' -a 'external-display-auto-switch' -d 'Get or set automatic handling for dGPU-owned external displays'
+complete -c cardwire -f -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from auto-apply-gpu-state experimental-nvidia-block battery-auto-switch battery-auto-switch-mode external-display-auto-switch save' -a 'save' -d 'Save current configuration to file'
 
 # config <action> <value>
 complete -c cardwire -f -n '__fish_seen_subcommand_from auto-apply-gpu-state; and test (count (commandline -opc)) -eq 3' -a "true\t'Enable' false\t'Disable'"
 complete -c cardwire -f -n '__fish_seen_subcommand_from experimental-nvidia-block; and test (count (commandline -opc)) -eq 3' -a "true\t'Enable' false\t'Disable'"
 complete -c cardwire -f -n '__fish_seen_subcommand_from battery-auto-switch; and test (count (commandline -opc)) -eq 3' -a "true\t'Enable' false\t'Disable'"
+complete -c cardwire -f -n '__fish_seen_subcommand_from external-display-auto-switch; and test (count (commandline -opc)) -eq 3' -a "true\t'Enable' false\t'Disable'"
 complete -c cardwire -f -n '__fish_seen_subcommand_from battery-auto-switch-mode; and test (count (commandline -opc)) -eq 3' -a "integrated\t'Integrated GPU only' hybrid\t'Hybrid mode' manual\t'Manual mode' smart\t'Smart mode'"
 
 # manager <action>
