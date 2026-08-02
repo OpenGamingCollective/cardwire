@@ -76,7 +76,7 @@ jobs:
         with:
           components: clippy
       - name: Install bpf-linker
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@67729d5c413db75907f0ad1e39bb04b9c868ff60 # v2.85.7
         with:
           tool: bpf-linker
       - name: Clippy Workspace
@@ -103,7 +103,7 @@ jobs:
       - name: Install Stable Rust
         uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
       - name: Install bpf-linker
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@67729d5c413db75907f0ad1e39bb04b9c868ff60 # v2.85.7
         with:
           tool: bpf-linker
       - name: Test code
