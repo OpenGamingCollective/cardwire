@@ -166,7 +166,8 @@ impl CardwireDbus {
         match setting {
             DaemonSettings::AutoApplyGpuState
             | DaemonSettings::ExpNvidiaBlock
-            | DaemonSettings::BattAutoSwitch => {
+            | DaemonSettings::BattAutoSwitch
+            | DaemonSettings::ExternalDisplayAutoSwitch => {
                 proxy.set_property(&setting.to_string(), state).await
             }
             DaemonSettings::BattAutoSwitchMode => {
