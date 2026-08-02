@@ -29,7 +29,7 @@ impl<T, E: std::fmt::Display> FdoResultExt<T> for Result<T, E> {
 // Represent a single gpu
 #[derive(Clone)]
 pub struct GpuInterface {
-    id: u32,
+    pub id: u32,
     pub device: GpuDevice,
     blocker: Arc<RwLock<EbpfBlocker>>,
     pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
