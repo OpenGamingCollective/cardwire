@@ -18,14 +18,14 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
 
     'inode_check: {
         // Check if the inode is in the blocked list
-        if let Some(v) = unsafe { CW_BLOCKED_INO.get(inode) } {
+        if let Some(v) = unsafe { CW_BLOCKED_INO.get(&inode) } {
             blocked = true;
             ino_gpu_id = *v;
             break 'inode_check;
         }
         // We didn't match any inode, try with nvidia inodes
         if unsafe { is_nvidia_setting_enabled() }
-            && let Some(v) = unsafe { CW_EXP_BLK_INO.get(inode) }
+            && let Some(v) = unsafe { CW_EXP_BLK_INO.get(&inode) }
         {
             blocked = true;
             ino_gpu_id = *v;
@@ -187,7 +187,7 @@ pub unsafe fn is_smart() -> Option<bool> {
 
 #[inline(always)]
 pub unsafe fn is_nvidia_setting_enabled() -> bool {
-    match unsafe { CW_SETTINGS.get(CardwiredSetting::EXP_NVIDIA) } {
+    match unsafe { CW_SETTINGS.get(&CardwiredSetting::EXP_NVIDIA) } {
         Some(setting) => *setting,
         None => false,
     }

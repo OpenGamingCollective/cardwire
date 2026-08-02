@@ -290,7 +290,7 @@ unsafe fn try_tracepoint_enter_getdents64(ctx: TracePointContext) -> Result<i32,
 
     let dirp_ptr: u64 = unsafe { ctx.read_at(DIRP_OFFSET)? };
 
-    CW_DIRENT.insert(pid, dirp_ptr, 0)?;
+    CW_DIRENT.insert(&pid, &dirp_ptr, 0)?;
 
     ReturnCode::SUCCESS
 }
@@ -335,7 +335,7 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
     }
 
     let pid = (bpf_get_current_pid_tgid() >> 32) as u32;
-    let dirent_ptr = match unsafe { CW_DIRENT.get(pid) } {
+    let dirent_ptr = match unsafe { CW_DIRENT.get(&pid) } {
         Some(ptr) => *ptr as *const linux_dirent64,
         None => return ReturnCode::SUCCESS,
     };
