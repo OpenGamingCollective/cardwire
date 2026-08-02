@@ -97,9 +97,12 @@ impl DisplayMode {
                 .map(|gpu| *gpu.device.card())
         };
         let connected = match card {
-            Some(card) => external_display_connected(card).map_err(|err| {
-                fdo::Error::Failed(format!("failed to read DRM connector state: {err}"))
-            })?,
+            Some(card) => tokio::task::spawn_blocking(move || external_display_connected(card))
+                .await
+                .map_err(|err| fdo::Error::Failed(format!("DRM probe task failed: {err}")))?
+                .map_err(|err| {
+                    fdo::Error::Failed(format!("failed to read DRM connector state: {err}"))
+                })?,
             None => false,
         };
 
