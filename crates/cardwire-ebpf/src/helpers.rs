@@ -50,15 +50,8 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
         let pid: u32 = (bpf_get_current_pid_tgid() >> 32) as u32;
 
         if *mode == INTEGRATED || *mode == MANUAL {
-            // if integrated/manual, just send the event and block
-            // only send if Some
-            if let Some(mut ring_buf) = CW_REPORT_EVENTS.reserve(0) {
-                let event: ReportEvent = ReportEvent { pid };
-                // write to the map
-                ring_buf.write(event);
-                // submit
-                ring_buf.submit(0);
-            };
+            // if integrated/manual, just report the event and block
+            report_event(pid);
             return true;
         }
 
@@ -95,14 +88,8 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
                     true => break 'end,
                     // Process should only be allowed to see the said GPU id
                     false => {
-                        // only send if Some
-                        if let Some(mut ring_buf) = CW_REPORT_EVENTS.reserve(0) {
-                            let event: ReportEvent = ReportEvent { pid };
-                            // write to the map
-                            ring_buf.write(event);
-                            // submit
-                            ring_buf.submit(0);
-                        };
+                        // Report the event to the daemon
+                        report_event(pid);
                         return true;
                     }
                 }
@@ -115,14 +102,8 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
                 break 'end;
             }
 
-            // only send if Some
-            if let Some(mut ring_buf) = CW_REPORT_EVENTS.reserve(0) {
-                let event: ReportEvent = ReportEvent { pid };
-                // write to the map
-                ring_buf.write(event);
-                // submit
-                ring_buf.submit(0);
-            };
+            // Report the event to the daemon
+            report_event(pid);
 
             // End of smart mode check, block if it didnt get allowed earlier
             return true;
@@ -130,6 +111,17 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
     }
 
     false
+}
+
+#[inline(always)]
+fn report_event(pid: u32) {
+    if let Some(mut ring_buf) = CW_REPORT_EVENTS.reserve(0) {
+        let event: ReportEvent = ReportEvent { pid };
+        // write to the map
+        ring_buf.write(event);
+        // submit
+        ring_buf.submit(0);
+    };
 }
 
 #[inline(always)]
