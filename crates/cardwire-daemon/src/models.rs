@@ -29,7 +29,6 @@ pub struct DaemonInner {
 #[derive(Clone)]
 pub struct DaemonManager {
     pub mode_interface: ModeInterface,
-    display_mode: tasks::DisplayMode,
     pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config_interface: ConfigInterface,
     pub debug_interface: DebugInterface,
@@ -78,27 +77,17 @@ impl DaemonManager {
         let gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>> =
             Arc::new(RwLock::new(gpu_interfaces_map));
 
-        // Build one shared coordinator before the D-Bus interfaces so every caller observes the
-        // same requested and effective display modes.
-        let display_mode = tasks::DisplayMode::new(
-            Arc::clone(&mode_state),
-            Arc::clone(&gpu_interfaces),
-            Arc::clone(&user_config),
-        )
-        .await;
         let mode_interface = ModeInterface::build(
             Arc::clone(&mode_state),
             Arc::clone(&gpu_state),
             Arc::clone(&gpu_interfaces),
             Arc::clone(&user_config),
             Arc::clone(&blocker),
-            display_mode.clone(),
         )
         .await?;
 
         Ok(Self {
             mode_interface: mode_interface.clone(),
-            display_mode,
             gpu_interfaces: Arc::clone(&gpu_interfaces),
             config_interface: ConfigInterface::build(
                 Arc::clone(&user_config),
@@ -251,18 +240,11 @@ impl DaemonManager {
         };
         let mode = Modes::try_from(mode_to_apply).map_err(anyhow::Error::msg)?;
         // Store the result to return after any fallback mode state has been updated.
-        let res = if mode_arg.is_some() {
-            // The only supplied mode is the forced Manual fallback; reapply it even if cached.
-            self.display_mode
-                .apply(&self.mode_interface, mode, true)
-                .await
-                .map(|_| ())
-        } else {
-            self.display_mode
-                .apply_at_startup(&self.mode_interface, mode)
-                .await
-        }
-        .map_err(anyhow::Error::from);
+        let res = self
+            .mode_interface
+            .apply_mode_at_startup(mode, true)
+            .await
+            .map_err(anyhow::Error::from);
         // If the configured mode failed, persist the supplied fallback instead of retrying the
         // failing mode on every daemon start.
         if mode_arg.is_some() {
@@ -296,11 +278,10 @@ impl DaemonManager {
         &self,
         mode_interface: InterfaceRef<ModeInterface>,
     ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
-        // Clone the shared coordinator and D-Bus interface into the long-running monitor task.
+        // Clone the shared D-Bus interface into the long-running monitor task.
         let mode = self.mode_interface.clone();
-        let display_mode = self.display_mode.clone();
         async move {
-            let res = tasks::monitor_display_changes(mode, display_mode, mode_interface).await;
+            let res = tasks::monitor_display_changes(mode, mode_interface).await;
             if let Err(ref e) = res {
                 error!("monitor_display task failed: {}", e);
             }
