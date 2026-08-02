@@ -70,9 +70,7 @@ async fn main() -> Result<()> {
     // Automatic transitions happen outside a D-Bus call, so the monitor needs this reference to
     // emit Mode property changes to clients.
     let mode_interface = object_server
-        .interface::<_, crate::interface::ModeInterface>(
-            "/org/opengamingcollective/cardwire",
-        )
+        .interface::<_, crate::interface::ModeInterface>("/org/opengamingcollective/cardwire")
         .await?;
     task::spawn(daemon.battery_switch_future());
     task::spawn(daemon.monitor_udev_future());
