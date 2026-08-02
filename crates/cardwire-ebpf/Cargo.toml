@@ -14,6 +14,8 @@ aya-log-ebpf.workspace = true
 [[bin]]
 name = "cardwire-ebpf"
 path = "src/main.rs"
+test = false
+doc = false
 
 [build-dependencies]
 which.workspace = true

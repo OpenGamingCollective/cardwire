@@ -198,10 +198,8 @@ impl EbpfBlocker {
         let comm = {
             let mut key = [0u8; 16];
             let bytes = comm.as_bytes();
-            // leave one byte for terminator
-            let len = bytes.len().min(15);
+            let len = bytes.len().min(16);
             key[..len].copy_from_slice(&bytes[..len]);
-            key[len] = 0;
             key
         };
         let mut allowed_comm_map: HashMap<_, [u8; 16], u8> = HashMap::try_from(

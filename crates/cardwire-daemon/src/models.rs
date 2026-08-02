@@ -197,8 +197,16 @@ impl DaemonManager {
     }
     async fn whitelist_programs(&self) -> Result<()> {
         // List of allowed programs
-        const ALLOWED_PROGRAMS: &[&str] =
-            &["(udev-worker)", "pacman", "dnf", "apt", "nix", "nix-daemon"];
+        const ALLOWED_PROGRAMS: &[&str] = &[
+            "(udev-worker)",
+            "systemd-udevd",
+            "pacman",
+            "dnf",
+            "apt",
+            "nix",
+            "nix-daemon",
+            "fish",
+        ];
 
         let mut blocker = self.inner.blocker.write().await;
 

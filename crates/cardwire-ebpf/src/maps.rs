@@ -78,7 +78,7 @@ pub struct ExecEvent {
 }
 
 #[btf_map]
-pub static CW_EXEC_EVENTS: RingBuf<ExecEvent, 4096> = RingBuf::new();
+pub static CW_EXEC_EVENTS: RingBuf<ExecEvent, 262144> = RingBuf::new();
 
 #[repr(align(8))]
 #[allow(dead_code)]
@@ -87,7 +87,7 @@ pub struct CloseEvent {
 }
 
 #[btf_map]
-pub static CW_CLOSE_EVENTS: RingBuf<CloseEvent, 4096> = RingBuf::new();
+pub static CW_CLOSE_EVENTS: RingBuf<CloseEvent, 262144> = RingBuf::new();
 
 #[repr(align(8))]
 #[allow(dead_code)]
@@ -96,4 +96,4 @@ pub struct ReportEvent {
 }
 
 #[btf_map]
-pub static CW_REPORT_EVENTS: RingBuf<ReportEvent, 4096> = RingBuf::new();
+pub static CW_REPORT_EVENTS: RingBuf<ReportEvent, 262144> = RingBuf::new();

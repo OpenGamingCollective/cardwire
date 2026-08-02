@@ -219,6 +219,10 @@ impl CardwireAnalyzer {
         if pid_map.remove(&event.pid).is_ok() {
             debug!("REMOVE: pid: {}", event.pid);
         }
+        let mut forced_map = self.forced_map.write().await;
+        if forced_map.remove(&event.pid).is_ok() {
+            debug!("REMOVE FORCED: pid: {}", event.pid);
+        }
     }
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app, the u8 is the

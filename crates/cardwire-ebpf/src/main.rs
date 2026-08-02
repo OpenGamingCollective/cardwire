@@ -7,7 +7,7 @@ use aya_ebpf::{
 use aya_log_ebpf::{error, warn};
 
 use crate::{
-    helpers::{is_cardwired, is_hybrid, is_inode_blocked, is_smart}, maps::{CW_CLOSE_EVENTS, CW_DIRENT, CW_EXEC_EVENTS, CloseEvent, ExecEvent}, vmlinux::{dentry, file, inode, linux_dirent64, path}
+    helpers::{is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_smart}, maps::{CW_CLOSE_EVENTS, CW_DIRENT, CW_EXEC_EVENTS, CloseEvent, ExecEvent}, vmlinux::{dentry, file, inode, linux_dirent64, path}
 };
 
 #[allow(
@@ -73,6 +73,10 @@ pub fn file_open(ctx: LsmContext) -> i32 {
 }
 
 unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
+    if is_comm_whitelisted() {
+        return ReturnCode::SUCCESS;
+    }
+
     // If it's the daemon, we must exit
     match is_cardwired() {
         Some(res) => {
@@ -143,6 +147,10 @@ pub fn inode_permission(ctx: LsmContext) -> i32 {
 }
 
 unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
+    if is_comm_whitelisted() {
+        return ReturnCode::SUCCESS;
+    }
+
     // If it's the daemon, we must exit
     match is_cardwired() {
         Some(res) => {
@@ -202,6 +210,10 @@ pub fn inode_getattr(ctx: LsmContext) -> i32 {
 }
 
 unsafe fn try_inode_getattr(ctx: LsmContext) -> Result<i32, i32> {
+    if is_comm_whitelisted() {
+        return ReturnCode::SUCCESS;
+    }
+
     // If it's the daemon, we must exit
     match is_cardwired() {
         Some(res) => {
@@ -269,6 +281,9 @@ pub fn tracepoint_enter_getdents64(ctx: TracePointContext) -> u32 {
 }
 
 unsafe fn try_tracepoint_enter_getdents64(ctx: TracePointContext) -> Result<i32, i32> {
+    if is_comm_whitelisted() {
+        return ReturnCode::SUCCESS;
+    }
     // If it's the daemon, we must exit
     match is_cardwired() {
         Some(res) => {
@@ -325,47 +340,14 @@ pub fn tracepoint_exit_getdents64(ctx: TracePointContext) -> u32 {
 }
 
 unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, i32> {
-    // If it's the daemon, we must exit
-    match is_cardwired() {
-        Some(res) => {
-            if res {
-                return ReturnCode::SUCCESS;
-            }
-        }
-        None => {
-            // This error happen if either the array is not available or the index 0 of the array is
-            // empty
-            error!(
-                &ctx,
-                "EBPF is_cardwired() produced an error in tracepoint_exit_getdents64, skipping"
-            );
-            return ReturnCode::SUCCESS;
-        }
-    }
-
-    // If the mode is hybrid, we must exit
-    match unsafe { is_hybrid() } {
-        Some(res) => {
-            if res {
-                return ReturnCode::SUCCESS;
-            }
-        }
-        None => {
-            // This error happen if either the array is not available or the index 0 of the array is
-            // empty
-            error!(
-                &ctx,
-                "EBPF is_hybrid() produced an error in tracepoint_exit_getdents64, skipping"
-            );
-            return ReturnCode::SUCCESS;
-        }
-    }
-
     let pid = (bpf_get_current_pid_tgid() >> 32) as u32;
     let dirent_ptr = match unsafe { CW_DIRENT.get(&pid) } {
         Some(ptr) => *ptr as *const linux_dirent64,
         None => return ReturnCode::SUCCESS,
     };
+
+    // Remove entry immediately to avoid map leak
+    let _ = CW_DIRENT.remove(&pid);
 
     let retval = match unsafe { ctx.read_at::<i64>(16) } {
         Ok(ret) => ret as u64,
@@ -455,6 +437,9 @@ unsafe fn try_tracepoint_sched_process_exec(ctx: TracePointContext) -> Result<i3
             return ReturnCode::SUCCESS;
         }
     }
+    if is_comm_whitelisted() {
+        return ReturnCode::SUCCESS;
+    }
 
     // Only proceed if we are in smart mode, events are not used when not in smart mode and it would
     // slow down the system for no reason
@@ -492,24 +477,6 @@ pub fn tracepoint_sched_process_exit(ctx: TracePointContext) -> u32 {
 }
 
 unsafe fn try_tracepoint_sched_process_exit(ctx: TracePointContext) -> Result<i32, i32> {
-    // If it's the daemon, we must exit
-    match is_cardwired() {
-        Some(res) => {
-            if res {
-                return ReturnCode::SUCCESS;
-            }
-        }
-        None => {
-            // This error happen if either the array is not available or the index 0 of the array is
-            // empty
-            error!(
-                &ctx,
-                "EBPF is_cardwired() produced an error in tracepoint_sched_process_exec, skipping"
-            );
-            return ReturnCode::SUCCESS;
-        }
-    }
-
     // Only proceed if we are in smart mode, events are not used when not in smart mode and it would
     // slow down the system for no reason
     if let Some(res) = unsafe { is_smart() }

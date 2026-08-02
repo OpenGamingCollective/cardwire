@@ -1,10 +1,10 @@
 use aya_ebpf::helpers::{
-    bpf_get_current_pid_tgid, bpf_probe_read_kernel, generated::bpf_get_current_task
+    bpf_get_current_comm, bpf_get_current_pid_tgid, bpf_probe_read_kernel, generated::bpf_get_current_task
 };
 
 use crate::{
     CardwiredSetting, DAEMON_INDEX, HYBRID, INTEGRATED, MANUAL, MODE_INDEX, SMART, maps::{
-        CW_ALLOWED_PID, CW_BLOCKED_INO, CW_DAEMON_PID, CW_EXP_BLK_INO, CW_FORCED_PID, CW_MODE, CW_REPORT_EVENTS, CW_SETTINGS, ReportEvent
+        CW_ALLOWED_COMM, CW_ALLOWED_PID, CW_BLOCKED_INO, CW_DAEMON_PID, CW_EXP_BLK_INO, CW_FORCED_PID, CW_MODE, CW_REPORT_EVENTS, CW_SETTINGS, ReportEvent
     }
 };
 
@@ -147,6 +147,17 @@ fn get_task_ppid() -> Option<u32> {
         Ok(ppid) => Some(ppid as u32),
         Err(_) => None,
     }
+}
+
+/// Verify if the proc is whitelisted, returns false if not
+#[inline(always)]
+pub fn is_comm_whitelisted() -> bool {
+    if let Ok(comm) = bpf_get_current_comm()
+        && unsafe { CW_ALLOWED_COMM.get(&comm).is_some() }
+    {
+        return true;
+    }
+    false
 }
 
 /// Verify if the proc is cardwired, returns None if the map fails
