@@ -76,39 +76,40 @@ async fn reconcile_display_mode(
     mode: &ModeInterface,
     was_connected: bool,
 ) -> fdo::Result<(bool, Option<u32>)> {
-    let (first_changed, first_requested, first_target, first_card) =
-        mode.reconcile_effective_mode().await?;
+    let mut requested = mode.requested_mode_value().await;
+    let (mut target, mut card) = match mode.detect_display_target(requested).await {
+        Ok(res) => res,
+        Err(err) => {
+            warn!("failed to read external display topology: {err}");
+            (requested, None)
+        }
+    };
 
-    if was_connected
-        && first_card.is_none()
-        && matches!(first_requested, Modes::Integrated | Modes::Smart)
-    {
+    if was_connected && card.is_none() && matches!(requested, Modes::Integrated | Modes::Smart) {
         info!(
             "external dGPU display disconnected; restoring the configured mode after {} seconds",
             DISPLAY_RESTORE_WAIT.as_secs()
         );
         tokio::time::sleep(DISPLAY_RESTORE_WAIT).await;
-        let (changed, requested, target, card) = mode.reconcile_effective_mode().await?;
+        requested = mode.requested_mode_value().await;
+        (target, card) = match mode.detect_display_target(requested).await {
+            Ok(res) => res,
+            Err(err) => {
+                warn!("failed to read external display topology after disconnect wait: {err}");
+                (requested, None)
+            }
+        };
         if card.is_some() {
             info!("external display reconnected; keeping the current mode");
         }
-        if changed
-            && target == Modes::Hybrid
-            && requested != Modes::Hybrid
-            && let Some(card) = card
-        {
-            let path = format!("/sys/class/drm/card{card}/uevent");
-            if let Err(err) = tokio::fs::write(&path, "change\n").await {
-                warn!("failed to replay DRM change event through {path}: {err}");
-            }
-        }
-        return Ok((changed, card));
     }
 
-    if first_changed
-        && first_target == Modes::Hybrid
-        && first_requested != Modes::Hybrid
-        && let Some(card) = first_card
+    let changed = mode.effective_set_mode(target, false).await?;
+
+    if changed
+        && target == Modes::Hybrid
+        && requested != Modes::Hybrid
+        && let Some(card) = card
     {
         let path = format!("/sys/class/drm/card{card}/uevent");
         if let Err(err) = tokio::fs::write(&path, "change\n").await {
@@ -116,7 +117,7 @@ async fn reconcile_display_mode(
         }
     }
 
-    Ok((first_changed, first_card))
+    Ok((changed, card))
 }
 
 /// Monitor DRM uevents and periodic retries, applying and signaling automatic mode changes.

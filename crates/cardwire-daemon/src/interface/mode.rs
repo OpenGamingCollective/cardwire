@@ -176,8 +176,6 @@ impl ModeInterface {
     ) -> zbus::Result<()> {
         if changed {
             self.mode_changed(interface.signal_emitter()).await?;
-            self.requested_mode_changed(interface.signal_emitter())
-                .await?;
         }
         Ok(())
     }
@@ -190,27 +188,7 @@ impl ModeInterface {
         crate::tasks::detect_external_display_target(&self.gpu_list, &self.config, requested).await
     }
 
-    /// Atomically reconcile the effective mode with the current display topology.
-    pub async fn reconcile_effective_mode(&self) -> fdo::Result<(bool, Modes, Modes, Option<u32>)> {
-        let _transition = self.transition.lock().await;
-        let requested = self.requested_mode_value().await;
-        let (target, card) = match self.detect_display_target(requested).await {
-            Ok(res) => res,
-            Err(err) => {
-                warn!("failed to read external display topology: {err}");
-                (requested, None)
-            }
-        };
-        let previous = *self.effective_mode.read().await;
-        if target != previous {
-            self.apply_mode(target).await?;
-            *self.effective_mode.write().await = target;
-        }
-        Ok((target != previous, requested, target, card))
-    }
-
     /// Apply an effective mode without persisting it to mode_state.
-    #[allow(dead_code)]
     pub async fn effective_set_mode(&self, target: Modes, force: bool) -> fdo::Result<bool> {
         let _transition = self.transition.lock().await;
         let previous = *self.effective_mode.read().await;
