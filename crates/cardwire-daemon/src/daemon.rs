@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
     // emit Mode property changes to clients.
     let mode_interface = object_server
         .interface::<_, crate::interface::ModeInterface>(
-            "/com/github/opengamingcollective/cardwire",
+            "/org/opengamingcollective/cardwire",
         )
         .await?;
     task::spawn(daemon.battery_switch_future());
