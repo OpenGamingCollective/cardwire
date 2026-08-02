@@ -205,7 +205,6 @@ impl DaemonManager {
             "apt",
             "nix",
             "nix-daemon",
-            "fish",
         ];
 
         let mut blocker = self.inner.blocker.write().await;
