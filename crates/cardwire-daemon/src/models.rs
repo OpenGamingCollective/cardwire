@@ -90,7 +90,6 @@ impl DaemonManager {
             config_interface: ConfigInterface::build(
                 Arc::clone(&user_config),
                 Arc::clone(&blocker),
-                mode_interface,
             )?,
             debug_interface: DebugInterface::build(
                 Arc::clone(&mode_state),

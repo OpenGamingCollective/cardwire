@@ -354,44 +354,6 @@ impl ModeInterface {
         }
     }
 
-    pub async fn external_display_setting_changed(
-        &self,
-        enabled: bool,
-    ) -> fdo::Result<(bool, Modes)> {
-        let _transition = self.transition_lock.lock().await;
-        let previous_mode = self.current_mode_value().await;
-        let was_enabled = self.external_display_auto_switch_enabled();
-        self.config
-            .external_display_auto_switch
-            .store(enabled, Ordering::Relaxed);
-        if !enabled {
-            return Ok((false, previous_mode));
-        }
-        if was_enabled {
-            return Ok((false, previous_mode));
-        }
-
-        let res = async {
-            let cards = self.required_external_cards().await?;
-            let changed = self
-                .apply_external_display_cards_locked(&cards, !cards.is_empty())
-                .await?;
-            Ok((changed, previous_mode))
-        }
-        .await;
-
-        if res.is_err() {
-            self.config
-                .external_display_auto_switch
-                .store(was_enabled, Ordering::Relaxed);
-            if let Err(rollback_err) = self.restore_external_display_snapshot_locked().await {
-                warn!("failed to roll back external-display mode change: {rollback_err}");
-            }
-        }
-
-        res
-    }
-
     pub async fn emit_mode_change(
         &self,
         interface: &InterfaceRef<ModeInterface>,
@@ -401,16 +363,6 @@ impl ModeInterface {
             self.mode_changed(interface.signal_emitter()).await?;
         }
         Ok(())
-    }
-
-    pub async fn cancel_external_display_snapshot(&self) {
-        let _transition = self.transition_lock.lock().await;
-        self.clear_external_display_snapshot_locked().await;
-    }
-
-    pub async fn restore_external_display_snapshot(&self) -> fdo::Result<bool> {
-        let _transition = self.transition_lock.lock().await;
-        self.restore_external_display_snapshot_locked().await
     }
 
     pub async fn apply_at_startup(&self) -> fdo::Result<()> {

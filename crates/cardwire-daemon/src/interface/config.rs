@@ -5,12 +5,12 @@ use std::{
 };
 
 use crate::{
-    file::CardwireConfig, interface::{ModeInterface, Modes}
+    file::CardwireConfig, interface::Modes
 };
 use cardwire_ebpf::{EbpfBlocker, EbpfSettings};
 use log::warn;
 use tokio::sync::RwLock;
-use zbus::{ObjectServer, fdo, interface};
+use zbus::{fdo, interface};
 
 // Use a custom Config struct instead of CarwireConfig to allow more control over the settings
 pub struct ConfigMemory {
@@ -46,18 +46,15 @@ impl ConfigMemory {
 pub struct ConfigInterface {
     config: Arc<ConfigMemory>,
     blocker: Arc<RwLock<EbpfBlocker>>,
-    mode_interface: ModeInterface,
 }
 impl ConfigInterface {
     pub fn build(
         config: Arc<ConfigMemory>,
         blocker: Arc<RwLock<EbpfBlocker>>,
-        mode_interface: ModeInterface,
     ) -> anyhow::Result<ConfigInterface> {
         Ok(Self {
             config,
             blocker,
-            mode_interface,
         })
     }
 }
@@ -134,55 +131,11 @@ impl ConfigInterface {
         Ok(())
     }
     #[zbus(property)]
-    pub async fn set_external_display_auto_switch(
-        &self,
-        state: bool,
-        #[zbus(object_server)] object_server: &ObjectServer,
-    ) -> fdo::Result<()> {
-        let interface = object_server
-            .interface::<_, ModeInterface>("/com/github/opengamingcollective/cardwire")
-            .await
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        let previous_auto_switch = self
-            .config
+    pub async fn set_external_display_auto_switch(&mut self, state: bool) -> fdo::Result<()> {
+        self.config
             .external_display_auto_switch
-            .load(Ordering::Relaxed);
-        let (changed, previous_mode) = self
-            .mode_interface
-            .external_display_setting_changed(state)
-            .await?;
-        if let Err(err) = self.save_to_file().await {
-            self.config
-                .external_display_auto_switch
-                .store(previous_auto_switch, Ordering::Relaxed);
-            if state
-                && !previous_auto_switch
-                && let Err(rollback_err) = self
-                    .mode_interface
-                    .restore_external_display_snapshot()
-                    .await
-            {
-                warn!(
-                    "failed to restore display state during config save rollback: {rollback_err}"
-                );
-                if changed
-                    && let Err(mode_err) = self
-                        .mode_interface
-                        .set_mode_value(previous_mode, false)
-                        .await
-                {
-                    warn!("failed to restore mode value during config save rollback: {mode_err}");
-                }
-            }
-            return Err(err);
-        }
-        if !state {
-            self.mode_interface.cancel_external_display_snapshot().await;
-        }
-        self.mode_interface
-            .emit_mode_change(&interface, changed)
-            .await
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            .store(state, Ordering::Relaxed);
+        self.save_to_file().await?;
         Ok(())
     }
     /// Save the daemon's configuration to cardwire.toml
@@ -249,5 +202,9 @@ mod tests {
         // Mutate the atomic
         memory.auto_apply_gpu_state.store(false, Ordering::Relaxed);
         assert!(!memory.auto_apply_gpu_state.load(Ordering::Relaxed));
+        memory
+            .external_display_auto_switch
+            .store(true, Ordering::Relaxed);
+        assert!(memory.external_display_auto_switch.load(Ordering::Relaxed));
     }
 }
