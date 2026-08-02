@@ -3,7 +3,7 @@ use crate::{
     analyzer::CardwireAnalyzer, core::{
         gpu::{self, GpuVendor, check_default_drm_class}, inode::exp_nvidia_inodes, pci::{self}
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
-        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, SwitcherooInterface
+        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes, SwitcherooInterface
     }, tasks
 };
 use anyhow::{Context, Result};
@@ -12,12 +12,13 @@ use log::error;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, task};
 use zbus::{
-    fdo::{self}, interface
+    fdo::{self}, interface, object_server::InterfaceRef
 };
 
 /// Contain the variable used by the daemon in daemon.rs
 #[derive(Clone)]
 pub struct DaemonInner {
+    pub mode_state: Arc<RwLock<CardwireModeState>>,
     pub gpu_state: Arc<RwLock<CardwireGpuState>>,
     pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config: Arc<ConfigMemory>,
@@ -28,6 +29,7 @@ pub struct DaemonInner {
 #[derive(Clone)]
 pub struct DaemonManager {
     pub mode_interface: ModeInterface,
+    display_mode: tasks::DisplayMode,
     pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config_interface: ConfigInterface,
     pub debug_interface: DebugInterface,
@@ -36,7 +38,7 @@ pub struct DaemonManager {
 }
 
 impl DaemonManager {
-    pub async fn new() -> Result<(Self, tasks::DisplayModeTask)> {
+    pub async fn new() -> Result<Self> {
         let mode_state: CardwireModeState =
             CardwireModeState::build().context("Error building mode")?;
         let mode_state: Arc<RwLock<CardwireModeState>> = Arc::new(RwLock::new(mode_state));
@@ -76,24 +78,25 @@ impl DaemonManager {
         let gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>> =
             Arc::new(RwLock::new(gpu_interfaces_map));
 
-        let (mode_interface, mode_runtime) = ModeInterface::build(
+        let display_mode = tasks::DisplayMode::new(
+            Arc::clone(&mode_state),
+            Arc::clone(&gpu_interfaces),
+            Arc::clone(&user_config),
+        )
+        .await;
+        let mode_interface = ModeInterface::build(
             Arc::clone(&mode_state),
             Arc::clone(&gpu_state),
             Arc::clone(&gpu_interfaces),
             Arc::clone(&user_config),
             Arc::clone(&blocker),
+            display_mode.clone(),
         )
         .await?;
-        let display_mode_task = tasks::DisplayModeTask::new(
-            mode_interface.clone(),
-            Arc::clone(&mode_state),
-            Arc::clone(&gpu_interfaces),
-            Arc::clone(&user_config),
-            mode_runtime,
-        );
 
-        let manager = Self {
+        Ok(Self {
             mode_interface: mode_interface.clone(),
+            display_mode,
             gpu_interfaces: Arc::clone(&gpu_interfaces),
             config_interface: ConfigInterface::build(
                 Arc::clone(&user_config),
@@ -112,18 +115,18 @@ impl DaemonManager {
             )?,
             switcheroo_interface: SwitcherooInterface::build(Arc::clone(&gpu_interfaces)),
             inner: DaemonInner {
+                mode_state: Arc::clone(&mode_state),
                 gpu_state: Arc::clone(&gpu_state),
                 gpu_list: Arc::clone(&gpu_interfaces),
                 config: Arc::clone(&user_config),
                 blocker: Arc::clone(&blocker),
                 power_tasks: Arc::clone(&power_tasks),
             },
-        };
-        Ok((manager, display_mode_task))
+        })
     }
 
     /// Tasks that need to be run before running the daemon, like applying the mode,
-    pub async fn pre_daemon_tasks(&self, display_mode_task: &tasks::DisplayModeTask) -> Result<()> {
+    pub async fn pre_daemon_tasks(&self) -> Result<()> {
         // Whitelist cardwire pid before starting
         self.whitelist_daemon_pid().await?;
 
@@ -142,12 +145,13 @@ impl DaemonManager {
         self.populate_state_file().await?;
 
         // This one can fail on asus laptop when switching to integrated using the kernel attribute
-        if let Err(err) = display_mode_task.apply_at_startup().await {
+        if let Err(err) = self.apply_mode_at_startup(None).await {
             error!(
                 "failed to apply mode at startup: {}, switching to manual...",
                 err
             );
-            display_mode_task.apply_startup_fallback().await?
+            // 2 = manual
+            self.apply_mode_at_startup(Some(2)).await?
         };
 
         Ok(())
@@ -234,6 +238,34 @@ impl DaemonManager {
         }
         Ok(())
     }
+    async fn apply_mode_at_startup(&self, mode_arg: Option<u32>) -> Result<()> {
+        // If a mode is supplied as arg, use it, else read the internal state (from file)
+        let mode_to_apply = match mode_arg {
+            Some(mode) => mode,
+            None => {
+                let mode_lock = self.inner.mode_state.read().await;
+                Modes::into(mode_lock.mode())
+            }
+        };
+        let mode = Modes::try_from(mode_to_apply).map_err(anyhow::Error::msg)?;
+        let res = if mode_arg.is_some() {
+            self.display_mode
+                .apply(&self.mode_interface, mode, true)
+                .await
+                .map(|_| ())
+        } else {
+            self.display_mode
+                .apply_at_startup(&self.mode_interface, mode)
+                .await
+        }
+        .map_err(anyhow::Error::from);
+        // If a mode was supplied as arg, bring back the user configured mode
+        if mode_arg.is_some() {
+            let mut mode_lock = self.inner.mode_state.write().await;
+            mode_lock.save_state(mode).await?;
+        }
+        res
+    }
     pub fn battery_switch_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let auto_switch = Arc::clone(&self.inner.config.battery_auto_switch);
         let auto_switch_mode = Arc::clone(&self.inner.config.battery_auto_switch_mode);
@@ -251,6 +283,20 @@ impl DaemonManager {
             let res = tasks::monitor_pci_changes(debug_int).await;
             if let Err(ref e) = res {
                 error!("monitor_udev task failed: {}", e);
+            }
+            res
+        }
+    }
+    pub fn monitor_display_future(
+        &self,
+        mode_interface: InterfaceRef<ModeInterface>,
+    ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
+        let mode = self.mode_interface.clone();
+        let display_mode = self.display_mode.clone();
+        async move {
+            let res = tasks::monitor_display_changes(mode, display_mode, mode_interface).await;
+            if let Err(ref e) = res {
+                error!("monitor_display task failed: {}", e);
             }
             res
         }

@@ -23,9 +23,9 @@ async fn main() -> Result<()> {
 
     // Build the DaemonManager, it mostly consists of reading config files and setting up Arc and
     // RwLocks
-    let (mut daemon, display_mode_task) = DaemonManager::new().await?;
+    let mut daemon = DaemonManager::new().await?;
     // Before we publish the API
-    daemon.pre_daemon_tasks(&display_mode_task).await?;
+    daemon.pre_daemon_tasks().await?;
 
     // Now connect to the system dbus
     let conn_builder = connection::Builder::system()?;
@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
         .await?;
     task::spawn(daemon.battery_switch_future());
     task::spawn(daemon.monitor_udev_future());
-    task::spawn(display_mode_task.run(mode_interface));
+    task::spawn(daemon.monitor_display_future(mode_interface));
     task::spawn(daemon.run_analyzer());
     info!("Daemon started succesfully");
     pending::<()>().await;

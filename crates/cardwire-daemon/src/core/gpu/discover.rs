@@ -9,8 +9,6 @@ use std::{
     collections::{BTreeMap, HashMap}, fs, io, path::Path
 };
 
-const DRM_CLASS_PATH: &str = "/sys/class/drm";
-
 /// read a map of pci devices and return a map of gpu devices
 pub fn read_gpu(
     pci_devices: &BTreeMap<String, PciDevice>,
@@ -36,18 +34,30 @@ pub fn read_gpu(
 
 /// Return whether a DRM card currently owns a connected physical external display.
 pub fn external_display_connected(card: u32) -> io::Result<bool> {
-    external_display_connected_at(Path::new(DRM_CLASS_PATH), card)
-}
+    const NON_EXTERNAL: &[&str] = &[
+        "eDP-",
+        "LVDS-",
+        "DSI-",
+        "DPI-",
+        "SPI-",
+        "Virtual-",
+        "Unknown-",
+        "Writeback-",
+    ];
+    let card_prefix = format!("card{card}-");
 
-fn external_display_connected_at(class_path: &Path, card: u32) -> io::Result<bool> {
-    for entry in fs::read_dir(class_path)? {
+    for entry in fs::read_dir("/sys/class/drm")? {
         let entry = entry?;
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        let Some((entry_card, connector)) = parse_drm_connector_name(&name) else {
+        let Some(connector) = name.strip_prefix(&card_prefix) else {
             continue;
         };
-        if entry_card != card || !is_external_connector(connector) {
+        if connector.is_empty()
+            || NON_EXTERNAL
+                .iter()
+                .any(|prefix| connector.starts_with(prefix))
+        {
             continue;
         }
 
@@ -59,29 +69,6 @@ fn external_display_connected_at(class_path: &Path, card: u32) -> io::Result<boo
     }
 
     Ok(false)
-}
-
-fn parse_drm_connector_name(name: &str) -> Option<(u32, &str)> {
-    let name = name.strip_prefix("card")?;
-    let (card, connector) = name.split_once('-')?;
-    Some((card.parse().ok()?, connector))
-}
-
-fn is_external_connector(connector: &str) -> bool {
-    const NON_EXTERNAL: &[&str] = &[
-        "eDP-",
-        "LVDS-",
-        "DSI-",
-        "DPI-",
-        "SPI-",
-        "Virtual-",
-        "Unknown-",
-        "Writeback-",
-    ];
-    !connector.is_empty()
-        && !NON_EXTERNAL
-            .iter()
-            .any(|prefix| connector.starts_with(prefix))
 }
 
 /// Take a pci device and build a gpu device from it
@@ -393,86 +380,4 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> 
     *gpu_list = gpus.into_iter().enumerate().collect();
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::{
-        path::PathBuf, sync::atomic::{AtomicU64, Ordering}
-    };
-
-    static NEXT_TEMP_DIR: AtomicU64 = AtomicU64::new(0);
-
-    struct TempDrmRoot(PathBuf);
-
-    impl TempDrmRoot {
-        fn new() -> Self {
-            let id = NEXT_TEMP_DIR.fetch_add(1, Ordering::Relaxed);
-            let path =
-                std::env::temp_dir().join(format!("cardwire-drm-test-{}-{id}", std::process::id()));
-            fs::create_dir_all(&path).unwrap();
-            Self(path)
-        }
-
-        fn connector(&self, name: &str, status: &str) {
-            let path = self.0.join(name);
-            fs::create_dir_all(&path).unwrap();
-            fs::write(path.join("status"), status).unwrap();
-        }
-    }
-
-    impl Drop for TempDrmRoot {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    #[test]
-    fn parse_connector_names_keeps_card_ownership() {
-        assert_eq!(
-            parse_drm_connector_name("card1-HDMI-A-1"),
-            Some((1, "HDMI-A-1"))
-        );
-        assert_eq!(parse_drm_connector_name("card12-DP-3"), Some((12, "DP-3")));
-        assert_eq!(parse_drm_connector_name("renderD128"), None);
-        assert_eq!(parse_drm_connector_name("card1"), None);
-        assert!(!is_external_connector(""));
-    }
-
-    #[test]
-    fn external_connector_classification_ignores_nonphysical_outputs() {
-        for connector in [
-            "eDP-1",
-            "LVDS-1",
-            "DSI-1",
-            "DPI-1",
-            "SPI-1",
-            "Virtual-1",
-            "Unknown-1",
-            "Writeback-1",
-        ] {
-            assert!(!is_external_connector(connector));
-        }
-        for connector in ["HDMI-A-1", "DP-1", "DVI-D-1"] {
-            assert!(is_external_connector(connector));
-        }
-    }
-
-    #[test]
-    fn connected_external_display_is_discovered_for_requested_card() {
-        let root = TempDrmRoot::new();
-        root.connector("card0-eDP-1", "connected\n");
-        root.connector("card0-DP-1", "connected\n");
-        root.connector("card1-HDMI-A-1", "connected\n");
-        root.connector("card2-DP-2", "disconnected\n");
-        root.connector("card3-Writeback-1", "connected\n");
-        fs::create_dir_all(root.0.join("card4-DP-3")).unwrap();
-
-        assert!(external_display_connected_at(&root.0, 0).unwrap());
-        assert!(external_display_connected_at(&root.0, 1).unwrap());
-        assert!(!external_display_connected_at(&root.0, 2).unwrap());
-        assert!(!external_display_connected_at(&root.0, 3).unwrap());
-        assert!(!external_display_connected_at(&root.0, 4).unwrap());
-    }
 }

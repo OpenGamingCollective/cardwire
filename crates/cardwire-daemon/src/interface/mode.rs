@@ -1,6 +1,6 @@
 //! Define the mode dbus
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{GpuInterface, config::ConfigMemory}
+    file::{CardwireGpuState, CardwireModeState}, interface::{GpuInterface, config::ConfigMemory}, tasks::DisplayMode
 };
 use anyhow::Result;
 use aya::maps::Array as AyaArray;
@@ -9,11 +9,9 @@ use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt, process::Stdio, sync::Arc};
 use tokio::{
-    process::Command, sync::{Mutex, RwLock, mpsc, oneshot, watch}, task
+    process::Command, sync::{Mutex, RwLock}, task
 };
 use zbus::{fdo, interface, object_server::InterfaceRef};
-
-const MODE_COMMAND_CAPACITY: usize = 8;
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -62,25 +60,15 @@ impl From<Modes> for u32 {
     }
 }
 
-pub(crate) struct SetModeRequest {
-    pub requested: Modes,
-    pub response: oneshot::Sender<fdo::Result<()>>,
-}
-
-pub(crate) struct ModeRuntime {
-    pub requests: mpsc::Receiver<SetModeRequest>,
-    pub effective_mode: watch::Sender<Modes>,
-}
-
 // to change a mode, we need the config, the mode_state, the gpu_list
 #[derive(Clone)]
 pub struct ModeInterface {
+    mode_state: Arc<RwLock<CardwireModeState>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     config: Arc<ConfigMemory>,
     mode_map: Arc<Mutex<AyaArray<aya::maps::MapData, u8>>>,
-    mode_requests: mpsc::Sender<SetModeRequest>,
-    effective_mode: watch::Receiver<Modes>,
+    display_mode: DisplayMode,
 }
 
 impl ModeInterface {
@@ -90,27 +78,19 @@ impl ModeInterface {
         gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
         config: Arc<ConfigMemory>,
         blocker: Arc<RwLock<EbpfBlocker>>,
-    ) -> Result<(ModeInterface, ModeRuntime)> {
-        let effective_mode = mode_state.read().await.mode();
-        let (mode_requests, requests) = mpsc::channel(MODE_COMMAND_CAPACITY);
-        let (effective_mode_tx, effective_mode) = watch::channel(effective_mode);
+        display_mode: DisplayMode,
+    ) -> Result<ModeInterface> {
         let mut blocker = blocker.write().await;
         let mode_map: aya::maps::Array<aya::maps::MapData, u8> = blocker.get_mode_map()?;
         let mode_map = Arc::new(Mutex::new(mode_map));
-        Ok((
-            ModeInterface {
-                gpu_state,
-                gpu_list,
-                config,
-                mode_map,
-                mode_requests,
-                effective_mode,
-            },
-            ModeRuntime {
-                requests,
-                effective_mode: effective_mode_tx,
-            },
-        ))
+        Ok(ModeInterface {
+            mode_state,
+            gpu_state,
+            gpu_list,
+            config,
+            mode_map,
+            display_mode,
+        })
     }
 
     /// set the mode in the `cardwire_mode` bpf map
@@ -166,38 +146,17 @@ impl ModeInterface {
             };
         }
     }
-}
-
-#[interface(name = "org.opengamingcollective.cardwire.Mode")]
-impl ModeInterface {
-    /*
-        Set the mode
-    */
-    #[zbus(property)]
-    pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
-        // Valide inputs and turn into a Modes
-        let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
-        let (response, result) = oneshot::channel();
-        self.mode_requests
-            .send(SetModeRequest {
-                requested: mode,
-                response,
-            })
-            .await
-            .map_err(|_| fdo::Error::Failed("mode task is not running".to_string()))?;
-        result
-            .await
-            .map_err(|_| fdo::Error::Failed("mode task stopped before replying".to_string()))?
-    }
-    #[zbus(property)]
-    pub(crate) async fn mode(&self) -> fdo::Result<u32> {
-        Ok(self.current_mode_value().await.into())
-    }
-}
 
 impl ModeInterface {
     pub async fn current_mode_value(&self) -> Modes {
-        *self.effective_mode.borrow()
+        self.display_mode.current_mode().await
+    }
+
+    pub(crate) async fn save_mode(&self, mode: Modes) {
+        let mut current_mode = self.mode_state.write().await;
+        if let Err(e) = current_mode.save_state(mode).await {
+            warn!("mode couldn't be saved to config: {e}");
+        }
     }
 
     pub async fn emit_mode_change(
@@ -283,6 +242,23 @@ impl ModeInterface {
     }
 }
 
+#[interface(name = "org.opengamingcollective.cardwire.Mode")]
+impl ModeInterface {
+    /*
+        Set the mode
+    */
+    #[zbus(property)]
+    pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
+        // Valide inputs and turn into a Modes
+        let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
+        self.display_mode.set(self, mode).await?;
+        Ok(())
+    }
+    #[zbus(property)]
+    pub(crate) async fn mode(&self) -> fdo::Result<u32> {
+        Ok(self.current_mode_value().await.into())
+    }
+}
 
 #[cfg(test)]
 mod tests {
