@@ -33,7 +33,6 @@ enum PidType {
 #[derive(Debug, Copy, Clone)]
 pub struct ReportEvent {
     pub pid: u32,
-    pub comm: [u8; 16],
 }
 
 #[derive(Clone)]
@@ -433,41 +432,29 @@ mod tests {
     #[test]
     fn test_report_event_deserialization_from_valid_bytes() {
         // ReportEvent: pid (4 bytes) + comm (16 bytes) = 20 bytes
-        let mut item: Vec<u8> = vec![
+        let item: Vec<u8> = vec![
             0x39, 0x05, 0x00, 0x00, // pid = 1337
         ];
-        // comm = "steam\0\0\0\0\0\0\0\0\0\0\0" (16 bytes, null-padded)
-        item.extend_from_slice(b"steam\0\0\0\0\0\0\0\0\0\0\0");
-        assert_eq!(item.len(), 20);
+        assert_eq!(item.len(), 4);
         assert!(item.len() >= std::mem::size_of::<ReportEvent>());
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
         assert_eq!(event.pid, 1337);
-        // Verify the comm field contains "steam"
-        let comm_str = std::str::from_utf8(&event.comm)
-            .unwrap()
-            .trim_end_matches('\0');
-        assert_eq!(comm_str, "steam");
     }
 
     #[test]
     fn test_report_event_deserialization_rejects_undersized_buffer() {
-        // ReportEvent needs 20 bytes, give only 19
-        let item: Vec<u8> = vec![0u8; 19];
+        // ReportEvent needs 4 bytes, give only 3
+        let item: Vec<u8> = vec![0u8; 3];
         assert!(item.len() < std::mem::size_of::<ReportEvent>());
     }
 
     #[test]
     fn test_report_event_comm_extraction_with_full_length_name() {
         // comm is exactly 15 chars + null terminator (16 bytes total)
-        let mut item: Vec<u8> = vec![
+        let item: Vec<u8> = vec![
             0x01, 0x00, 0x00, 0x00, // pid = 1
         ];
-        item.extend_from_slice(b"123456789012345\0"); // 15 chars + null = 16 bytes
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
         assert_eq!(event.pid, 1);
-        let comm_str = std::str::from_utf8(&event.comm)
-            .unwrap()
-            .trim_end_matches('\0');
-        assert_eq!(comm_str, "123456789012345");
     }
 }
