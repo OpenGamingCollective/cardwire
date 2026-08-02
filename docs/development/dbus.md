@@ -73,10 +73,9 @@
   - **Access:** Read/Write
 
 - **`ExternalDisplayAutoSwitch`**
-  Makes the required GPU available when an external display is connected to a dGPU-owned DRM
-  connector. Manual mode remains active and temporarily unblocks that GPU; other modes switch to
-  Hybrid. The previous mode and GPU state are restored after disconnect unless explicitly
-  overridden by the user.
+  Temporarily switches Integrated and Smart modes to Hybrid when an external display is connected
+  to a dGPU-owned DRM connector. Hybrid and Manual modes are unchanged. The requested mode is
+  restored after disconnect.
   - **Type:** `b`
   - **Access:** Read/Write
 
