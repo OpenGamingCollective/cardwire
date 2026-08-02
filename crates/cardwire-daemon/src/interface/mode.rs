@@ -71,7 +71,9 @@ pub struct ModeInterface {
     config: Arc<ConfigMemory>,
     mode_map: Arc<Mutex<AyaArray<aya::maps::MapData, u8>>>,
     transition_lock: Arc<Mutex<()>>,
-    latest_mode: Arc<Mutex<Option<Modes>>>,
+    // `mode_state` is the persisted mode the user wants restored. This tracks the
+    // mode currently applied to the hardware while an external display overrides it.
+    effective_mode: Arc<Mutex<Modes>>,
 }
 
 impl ModeInterface {
@@ -90,6 +92,7 @@ impl ModeInterface {
         config: Arc<ConfigMemory>,
         blocker: Arc<RwLock<EbpfBlocker>>,
     ) -> Result<ModeInterface> {
+        let effective_mode = mode_state.read().await.mode();
         let mut blocker = blocker.write().await;
         let mode_map: aya::maps::Array<aya::maps::MapData, u8> = blocker.get_mode_map()?;
         let mode_map = Arc::new(Mutex::new(mode_map));
@@ -100,11 +103,11 @@ impl ModeInterface {
             config,
             mode_map,
             transition_lock: Arc::new(Mutex::new(())),
-            latest_mode: Arc::new(Mutex::new(None)),
+            effective_mode: Arc::new(Mutex::new(effective_mode)),
         })
     }
 
-    async fn required_external_cards(&self) -> fdo::Result<BTreeSet<u32>> {
+    pub async fn required_external_cards(&self) -> fdo::Result<BTreeSet<u32>> {
         let connected_cards = connected_external_drm_cards().map_err(|err| {
             fdo::Error::Failed(format!("failed to read DRM connector state: {err}"))
         })?;
@@ -126,24 +129,23 @@ impl ModeInterface {
     }
 
     pub async fn current_mode_value(&self) -> Modes {
-        self.mode_state.read().await.mode()
+        *self.effective_mode.lock().await
     }
 
-    pub async fn set_mode_value(&self, mode: Modes, force_apply: bool) -> fdo::Result<bool> {
-        let _transition = self.transition_lock.lock().await;
-        self.set_mode_value_locked(mode, force_apply).await
+    async fn desired_mode_value(&self) -> Modes {
+        self.mode_state.read().await.mode()
     }
 
     pub async fn set_battery_mode_value(&self, mode: Modes) -> fdo::Result<bool> {
         let _transition = self.transition_lock.lock().await;
-        if self.external_display_override_active_locked().await {
-            info!("ignoring battery mode change while an external display requires a GPU");
-            return Ok(false);
-        }
-        self.set_mode_value_locked(mode, false).await
+        self.set_requested_mode_value_locked(mode).await
     }
 
-    async fn set_mode_value_locked(&self, mode: Modes, force_apply: bool) -> fdo::Result<bool> {
+    async fn apply_effective_mode_locked(
+        &self,
+        mode: Modes,
+        force_apply: bool,
+    ) -> fdo::Result<bool> {
         let previous_mode = self.current_mode_value().await;
         if force_apply || mode != previous_mode {
             if let Err(err) = self.apply_mode(mode).await {
@@ -154,24 +156,24 @@ impl ModeInterface {
                 }
                 return Err(err);
             }
-            let mut state = self.mode_state.write().await;
-            if let Err(err) = state.save_state(mode).await {
-                warn!("mode couldn't be saved to state: {err}");
-            }
+            *self.effective_mode.lock().await = mode;
         }
         Ok(mode != previous_mode)
+    }
+
+    async fn save_desired_mode_locked(&self, mode: Modes) {
+        let mut state = self.mode_state.write().await;
+        if state.mode() != mode
+            && let Err(err) = state.save_state(mode).await
+        {
+            warn!("mode couldn't be saved to state: {err}");
+        }
     }
 
     pub fn external_display_auto_switch_enabled(&self) -> bool {
         self.config
             .external_display_auto_switch
             .load(Ordering::Relaxed)
-    }
-
-    pub async fn required_external_display_connected(&self) -> fdo::Result<bool> {
-        self.required_external_cards()
-            .await
-            .map(|cards| !cards.is_empty())
     }
 
     async fn external_display_override_active_locked(&self) -> bool {
@@ -182,64 +184,40 @@ impl ModeInterface {
             .any(GpuInterface::external_display_required)
     }
 
-    async fn capture_external_display_snapshot_locked(&self) -> fdo::Result<Modes> {
-        if let Some(mode) = *self.latest_mode.lock().await {
-            return Ok(mode);
-        }
-
-        let mode = self.current_mode_value().await;
-        let gpu_list = self.gpu_list.read().await;
-        let mut states = Vec::with_capacity(gpu_list.len());
-        for gpu in gpu_list.values() {
-            states.push((gpu.clone(), gpu.gpu_blocked().await?));
-        }
-        for (gpu, blocked) in states {
-            gpu.set_latest_state(Some(blocked)).await;
-        }
-        *self.latest_mode.lock().await = Some(mode);
-        Ok(mode)
-    }
-
-    async fn clear_external_display_snapshot_locked(&self) {
-        *self.latest_mode.lock().await = None;
+    async fn clear_external_display_requirement_locked(&self) {
         let gpu_list = self.gpu_list.read().await;
         for gpu in gpu_list.values() {
-            gpu.set_latest_state(None).await;
             gpu.set_external_display_required(false);
         }
     }
 
-    async fn set_required_cards_locked(
-        &self,
-        cards: &BTreeSet<u32>,
-        restore_departed: bool,
-    ) -> fdo::Result<()> {
+    async fn set_required_cards_locked(&self, cards: &BTreeSet<u32>, desired_mode: Modes) -> fdo::Result<()> {
         enum RequiredGpuUpdate {
-            Unblock { capture_state: bool },
+            Unblock,
             Restore(bool),
             None,
         }
 
-        let snapshot_active = self.latest_mode.lock().await.is_some();
         let updates = {
+            let restore_manual_state = desired_mode == Modes::Manual
+                && self
+                    .config
+                    .auto_apply_gpu_state
+                    .load(Ordering::Relaxed);
+            let gpu_state = self.gpu_state.read().await;
             let gpu_list = self.gpu_list.read().await;
             let mut updates = Vec::with_capacity(gpu_list.len());
             for gpu in gpu_list.values() {
                 let required = cards.contains(gpu.device.card());
                 let was_required = gpu.external_display_required();
-                let latest_state = gpu.latest_state().await;
                 let update = if required {
                     gpu.set_external_display_required(true);
-                    RequiredGpuUpdate::Unblock {
-                        capture_state: snapshot_active && !was_required && latest_state.is_none(),
-                    }
-                } else if restore_departed && was_required {
-                    if let Some(blocked) = latest_state {
-                        RequiredGpuUpdate::Restore(blocked)
-                    } else {
-                        gpu.set_external_display_required(false);
-                        RequiredGpuUpdate::None
-                    }
+                    RequiredGpuUpdate::Unblock
+                } else if was_required && restore_manual_state {
+                    gpu.set_external_display_required(false);
+                    RequiredGpuUpdate::Restore(
+                        gpu_state.gpu_block_state(gpu.device.pci().pci_address()),
+                    )
                 } else {
                     gpu.set_external_display_required(false);
                     RequiredGpuUpdate::None
@@ -251,19 +229,13 @@ impl ModeInterface {
 
         for (mut gpu, update) in updates {
             match update {
-                RequiredGpuUpdate::Unblock { capture_state } => {
-                    if capture_state {
-                        gpu.set_latest_state(Some(gpu.gpu_blocked().await?)).await;
-                    }
-                    gpu.unblock_gpu().await?;
-                }
+                RequiredGpuUpdate::Unblock => gpu.unblock_gpu().await?,
                 RequiredGpuUpdate::Restore(blocked) => {
                     if blocked && !gpu.device.is_default() {
                         gpu.block_gpu(1).await?;
                     } else {
                         gpu.unblock_gpu().await?;
                     }
-                    gpu.set_external_display_required(false);
                 }
                 RequiredGpuUpdate::None => {}
             }
@@ -271,86 +243,66 @@ impl ModeInterface {
         Ok(())
     }
 
-    async fn restore_external_display_snapshot_locked(&self) -> fdo::Result<bool> {
-        let latest_mode = *self.latest_mode.lock().await;
-        let Some(mode) = latest_mode else {
-            self.clear_external_display_snapshot_locked().await;
-            return Ok(false);
-        };
-
-        let changed = if mode == Modes::Manual {
-            let states = {
-                let gpu_list = self.gpu_list.read().await;
-                let mut states = Vec::with_capacity(gpu_list.len());
-                for gpu in gpu_list.values() {
-                    states.push((gpu.clone(), gpu.latest_state().await));
-                }
-                states
-            };
-            for (mut gpu, latest_state) in states {
-                if let Some(blocked) = latest_state {
-                    if blocked && !gpu.device.is_default() {
-                        gpu.block_gpu(1).await?;
-                    } else {
-                        gpu.unblock_gpu().await?;
-                    }
-                }
-            }
-            false
-        } else {
-            self.set_mode_value_locked(mode, false).await?
-        };
-        self.clear_external_display_snapshot_locked().await;
+    async fn restore_external_display_mode_locked(&self) -> fdo::Result<bool> {
+        let mode = self.desired_mode_value().await;
+        // Even when the effective mode is already Manual, applying it again is
+        // necessary to restore the saved per-GPU manual state after unplugging.
+        let changed = self.apply_effective_mode_locked(mode, true).await?;
+        self.clear_external_display_requirement_locked().await;
         Ok(changed)
     }
 
     async fn apply_external_display_cards_locked(
         &self,
         cards: &BTreeSet<u32>,
-        capture_snapshot: bool,
+        desired_mode: Modes,
     ) -> fdo::Result<bool> {
         if cards.is_empty() {
-            return self.restore_external_display_snapshot_locked().await;
+            return self.restore_external_display_mode_locked().await;
         }
 
-        let mode = if capture_snapshot {
-            self.capture_external_display_snapshot_locked().await?
-        } else {
-            self.current_mode_value().await
-        };
-        let target = Self::external_display_target(mode);
-        let changed = if target == Modes::Manual {
-            self.set_required_cards_locked(cards, true).await?;
-            false
-        } else {
-            let changed = self.set_mode_value_locked(target, false).await?;
-            self.set_required_cards_locked(cards, false).await?;
-            changed
-        };
+        let target = Self::external_display_target(desired_mode);
+        let changed = self.apply_effective_mode_locked(target, false).await?;
+        self.set_required_cards_locked(cards, desired_mode).await?;
         Self::notify_drm_change(cards).await;
         Ok(changed)
     }
 
-    pub async fn apply_external_display_mode(&self, connected: bool) -> fdo::Result<bool> {
+    async fn set_requested_mode_value_locked(&self, mode: Modes) -> fdo::Result<bool> {
+        let cards = if self.external_display_auto_switch_enabled() {
+            self.required_external_cards().await?
+        } else {
+            BTreeSet::new()
+        };
+        let changed = if cards.is_empty() {
+            let force_apply = self.external_display_override_active_locked().await;
+            let changed = self.apply_effective_mode_locked(mode, force_apply).await?;
+            self.clear_external_display_requirement_locked().await;
+            changed
+        } else {
+            self.apply_external_display_cards_locked(&cards, mode).await?
+        };
+        self.save_desired_mode_locked(mode).await;
+        Ok(changed)
+    }
+
+    pub async fn reconcile_external_display_cards(
+        &self,
+        cards: &BTreeSet<u32>,
+    ) -> fdo::Result<bool> {
         let _transition = self.transition_lock.lock().await;
         if !self.external_display_auto_switch_enabled() {
             return Ok(false);
         }
-        if connected {
-            let cards = self.required_external_cards().await?;
-            let capture_snapshot = !self.external_display_override_active_locked().await;
-            let result = self
-                .apply_external_display_cards_locked(&cards, capture_snapshot)
-                .await;
-            if result.is_err()
-                && capture_snapshot
-                && let Err(rollback_err) = self.restore_external_display_snapshot_locked().await
-            {
-                warn!("failed to roll back external-display mode change: {rollback_err}");
+        if cards.is_empty() {
+            if self.external_display_override_active_locked().await {
+                self.restore_external_display_mode_locked().await
+            } else {
+                Ok(false)
             }
-            result
         } else {
-            self.restore_external_display_snapshot_locked().await
+            let desired_mode = self.desired_mode_value().await;
+            self.apply_external_display_cards_locked(cards, desired_mode).await
         }
     }
 
@@ -366,13 +318,13 @@ impl ModeInterface {
     }
 
     pub async fn apply_at_startup(&self) -> fdo::Result<()> {
-        let mode = self.current_mode_value().await;
-        self.set_mode_value(mode, true).await?;
+        let mode = self.desired_mode_value().await;
+        self.apply_effective_mode_locked(mode, true).await?;
         if self.external_display_auto_switch_enabled() {
             match self.required_external_cards().await {
                 Ok(cards) if !cards.is_empty() => {
                     let _transition = self.transition_lock.lock().await;
-                    self.apply_external_display_cards_locked(&cards, false)
+                    self.apply_external_display_cards_locked(&cards, mode)
                         .await?;
                 }
                 Ok(_) => {}
@@ -383,7 +335,10 @@ impl ModeInterface {
     }
 
     pub async fn apply_startup_fallback(&self) -> fdo::Result<()> {
-        self.set_mode_value(Modes::Manual, true).await.map(|_| ())
+        let _transition = self.transition_lock.lock().await;
+        self.apply_effective_mode_locked(Modes::Manual, true).await?;
+        self.save_desired_mode_locked(Modes::Manual).await;
+        Ok(())
     }
 
     /// set the mode in the `cardwire_mode` bpf map
@@ -521,15 +476,7 @@ impl ModeInterface {
         // Valide inputs and turn into a Modes
         let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
         let _transition = self.transition_lock.lock().await;
-        self.set_mode_value_locked(mode, false).await?;
-        self.clear_external_display_snapshot_locked().await;
-        if self.external_display_auto_switch_enabled() {
-            let cards = self.required_external_cards().await?;
-            if !cards.is_empty() {
-                self.apply_external_display_cards_locked(&cards, false)
-                    .await?;
-            }
-        }
+        self.set_requested_mode_value_locked(mode).await?;
         Ok(())
     }
     #[zbus(property)]

@@ -1,6 +1,6 @@
 //! Monitor DRM topology and apply automatic external-display mode changes.
 
-use std::time::Duration;
+use std::{collections::BTreeSet, time::Duration};
 
 use log::{debug, error, info, warn};
 use tokio::{
@@ -44,27 +44,34 @@ enum TopologyChange {
     Initialize,
     Connected,
     Disconnected,
+    Changed,
     Unchanged,
 }
 
-fn topology_change(previous: Option<bool>, connected: bool) -> TopologyChange {
+fn topology_change(
+    previous: Option<&BTreeSet<u32>>,
+    cards: &BTreeSet<u32>,
+) -> TopologyChange {
     match previous {
         None => TopologyChange::Initialize,
-        Some(false) if connected => TopologyChange::Connected,
-        Some(true) if !connected => TopologyChange::Disconnected,
+        Some(previous) if previous.is_empty() && !cards.is_empty() => TopologyChange::Connected,
+        Some(previous) if !previous.is_empty() && cards.is_empty() => {
+            TopologyChange::Disconnected
+        }
+        Some(previous) if previous != cards => TopologyChange::Changed,
         Some(_) => TopologyChange::Unchanged,
     }
 }
 
 struct DisplayMonitorState {
-    last_connected: Option<bool>,
+    last_cards: Option<BTreeSet<u32>>,
     restore: DisplayRestoreGuard,
 }
 
 impl DisplayMonitorState {
-    fn new(last_connected: Option<bool>) -> Self {
+    fn new(last_cards: Option<BTreeSet<u32>>) -> Self {
         Self {
-            last_connected,
+            last_cards,
             restore: DisplayRestoreGuard::default(),
         }
     }
@@ -73,9 +80,9 @@ impl DisplayMonitorState {
 async fn apply_automatic_mode(
     mode: &ModeInterface,
     interface: &InterfaceRef<ModeInterface>,
-    connected: bool,
+    cards: &BTreeSet<u32>,
 ) -> bool {
-    match mode.apply_external_display_mode(connected).await {
+    match mode.reconcile_external_display_cards(cards).await {
         Ok(changed) => {
             if let Err(err) = mode.emit_mode_change(interface, changed).await {
                 error!("failed to emit automatic mode change: {err}");
@@ -95,8 +102,8 @@ async fn reconcile_display_topology(
     state: &mut DisplayMonitorState,
     topology_event: bool,
 ) {
-    let connected = match mode.required_external_display_connected().await {
-        Ok(connected) => connected,
+    let cards = match mode.required_external_cards().await {
+        Ok(cards) => cards,
         Err(err) => {
             warn!("failed to inspect external display topology: {err}");
             return;
@@ -107,21 +114,21 @@ async fn reconcile_display_topology(
         if state.restore.cancel() {
             info!("external-display mode restoration canceled because auto-switch is disabled");
         }
-        state.last_connected = Some(connected);
+        state.last_cards = Some(cards);
         return;
     }
 
-    match topology_change(state.last_connected, connected) {
-        TopologyChange::Initialize | TopologyChange::Connected => {
+    match topology_change(state.last_cards.as_ref(), &cards) {
+        TopologyChange::Initialize | TopologyChange::Connected | TopologyChange::Changed => {
             if state.restore.cancel() {
                 info!("external display reconnected; pending mode restoration canceled");
             }
-            if apply_automatic_mode(mode, interface, connected).await {
-                state.last_connected = Some(connected);
+            if apply_automatic_mode(mode, interface, &cards).await {
+                state.last_cards = Some(cards);
             }
         }
         TopologyChange::Disconnected => {
-            state.last_connected = Some(false);
+            state.last_cards = Some(BTreeSet::new());
             state.restore.defer(Instant::now(), true);
             info!(
                 "external dGPU display disconnected; restoring the configured mode after {} seconds",
@@ -129,11 +136,7 @@ async fn reconcile_display_topology(
             );
         }
         TopologyChange::Unchanged => {
-            if connected && topology_event {
-                if !apply_automatic_mode(mode, interface, true).await {
-                    state.last_connected = Some(false);
-                }
-            } else if !connected && state.restore.is_pending() && topology_event {
+            if cards.is_empty() && state.restore.is_pending() && topology_event {
                 state.restore.defer(Instant::now(), true);
                 debug!(
                     "DRM topology changed while mode restoration was pending; restarting the quiet period"
@@ -154,8 +157,8 @@ async fn restore_mode_after_settle(
         return;
     }
 
-    let connected = match mode.required_external_display_connected().await {
-        Ok(connected) => connected,
+    let cards = match mode.required_external_cards().await {
+        Ok(cards) => cards,
         Err(err) => {
             warn!("failed to verify external display topology: {err}");
             state.restore.defer(Instant::now(), false);
@@ -163,19 +166,19 @@ async fn restore_mode_after_settle(
         }
     };
 
-    if connected {
+    if !cards.is_empty() {
         info!("external display reconnected before mode restoration");
-        if apply_automatic_mode(mode, interface, true).await {
-            state.last_connected = Some(true);
+        if apply_automatic_mode(mode, interface, &cards).await {
+            state.last_cards = Some(cards);
         } else {
-            state.last_connected = Some(false);
+            state.last_cards = Some(BTreeSet::new());
         }
         return;
     }
 
     info!("external display topology settled; restoring the previous mode and GPU state");
-    if apply_automatic_mode(mode, interface, false).await {
-        state.last_connected = Some(false);
+    if apply_automatic_mode(mode, interface, &cards).await {
+        state.last_cards = Some(BTreeSet::new());
     } else {
         state.restore.defer(Instant::now(), false);
         warn!(
@@ -193,8 +196,8 @@ async fn run_display_monitor(
     let drm_fd = AsyncFd::new(drm_monitor.listen()?)?;
     let mut retry = tokio::time::interval(RETRY_INTERVAL);
     retry.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let initial_connected = mode.required_external_display_connected().await.ok();
-    let mut display_state = DisplayMonitorState::new(initial_connected);
+    let initial_cards = mode.required_external_cards().await.ok();
+    let mut display_state = DisplayMonitorState::new(initial_cards);
 
     loop {
         let restore_deadline = display_state
@@ -263,29 +266,40 @@ pub async fn monitor_display_changes(
 mod tests {
     use super::*;
 
+    fn cards(cards: &[u32]) -> BTreeSet<u32> {
+        cards.iter().copied().collect()
+    }
+
     #[test]
-    fn topology_changes_are_edge_triggered() {
-        assert_eq!(topology_change(None, false), TopologyChange::Initialize);
+    fn topology_changes_track_the_required_card_set() {
+        let empty = cards(&[]);
+        let card_one = cards(&[1]);
+        let card_two = cards(&[2]);
+
+        assert_eq!(topology_change(None, &empty), TopologyChange::Initialize);
         assert_eq!(
-            topology_change(Some(false), true),
+            topology_change(Some(&empty), &card_one),
             TopologyChange::Connected
         );
         assert_eq!(
-            topology_change(Some(true), false),
+            topology_change(Some(&card_one), &empty),
             TopologyChange::Disconnected
         );
-        assert_eq!(topology_change(Some(true), true), TopologyChange::Unchanged);
         assert_eq!(
-            topology_change(Some(false), false),
+            topology_change(Some(&card_one), &card_two),
+            TopologyChange::Changed
+        );
+        assert_eq!(
+            topology_change(Some(&card_one), &card_one),
             TopologyChange::Unchanged
         );
     }
 
     #[test]
-    fn stable_topology_does_not_create_an_automatic_edge() {
-        assert_eq!(topology_change(Some(true), true), TopologyChange::Unchanged);
+    fn self_replayed_drm_event_does_not_create_a_new_topology_edge() {
+        let connected_cards = cards(&[1, 2]);
         assert_eq!(
-            topology_change(Some(false), false),
+            topology_change(Some(&connected_cards), &connected_cards),
             TopologyChange::Unchanged
         );
     }
