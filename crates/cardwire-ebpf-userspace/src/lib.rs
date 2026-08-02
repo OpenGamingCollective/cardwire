@@ -77,7 +77,7 @@ impl EbpfBlocker {
         // to hide files
         let cardwire_sys_exit_getdents64: &mut TracePoint = ebpf
             .program_mut("tracepoint_exit_getdents64")
-            .ok_or_else(|| CardwireEbpfError::missing_lsm("try_tracepoint_exit_getdents64"))?
+            .ok_or_else(|| CardwireEbpfError::missing_lsm("tracepoint_exit_getdents64"))?
             .try_into()
             .map_err(CardwireEbpfError::aya)?;
 
