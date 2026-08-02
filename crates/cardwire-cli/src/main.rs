@@ -83,12 +83,12 @@ async fn main() -> anyhow::Result<()> {
                 for (path, interfaces) in objects {
                     let path_str = path.as_str();
                     if let Some(id_str) =
-                        path_str.strip_prefix("/com/github/opengamingcollective/cardwire/Gpu/")
+                        path_str.strip_prefix("/org/opengamingcollective/cardwire/Gpu/")
                         && let Ok(id) = id_str.parse::<u32>()
                     {
                         let mut blocked = false;
                         for (iface, props) in interfaces {
-                            if iface.as_str() == "com.github.opengamingcollective.cardwire.Gpu"
+                            if iface.as_str() == "org.opengamingcollective.cardwire.Gpu"
                                 && let Some(block_val) = props.get("Block")
                             {
                                 blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
@@ -260,7 +260,7 @@ async fn main() -> anyhow::Result<()> {
             for (path, _) in objects {
                 let path_str = path.as_str();
                 if let Some(id_str) =
-                    path_str.strip_prefix("/com/github/opengamingcollective/cardwire/Gpu/")
+                    path_str.strip_prefix("/org/opengamingcollective/cardwire/Gpu/")
                     && let Ok(id) = id_str.parse::<u32>()
                     && let Ok(dbus_dev) = client.get_device(id).await
                 {

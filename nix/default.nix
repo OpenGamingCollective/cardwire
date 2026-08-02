@@ -68,14 +68,14 @@ pkgs.rustPlatform.buildRustPackage {
   };
 
   postInstall = ''
-    install -Dm444 ./assets/com.github.opengamingcollective.cardwire.conf \
-       $out/share/dbus-1/system.d/com.github.opengamingcollective.cardwire.conf
+    install -Dm444 ./assets/org.opengamingcollective.cardwire.conf \
+       $out/share/dbus-1/system.d/org.opengamingcollective.cardwire.conf
 
     install -Dm444 ./assets/cardwire-gui.desktop \
        $out/share/applications/cardwire-gui.desktop
 
-    install -Dm444 ./assets/com.github.opengamingcollective.cardwire.metainfo.xml \
-       $out/share/metainfo/com.github.opengamingcollective.cardwire.metainfo.xml
+    install -Dm444 ./assets/org.opengamingcollective.cardwire.metainfo.xml \
+       $out/share/metainfo/org.opengamingcollective.cardwire.metainfo.xml
 
     for icon in ./assets/icons/*.svg; do
       install -Dm444 "$icon" "$out/share/icons/hicolor/scalable/apps/$(basename "$icon")"

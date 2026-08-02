@@ -66,7 +66,7 @@ in
       };
       serviceConfig = {
         Type = "dbus";
-        BusName = "com.github.opengamingcollective.cardwire";
+        BusName = "org.opengamingcollective.cardwire";
         ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/cardwired";
         Restart = "on-failure";
         RestartSec = "5s";

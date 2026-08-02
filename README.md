@@ -6,7 +6,7 @@
 
 A GPU manager for Linux using eBPF LSM hooks to block GPUs
 
-![Cardwire GUI screenshot](./assets/com.github.opengamingcollective.cardwire.screenshot.png)
+![Cardwire GUI screenshot](./assets/org.opengamingcollective.cardwire.screenshot.png)
 
 Creator and Main maintainer: @luytan
 

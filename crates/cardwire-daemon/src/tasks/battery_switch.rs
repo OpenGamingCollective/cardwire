@@ -18,9 +18,9 @@ trait UPower {
     fn on_battery(&self) -> Result<bool>;
 }
 #[proxy(
-    interface = "com.github.opengamingcollective.cardwire.Mode",
-    default_service = "com.github.opengamingcollective.cardwire",
-    default_path = "/com/github/opengamingcollective/cardwire"
+    interface = "org.opengamingcollective.cardwire.Mode",
+    default_service = "org.opengamingcollective.cardwire",
+    default_path = "/org/opengamingcollective/cardwire"
 )]
 trait Cardwire {
     #[zbus(property)]

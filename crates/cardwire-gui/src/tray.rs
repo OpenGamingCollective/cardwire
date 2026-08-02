@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 
 use crate::{helpers::GpuDevice, models::Mode};
 
-const ICON_PREFIX: &str = "com.github.opengamingcollective.cardwire.tray";
+const ICON_PREFIX: &str = "org.opengamingcollective.cardwire.tray";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TrayAction {

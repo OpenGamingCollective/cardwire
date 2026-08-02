@@ -39,12 +39,12 @@ impl CardwireDbus {
     }
     pub async fn get_device(&self, id: u32) -> zbus::Result<DbusGpuDevice> {
         let connection = Connection::system().await?;
-        let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
         let proxy = zbus::Proxy::new(
             &connection,
-            "com.github.opengamingcollective.cardwire",
+            "org.opengamingcollective.cardwire",
             path.as_str(),
-            "com.github.opengamingcollective.cardwire.Gpu",
+            "org.opengamingcollective.cardwire.Gpu",
         )
         .await?;
         proxy.call("GetDevice", &()).await
@@ -58,8 +58,8 @@ impl CardwireDbus {
     > {
         let connection = Connection::system().await?;
         let proxy = zbus::fdo::ObjectManagerProxy::builder(&connection)
-            .destination("com.github.opengamingcollective.cardwire")?
-            .path("/com/github/opengamingcollective/cardwire")?
+            .destination("org.opengamingcollective.cardwire")?
+            .path("/org/opengamingcollective/cardwire")?
             .build()
             .await?;
         proxy.get_managed_objects().await
@@ -69,13 +69,12 @@ impl CardwireDbus {
         let mut map = std::collections::BTreeMap::new();
         for (path, interfaces) in objects {
             let path_str = path.as_str();
-            if let Some(id_str) =
-                path_str.strip_prefix("/com/github/opengamingcollective/cardwire/Gpu/")
+            if let Some(id_str) = path_str.strip_prefix("/org/opengamingcollective/cardwire/Gpu/")
                 && let Ok(id) = id_str.parse::<u32>()
             {
                 let mut blocked = false;
                 for (iface, props) in interfaces {
-                    if iface.as_str() == "com.github.opengamingcollective.cardwire.Gpu"
+                    if iface.as_str() == "org.opengamingcollective.cardwire.Gpu"
                         && let Some(block_val) = props.get("Block")
                     {
                         blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
@@ -104,9 +103,9 @@ impl CardwireDbus {
         let connection = Connection::system().await?;
         let proxy = zbus::Proxy::new(
             &connection,
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Mode",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Mode",
         )
         .await?;
         proxy.get_property("Mode").await
@@ -115,9 +114,9 @@ impl CardwireDbus {
         let connection = Connection::system().await?;
         let proxy = zbus::Proxy::new(
             &connection,
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Mode",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Mode",
         )
         .await
         .map_err(|e| zbus::fdo::Error::Failed(format!("Failed to create Mode proxy: {}", e)))?;
@@ -132,9 +131,9 @@ impl CardwireDbus {
         let connection = Connection::system().await?;
         let proxy = zbus::Proxy::new(
             &connection,
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await
         .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
@@ -158,12 +157,12 @@ impl CardwireDbus {
     }
     pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::fdo::Result<()> {
         let connection = Connection::system().await?;
-        let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
         let proxy = zbus::Proxy::new(
             &connection,
-            "com.github.opengamingcollective.cardwire",
+            "org.opengamingcollective.cardwire",
             path.as_str(),
-            "com.github.opengamingcollective.cardwire.Gpu",
+            "org.opengamingcollective.cardwire.Gpu",
         )
         .await
         .map_err(|e| zbus::fdo::Error::Failed(format!("Failed to create proxy: {}", e)))?;
@@ -171,12 +170,12 @@ impl CardwireDbus {
     }
     pub async fn lsof(&self, id: u32) -> zbus::Result<LsofData> {
         let connection = Connection::system().await?;
-        let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
         let proxy = zbus::Proxy::new(
             &connection,
-            "com.github.opengamingcollective.cardwire",
+            "org.opengamingcollective.cardwire",
             path.as_str(),
-            "com.github.opengamingcollective.cardwire.Gpu",
+            "org.opengamingcollective.cardwire.Gpu",
         )
         .await?;
         let result: HashMap<String, Vec<String>> = proxy.call("Lsof", &()).await?;
@@ -189,9 +188,9 @@ impl CardwireDbus {
         let connection = Connection::system().await?;
         let proxy = zbus::Proxy::new(
             &connection,
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Debug",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Debug",
         )
         .await?;
         proxy.call("RefreshGpu", &()).await

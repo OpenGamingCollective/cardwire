@@ -2,7 +2,7 @@
 
 ## Service
 
-- **Bus Name:** `com.github.opengamingcollective.cardwire`
+- **Bus Name:** `org.opengamingcollective.cardwire`
 
 > [!NOTE]
 > Cardwire also implements the SwitcherooControl interface for desktop environment integration. See [switcheroo.md](switcheroo.md) for details.
@@ -11,11 +11,11 @@
 
 ## Object Path
 
-`/com/github/opengamingcollective/cardwire`
+`/org/opengamingcollective/cardwire`
 
 ### Manager
 
-`com.github.opengamingcollective.cardwire.Manager`
+`org.opengamingcollective.cardwire.Manager`
 
 **Methods:**
 
@@ -31,7 +31,7 @@
 
 ### Mode
 
-`com.github.opengamingcollective.cardwire.Mode`
+`org.opengamingcollective.cardwire.Mode`
 
 **Properties:**
 
@@ -48,7 +48,7 @@
 
 ### Config
 
-`com.github.opengamingcollective.cardwire.Config`
+`org.opengamingcollective.cardwire.Config`
 
 **Properties:**
 
@@ -74,7 +74,7 @@
 
 ### Debug
 
-`com.github.opengamingcollective.cardwire.Debug`
+`org.opengamingcollective.cardwire.Debug`
 
 **Methods:**
 
@@ -95,9 +95,9 @@
 
 ### Gpu
 
-`/com/github/opengamingcollective/cardwire/Gpu/{id}`
+`/org/opengamingcollective/cardwire/Gpu/{id}`
 
-Represents a single GPU device, where `{id}` is the numeric identifier of the GPU (0 is always the default one). These objects can be dynamically discovered by calling `GetManagedObjects` on the standard `org.freedesktop.DBus.ObjectManager` interface located at the root path (`/com/github/opengamingcollective/cardwire`)
+Represents a single GPU device, where `{id}` is the numeric identifier of the GPU (0 is always the default one). These objects can be dynamically discovered by calling `GetManagedObjects` on the standard `org.freedesktop.DBus.ObjectManager` interface located at the root path (`/org/opengamingcollective/cardwire`)
 
 **Properties:**
 

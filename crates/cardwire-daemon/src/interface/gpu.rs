@@ -276,7 +276,7 @@ impl GpuInterface {
     }
 }
 
-#[interface(name = "com.github.opengamingcollective.cardwire.Gpu")]
+#[interface(name = "org.opengamingcollective.cardwire.Gpu")]
 impl GpuInterface {
     #[zbus(property)]
     pub async fn set_block(&mut self, block: bool) -> fdo::Result<()> {

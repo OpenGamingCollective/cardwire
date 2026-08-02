@@ -30,10 +30,10 @@ async fn main() -> Result<()> {
     // Now connect to the system dbus
     let conn_builder = connection::Builder::system()?;
     let conn = conn_builder
-        .name("com.github.opengamingcollective.cardwire")?
-        .serve_at("/com/github/opengamingcollective/cardwire", daemon.clone())?
+        .name("org.opengamingcollective.cardwire")?
+        .serve_at("/org/opengamingcollective/cardwire", daemon.clone())?
         .serve_at(
-            "/com/github/opengamingcollective/cardwire",
+            "/org/opengamingcollective/cardwire",
             zbus::fdo::ObjectManager,
         )?
         .build()
@@ -79,7 +79,7 @@ async fn spawn_dbus_api(
     object_server: &zbus::ObjectServer,
     daemon: &mut DaemonManager,
 ) -> anyhow::Result<()> {
-    let path = "/com/github/opengamingcollective/cardwire";
+    let path = "/org/opengamingcollective/cardwire";
 
     let gpu_interfaces = daemon.gpu_interfaces.read().await;
     // cardwire.Mode
@@ -93,7 +93,7 @@ async fn spawn_dbus_api(
     // cardwire.Gpu
     let mut power_tasks = daemon.inner.power_tasks.write().await;
     for (id, gpu_interface) in gpu_interfaces.iter() {
-        let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
         object_server
             .at(path.clone(), gpu_interface.clone())
             .await?;

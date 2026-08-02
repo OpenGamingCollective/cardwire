@@ -41,8 +41,8 @@ package() {
 
   install -Dm644 assets/cardwired.service \
     "$pkgdir/usr/lib/systemd/system/cardwired.service"
-  install -Dm644 assets/com.github.opengamingcollective.cardwire.conf \
-    "$pkgdir/usr/share/dbus-1/system.d/com.github.opengamingcollective.cardwire.conf"
+  install -Dm644 assets/org.opengamingcollective.cardwire.conf \
+    "$pkgdir/usr/share/dbus-1/system.d/org.opengamingcollective.cardwire.conf"
   install -Dm644 assets/cardwire-gui.desktop \
     "$pkgdir/usr/share/applications/cardwire-gui.desktop"
   for icon in assets/icons/*.svg; do
