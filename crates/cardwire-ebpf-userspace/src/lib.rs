@@ -115,7 +115,7 @@ impl EbpfBlocker {
         }
     }
 
-    /// Block an inode, value should be a either 0(iGPU) or 1 (dGPU)
+    /// Block an inode, value is the associated GPU id
     pub fn block_inode(&mut self, inode: u64, value: u32) -> CardwireEbpfResult<()> {
         // Also insert hardcoded values for now
         let mut inode_map: HashMap<_, u64, u32> = HashMap::try_from(
