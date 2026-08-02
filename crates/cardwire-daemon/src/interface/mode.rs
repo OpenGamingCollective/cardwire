@@ -166,7 +166,36 @@ impl ModeInterface {
             };
         }
     }
+}
 
+#[interface(name = "org.opengamingcollective.cardwire.Mode")]
+impl ModeInterface {
+    /*
+        Set the mode
+    */
+    #[zbus(property)]
+    pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
+        // Valide inputs and turn into a Modes
+        let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
+        let (response, result) = oneshot::channel();
+        self.mode_requests
+            .send(SetModeRequest {
+                requested: mode,
+                response,
+            })
+            .await
+            .map_err(|_| fdo::Error::Failed("mode task is not running".to_string()))?;
+        result
+            .await
+            .map_err(|_| fdo::Error::Failed("mode task stopped before replying".to_string()))?
+    }
+    #[zbus(property)]
+    pub(crate) async fn mode(&self) -> fdo::Result<u32> {
+        Ok(self.current_mode_value().await.into())
+    }
+}
+
+impl ModeInterface {
     pub async fn current_mode_value(&self) -> Modes {
         *self.effective_mode.borrow()
     }
@@ -254,32 +283,6 @@ impl ModeInterface {
     }
 }
 
-#[interface(name = "org.opengamingcollective.cardwire.Mode")]
-impl ModeInterface {
-    /*
-        Set the mode
-    */
-    #[zbus(property)]
-    pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
-        // Valide inputs and turn into a Modes
-        let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
-        let (response, result) = oneshot::channel();
-        self.mode_requests
-            .send(SetModeRequest {
-                requested: mode,
-                response,
-            })
-            .await
-            .map_err(|_| fdo::Error::Failed("mode task is not running".to_string()))?;
-        result
-            .await
-            .map_err(|_| fdo::Error::Failed("mode task stopped before replying".to_string()))?
-    }
-    #[zbus(property)]
-    pub(crate) async fn mode(&self) -> fdo::Result<u32> {
-        Ok(self.current_mode_value().await.into())
-    }
-}
 
 #[cfg(test)]
 mod tests {
