@@ -7,7 +7,7 @@ use aya_ebpf::{
 use aya_log_ebpf::{error, warn};
 
 use crate::{
-    helpers::{is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_smart}, maps::{CW_CLOSE_EVENTS, CW_DIRENT, CW_EXEC_EVENTS, CloseEvent, ExecEvent}, vmlinux::{dentry, file, inode, linux_dirent64}
+    helpers::{is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_smart}, maps::{CW_CLOSE_EVENTS, CW_DIRENT, CW_EXEC_EVENTS, CloseEvent, ExecEvent}, vmlinux::{dentry, file, inode, linux_dirent64, path}
 };
 
 #[allow(
@@ -142,70 +142,7 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
     }
 }
 
-#[lsm(hook = "inode_permission")]
-pub fn inode_permission(ctx: LsmContext) -> i32 {
-    match unsafe { try_inode_permission(ctx) } {
-        Ok(ret) => ret,
-        Err(ret) => ret,
-    }
-}
-
-unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
-    if is_comm_whitelisted() {
-        return ReturnCode::SUCCESS;
-    }
-
-    // If it's the daemon, we must exit
-    match is_cardwired() {
-        Some(res) => {
-            if res {
-                return ReturnCode::SUCCESS;
-            }
-        }
-        None => {
-            // This error happen if either the array is not available or the index 0 of the array is
-            // empty
-            error!(
-                &ctx,
-                "EBPF is_cardwired() produced an error in inode_permission, skipping"
-            );
-            return ReturnCode::SUCCESS;
-        }
-    }
-
-    // If the mode is hybrid, we must exit
-    match unsafe { is_hybrid() } {
-        Some(res) => {
-            if res {
-                return ReturnCode::SUCCESS;
-            }
-        }
-        None => {
-            // This error happen if either the array is not available or the index 0 of the array is
-            // empty
-            error!(
-                &ctx,
-                "EBPF is_hybrid() produced an error in inode_permission, skipping"
-            );
-            return ReturnCode::SUCCESS;
-        }
-    }
-
-    // Get a mutable ptr to the inode, in inode_permission it's the first argument
-    let inode_ptr: *mut inode = ctx.arg(0);
-
-    if inode_ptr.is_null() {
-        return ReturnCode::SUCCESS;
-    }
-    let inode: u64 = unsafe { (*inode_ptr).i_ino };
-
-    match unsafe { is_inode_blocked(inode) } {
-        true => ReturnCode::ENOENT,
-        false => ReturnCode::SUCCESS,
-    }
-}
-
-#[lsm(hook = "inode_getattr")]
+#[lsm(hook = "file_ioctl")]
 pub fn file_ioctl(ctx: LsmContext) -> i32 {
     match unsafe { try_file_ioctl(ctx) } {
         Ok(ret) => ret,
@@ -283,6 +220,69 @@ unsafe fn try_file_ioctl(ctx: LsmContext) -> Result<i32, i32> {
     }
 }
 
+#[lsm(hook = "inode_permission")]
+pub fn inode_permission(ctx: LsmContext) -> i32 {
+    match unsafe { try_inode_permission(ctx) } {
+        Ok(ret) => ret,
+        Err(ret) => ret,
+    }
+}
+
+unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
+    if is_comm_whitelisted() {
+        return ReturnCode::SUCCESS;
+    }
+
+    // If it's the daemon, we must exit
+    match is_cardwired() {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => {
+            // This error happen if either the array is not available or the index 0 of the array is
+            // empty
+            error!(
+                &ctx,
+                "EBPF is_cardwired() produced an error in inode_permission, skipping"
+            );
+            return ReturnCode::SUCCESS;
+        }
+    }
+
+    // If the mode is hybrid, we must exit
+    match unsafe { is_hybrid() } {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => {
+            // This error happen if either the array is not available or the index 0 of the array is
+            // empty
+            error!(
+                &ctx,
+                "EBPF is_hybrid() produced an error in inode_permission, skipping"
+            );
+            return ReturnCode::SUCCESS;
+        }
+    }
+
+    // Get a mutable ptr to the inode, in inode_permission it's the first argument
+    let inode_ptr: *mut inode = ctx.arg(0);
+
+    if inode_ptr.is_null() {
+        return ReturnCode::SUCCESS;
+    }
+    let inode: u64 = unsafe { (*inode_ptr).i_ino };
+
+    match unsafe { is_inode_blocked(inode) } {
+        true => ReturnCode::ENOENT,
+        false => ReturnCode::SUCCESS,
+    }
+}
+
 #[lsm(hook = "inode_getattr")]
 pub fn inode_getattr(ctx: LsmContext) -> i32 {
     match unsafe { try_inode_getattr(ctx) } {
@@ -332,20 +332,19 @@ unsafe fn try_inode_getattr(ctx: LsmContext) -> Result<i32, i32> {
         }
     }
 
-    let file_ptr: *const file = ctx.arg(0);
-    if file_ptr.is_null() {
+    let path_ptr: *const path = ctx.arg(0);
+    if path_ptr.is_null() {
         return ReturnCode::SUCCESS;
     }
 
-    let d: *mut dentry = unsafe { (*file_ptr).__bindgen_anon_1.f_path.dentry };
+    let dentry_ptr: *mut dentry = unsafe { (*path_ptr).dentry };
 
-    // if no dentry, exit
-    if d.is_null() {
+    if dentry_ptr.is_null() {
         return ReturnCode::SUCCESS;
     }
 
-    // Get a mutable ptr to the inode
-    let inode_ptr: *mut inode = unsafe { (*d).d_inode };
+    // Get a mutable ptr to the inode, it's the first argument
+    let inode_ptr: *mut inode = unsafe { (*dentry_ptr).d_inode };
 
     if inode_ptr.is_null() {
         return ReturnCode::SUCCESS;
