@@ -72,6 +72,14 @@
   - **Type:** `b`
   - **Access:** Read/Write
 
+- **`ExternalDisplayAutoSwitch`**
+  Makes the required GPU available when an external display is connected to a dGPU-owned DRM
+  connector. Manual mode remains active and temporarily unblocks that GPU; other modes switch to
+  Hybrid. The previous mode and GPU state are restored after disconnect unless explicitly
+  overridden by the user.
+  - **Type:** `b`
+  - **Access:** Read/Write
+
 ### Debug
 
 `org.opengamingcollective.cardwire.Debug`

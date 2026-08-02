@@ -81,6 +81,13 @@ impl ConfigInterface {
         let mode = self.config.battery_auto_switch_mode.load(Ordering::Relaxed);
         Ok(mode)
     }
+    #[zbus(property)]
+    pub async fn external_display_auto_switch(&self) -> fdo::Result<bool> {
+        Ok(self
+            .config
+            .external_display_auto_switch
+            .load(Ordering::Relaxed))
+    }
 
     // setters
     #[zbus(property)]
@@ -120,6 +127,14 @@ impl ConfigInterface {
         self.config
             .battery_auto_switch_mode
             .store(mode, Ordering::Relaxed);
+        self.save_to_file().await?;
+        Ok(())
+    }
+    #[zbus(property)]
+    pub async fn set_external_display_auto_switch(&mut self, state: bool) -> fdo::Result<()> {
+        self.config
+            .external_display_auto_switch
+            .store(state, Ordering::Relaxed);
         self.save_to_file().await?;
         Ok(())
     }
