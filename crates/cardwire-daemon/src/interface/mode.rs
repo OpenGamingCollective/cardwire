@@ -68,6 +68,7 @@ pub struct ModeInterface {
     gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     config: Arc<ConfigMemory>,
     mode_map: Arc<Mutex<AyaArray<aya::maps::MapData, u8>>>,
+    // Owns the requested/effective mode split used by display overrides.
     display_mode: DisplayMode,
 }
 
@@ -147,11 +148,12 @@ impl ModeInterface {
         }
     }
 
-impl ModeInterface {
+    /// Return the effective mode currently applied to the GPUs.
     pub async fn current_mode_value(&self) -> Modes {
         self.display_mode.current_mode().await
     }
 
+    /// Persist a user-requested mode without changing a temporary effective override.
     pub(crate) async fn save_mode(&self, mode: Modes) {
         let mut current_mode = self.mode_state.write().await;
         if let Err(e) = current_mode.save_state(mode).await {
@@ -170,7 +172,9 @@ impl ModeInterface {
         Ok(())
     }
 
-
+    /// Apply a mode to GPU blocking and the eBPF map without persisting it.
+    ///
+    /// Keeping persistence out of this helper lets display overrides restore the requested mode.
     pub(crate) async fn apply_mode(&self, mode: Modes) -> fdo::Result<()> {
         let mut gpu_list = self.gpu_list.write().await;
         match mode {
@@ -251,11 +255,13 @@ impl ModeInterface {
     pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
         // Valide inputs and turn into a Modes
         let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
+        // DisplayMode persists this request while applying the topology-dependent effective mode.
         self.display_mode.set(self, mode).await?;
         Ok(())
     }
     #[zbus(property)]
     pub(crate) async fn mode(&self) -> fdo::Result<u32> {
+        // Clients need the mode actually in effect, not the request hidden behind an override.
         Ok(self.current_mode_value().await.into())
     }
 }

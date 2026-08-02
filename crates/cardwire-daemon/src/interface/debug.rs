@@ -129,6 +129,8 @@ impl DebugInterface {
                 warn!("Failed to determine default GPU: {}", err);
             }
 
+            // Rebuild hotplug state from the effective mode; an external display may have
+            // temporarily overridden the persisted request with Hybrid.
             let mode = self.mode_interface.current_mode_value().await;
             let config = self
                 .config

@@ -67,6 +67,8 @@ async fn main() -> Result<()> {
     let object_server: &zbus::ObjectServer = conn.object_server();
     spawn_dbus_api(object_server, &mut daemon).await?;
     // Spawn background tasks
+    // Automatic transitions happen outside a D-Bus call, so the monitor needs this reference to
+    // emit Mode property changes to clients.
     let mode_interface = object_server
         .interface::<_, crate::interface::ModeInterface>(
             "/com/github/opengamingcollective/cardwire",

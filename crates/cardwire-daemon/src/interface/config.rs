@@ -119,6 +119,7 @@ impl ConfigInterface {
     }
     /// Save the daemon's configuration to cardwire.toml
     pub async fn save_to_file(&self) -> fdo::Result<()> {
+        // Include monitor-owned settings whenever any D-Bus property rewrites the whole file.
         let config = CardwireConfig::new(
             self.config.auto_apply_gpu_state.load(Ordering::Relaxed),
             self.config

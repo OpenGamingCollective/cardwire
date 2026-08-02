@@ -78,6 +78,8 @@ impl DaemonManager {
         let gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>> =
             Arc::new(RwLock::new(gpu_interfaces_map));
 
+        // Build one shared coordinator before the D-Bus interfaces so every caller observes the
+        // same requested and effective display modes.
         let display_mode = tasks::DisplayMode::new(
             Arc::clone(&mode_state),
             Arc::clone(&gpu_interfaces),
@@ -248,7 +250,9 @@ impl DaemonManager {
             }
         };
         let mode = Modes::try_from(mode_to_apply).map_err(anyhow::Error::msg)?;
+        // Store the result to return after any fallback mode state has been updated.
         let res = if mode_arg.is_some() {
+            // The only supplied mode is the forced Manual fallback; reapply it even if cached.
             self.display_mode
                 .apply(&self.mode_interface, mode, true)
                 .await
@@ -259,7 +263,8 @@ impl DaemonManager {
                 .await
         }
         .map_err(anyhow::Error::from);
-        // If a mode was supplied as arg, bring back the user configured mode
+        // If the configured mode failed, persist the supplied fallback instead of retrying the
+        // failing mode on every daemon start.
         if mode_arg.is_some() {
             let mut mode_lock = self.inner.mode_state.write().await;
             mode_lock.save_state(mode).await?;
@@ -291,6 +296,7 @@ impl DaemonManager {
         &self,
         mode_interface: InterfaceRef<ModeInterface>,
     ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
+        // Clone the shared coordinator and D-Bus interface into the long-running monitor task.
         let mode = self.mode_interface.clone();
         let display_mode = self.display_mode.clone();
         async move {
