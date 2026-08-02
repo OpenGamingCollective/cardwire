@@ -129,7 +129,7 @@ pub enum ConfigAction {
         #[arg(help = "Value to set")]
         set: Option<CliMode>,
     },
-    #[command(about = "Get or set automatic mode handling for dGPU-owned external displays")]
+    #[command(about = "Get or set automatic Hybrid fallback for dGPU-owned external displays")]
     ExternalDisplayAutoSwitch {
         #[arg(help = "Value to set")]
         set: Option<bool>,

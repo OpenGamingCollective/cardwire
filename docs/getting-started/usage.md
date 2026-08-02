@@ -157,10 +157,9 @@ cardwire config battery-auto-switch-mode hybrid
 
 ### External Display Auto Switch
 
-Cardwire can automatically make a dedicated GPU available when an external display is connected
-to a port wired directly to it. In Manual mode, Cardwire stays in Manual and temporarily unblocks
-only the required GPU. In other modes it switches to Hybrid. After disconnect, the previous mode
-and GPU states are restored unless you selected a mode or GPU state manually in the meantime.
+When an external display is connected to a port wired directly to the dedicated GPU, Cardwire can
+temporarily switch Integrated and Smart modes to Hybrid. It restores the requested mode after the
+display is disconnected. Hybrid and Manual modes are unchanged.
 
 This feature is disabled by default. Enable or disable it with:
 
