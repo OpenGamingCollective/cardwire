@@ -9,7 +9,7 @@ license.workspace = true
 description = "Daemon for cardwire GPU management"
 
 [dependencies]
-cardwire-ebpf = { path = "../cardwire-ebpf" }
+cardwire-ebpf-userspace = { path = "../cardwire-ebpf-userspace" }
 tokio.workspace = true
 zbus.workspace = true
 serde.workspace = true
@@ -24,6 +24,8 @@ aya.workspace = true
 xdg.workspace = true
 freedesktop-desktop-entry.workspace = true
 udev.workspace = true
+aya-log.workspace = true
+
 
 [[bin]]
 name = "cardwired"

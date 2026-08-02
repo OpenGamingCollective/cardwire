@@ -3,7 +3,7 @@ use crate::{
         gpu::{self, check_default_drm_class}, pci::{self, DbusPciDevice, PciDevice}
     }, tasks::watch_power_state
 };
-use cardwire_ebpf::EbpfBlocker;
+use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{info, warn};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, task};
@@ -95,7 +95,7 @@ impl DebugInterface {
             let mut power_tasks = self.power_tasks.write().await;
 
             // get rid of the old gpu api and the old tasks
-            for (id, _) in gpu_interfaces.iter() {
+            for id in gpu_interfaces.keys() {
                 let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
                 let _ = object_server.remove::<GpuInterface, &str>(&path).await;
                 // if task is present, abort
@@ -111,6 +111,7 @@ impl DebugInterface {
                 gpu::read_gpu(&new_pci_list).map_err(|err| fdo::Error::Failed(err.to_string()))?;
             for (id, device) in new_gpu_list {
                 let gpu = GpuInterface::build(
+                    id as u32,
                     device,
                     Arc::clone(&self.blocker),
                     Arc::clone(&self.pci_list),
@@ -146,7 +147,7 @@ impl DebugInterface {
                         "GPU {} should be blocked, re-applying block on hotplug",
                         gpu.device.name()
                     );
-                    if let Err(e) = gpu.block_gpu(1).await {
+                    if let Err(e) = gpu.block_gpu(gpu.id).await {
                         warn!(
                             "failed to automatically re-block {}: {}",
                             gpu.device.name(),

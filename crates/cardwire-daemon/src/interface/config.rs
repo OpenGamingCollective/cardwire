@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{file::CardwireConfig, interface::Modes};
-use cardwire_ebpf::{EbpfBlocker, EbpfSettings};
+use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
 use log::warn;
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};

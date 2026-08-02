@@ -92,28 +92,25 @@ pub fn check_for_flatpak_run(cmdline: &str, xdg_list: &HashMap<String, bool>) ->
     false
 }
 
-pub fn check_env(env_var: &str, environ: &[u8]) -> Option<bool> {
-    let env_var = format!("{}=", env_var);
-    let env_var_len = env_var.len();
+pub fn check_env(env_var: &str, environ: &[u8]) -> Option<u32> {
+    let prefix = format!("{}=", env_var);
+    let prefix_bytes = prefix.as_bytes();
 
     for var in environ.split(|&b| b == 0) {
-        if var.starts_with(env_var.as_bytes()) {
-            if var.get(env_var_len) == Some(&b'1') {
-                return Some(true); // CARDWIRE_FORCE_DGPU=1
-            } else {
-                return Some(false); // CARDWIRE_FORCE_DGPU=0
-            }
+        if let Some(value_bytes) = var.strip_prefix(prefix_bytes) {
+            let value_str = std::str::from_utf8(value_bytes).ok()?;
+            return value_str.parse::<u32>().ok();
         }
     }
-    // Not present
+
     None
 }
 
 pub fn check_gpu_env(environ: &[u8]) -> bool {
     if let Some(val) = check_env("DRI_PRIME", environ) {
-        return val;
+        return val == 1;
     } else if let Some(val) = check_env("__NV_PRIME_RENDER_OFFLOAD", environ) {
-        return val;
+        return val == 1;
     }
     // Not present
     false
@@ -312,19 +309,19 @@ mod tests {
     #[test]
     fn test_check_env_returns_true_for_allow_1() {
         let environ = b"HOME=/home\0CARDWIRE_ALLOW=1\0DISPLAY=:0";
-        assert_eq!(check_env("CARDWIRE_ALLOW", environ), Some(true));
+        assert_eq!(check_env("CARDWIRE_ALLOW", environ), Some(1));
     }
 
     #[test]
     fn test_check_env_returns_true_for_allow_1_dgpu() {
         let environ = b"HOME=/home\0CARDWIRE_FORCE_DGPU=1\0DISPLAY=:0";
-        assert_eq!(check_env("CARDWIRE_FORCE_DGPU", environ), Some(true));
+        assert_eq!(check_env("CARDWIRE_FORCE_DGPU", environ), Some(1));
     }
 
     #[test]
     fn test_check_env_returns_false_for_allow_0() {
         let environ = b"HOME=/home\0CARDWIRE_ALLOW=0\0DISPLAY=:0";
-        assert_eq!(check_env("CARDWIRE_ALLOW", environ), Some(false));
+        assert_eq!(check_env("CARDWIRE_ALLOW", environ), Some(0));
     }
 
     #[test]
@@ -339,10 +336,10 @@ mod tests {
     }
 
     #[test]
-    fn test_check_env_returns_false_for_unexpected_value() {
+    fn test_check_env_returns_none_for_unexpected_value() {
         // "CARDWIRE_ALLOW=x" — value at index 15 is 'x', not '1'
         let environ = b"CARDWIRE_ALLOW=x";
-        assert_eq!(check_env("CARDWIRE_ALLOW", environ), Some(false));
+        assert_eq!(check_env("CARDWIRE_ALLOW", environ), None);
     }
 
     /*

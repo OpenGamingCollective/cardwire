@@ -7,7 +7,7 @@ use crate::{
     }, tasks
 };
 use anyhow::{Context, Result};
-use cardwire_ebpf::{EbpfBlocker, EbpfSettings};
+use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
 use log::error;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, task};
@@ -64,6 +64,7 @@ impl DaemonManager {
 
         for (id, device) in gpu_list {
             let gpu = GpuInterface::build(
+                id as u32,
                 device,
                 Arc::clone(&blocker),
                 Arc::clone(&pci_list),
@@ -179,13 +180,13 @@ impl DaemonManager {
         let gpus_list = self.inner.gpu_list.read().await;
         let mut blocker = self.inner.blocker.write().await;
         // Only block if the device has a Nvidia gpu
-        for (_, gpu) in gpus_list.iter() {
+        for (id, gpu) in gpus_list.iter() {
             if gpu.device.gpu_vendor() == GpuVendor::Nvidia
                 && let Ok(inodes) = exp_nvidia_inodes()
                 && !inodes.is_empty()
             {
                 for inode in inodes {
-                    if let Err(err) = blocker.block_exp_inode(inode) {
+                    if let Err(err) = blocker.block_exp_inode(inode, *id as u32) {
                         error!("failed to block nvidia's file {}: {}", inode, err);
                     }
                 }
@@ -196,8 +197,15 @@ impl DaemonManager {
     }
     async fn whitelist_programs(&self) -> Result<()> {
         // List of allowed programs
-        const ALLOWED_PROGRAMS: &[&str] =
-            &["(udev-worker)", "pacman", "dnf", "apt", "nix", "nix-daemon"];
+        const ALLOWED_PROGRAMS: &[&str] = &[
+            "(udev-worker)",
+            "systemd-udevd",
+            "pacman",
+            "dnf",
+            "apt",
+            "nix",
+            "nix-daemon",
+        ];
 
         let mut blocker = self.inner.blocker.write().await;
 
@@ -212,7 +220,7 @@ impl DaemonManager {
         let mut state = self.inner.gpu_state.write().await;
         let default: bool = state.is_default_state();
         if default {
-            for (_, gpu) in gpus_list.iter() {
+            for gpu in gpus_list.values() {
                 state.save_state(&gpu.device, false).await?;
             }
         }

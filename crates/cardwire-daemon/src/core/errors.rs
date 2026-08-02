@@ -7,7 +7,7 @@ pub enum Error {
     Io(#[from] io::Error),
 
     #[error("ebpf error: {0}")]
-    CardwireEbpfError(#[from] cardwire_ebpf::CardwireEbpfError),
+    CardwireEbpfError(#[from] cardwire_ebpf_userspace::CardwireEbpfError),
 
     #[error("parse int error: {0}")]
     ParseInt(#[from] std::num::ParseIntError),

@@ -1,6 +1,7 @@
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
-use cardwire_ebpf::EbpfBlocker;
-use log::{debug, info, warn};
+use aya_log::EbpfLogger;
+use cardwire_ebpf_userspace::EbpfBlocker;
+use log::{Log, debug, error, info, warn};
 use std::{collections::HashMap, fs, path::PathBuf, ptr, sync::Arc};
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock}, task, time::Instant
@@ -23,11 +24,16 @@ pub struct CloseEvent {
     pub pid: u32,
 }
 
+#[derive(Debug, Copy, Clone)]
+enum PidType {
+    Allowed,
+    Forced,
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ReportEvent {
     pub pid: u32,
-    pub comm: [u8; 16],
 }
 
 #[derive(Clone)]
@@ -35,7 +41,9 @@ pub struct CardwireAnalyzer {
     exec_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     report_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
-    pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u8>>>,
+    pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
+    forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
+    ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
     #[allow(dead_code)]
     xdg_folders: Vec<PathBuf>,
@@ -48,6 +56,8 @@ impl CardwireAnalyzer {
         let close_ring = blocker.get_close_ring()?;
         let report_ring = blocker.get_report_ring()?;
         let pid_map = blocker.get_pid_map()?;
+        let forced_map = blocker.get_forced_pid_map()?;
+        let ebpf_logger = blocker.get_ebpf_logger()?;
 
         let exec_ring = AsyncFd::new(exec_ring)?;
         let close_ring = AsyncFd::new(close_ring)?;
@@ -56,8 +66,12 @@ impl CardwireAnalyzer {
         // Now Rwlock -> Arc
         let exec_ring = Arc::new(Mutex::new(exec_ring));
         let pid_map = Arc::new(RwLock::new(pid_map));
+        let forced_map = Arc::new(RwLock::new(forced_map));
         let close_ring = Arc::new(Mutex::new(close_ring));
         let report_ring = Arc::new(Mutex::new(report_ring));
+        let ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>> =
+            Arc::new(Mutex::new(ebpf_logger));
+
         let xdg_result = static_analysis::get_fdo_apps().await?;
         let xdg_list = Arc::new(RwLock::new(xdg_result.0));
         let xdg_folders: Vec<PathBuf> = xdg_result.1;
@@ -66,6 +80,8 @@ impl CardwireAnalyzer {
             close_ring,
             report_ring,
             pid_map,
+            forced_map,
+            ebpf_logger,
             xdg_list,
             xdg_folders,
         })
@@ -75,6 +91,7 @@ impl CardwireAnalyzer {
         let exec_arc = self.exec_ring.clone();
         let close_arc = self.close_ring.clone();
         let report_arc = self.report_ring.clone();
+        let logger_arc = self.ebpf_logger.clone();
         // Lock the buffers once
         let mut exec_ring = exec_arc.lock().await;
         let mut close_ring = close_arc.lock().await;
@@ -84,6 +101,23 @@ impl CardwireAnalyzer {
         let mut previous_reported_pid = 0;
 
         let shared_self = Arc::new(self);
+
+        // spawn the logger in it's own thread
+        task::spawn(async move {
+            let mut ebpf_logger = logger_arc.lock().await;
+            loop {
+                let mut guard = match ebpf_logger.readable_mut().await {
+                    Ok(guard) => guard,
+                    Err(err) => {
+                        error!("failed to get logger guard: {}", err);
+                        return;
+                    }
+                };
+                guard.get_inner_mut().flush();
+                guard.clear_ready();
+            }
+        });
+
         loop {
             tokio::select! {
                 Ok(mut guard) = exec_ring.ready_mut(Interest::READABLE) => {
@@ -132,7 +166,7 @@ impl CardwireAnalyzer {
                                 task::spawn(async move {
                                     if let Some(app_id) = get_app_id_wayland(event.pid).await {
                                         // use dGPU term instead of GPU, smart mode is only avaible on hybrid setups
-                                        info!("{}[{}] tried to access the dGPU (blocked by cardwire)", &app_id, event.pid);
+                                        info!("{}[{}] tried to access the dGPU (blocked by cardwire)", app_id, event.pid);
                                     }
                                 });
                             }
@@ -158,18 +192,25 @@ impl CardwireAnalyzer {
             && result.0
         {
             match result.1 {
-                0 => info!("FORCE: pid: {} process: {} ", event.pid, &real_app_name),
-                1 => info!(
-                    "ALLOW: pid: {} process: {} in {}us",
-                    event.pid,
-                    &real_app_name,
-                    time.elapsed().as_micros()
-                ),
-                _ => {}
-            }
-            let mut pid_map = self.pid_map.write().await;
-            if let Err(e) = pid_map.insert(event.pid, result.1, 0) {
-                warn!("Failed to insert into eBPF map: {}", e);
+                PidType::Forced => {
+                    info!("FORCE: pid: {} process: {} ", event.pid, real_app_name);
+                    let mut forced_map = self.forced_map.write().await;
+                    if let Err(e) = forced_map.insert(event.pid, result.2, 0) {
+                        warn!("Failed to insert into eBPF map: {}", e);
+                    }
+                }
+                PidType::Allowed => {
+                    info!(
+                        "ALLOW: pid: {} process: {} in {}us",
+                        event.pid,
+                        real_app_name,
+                        time.elapsed().as_micros()
+                    );
+                    let mut pid_map = self.pid_map.write().await;
+                    if let Err(e) = pid_map.insert(event.pid, result.1 as u32, 0) {
+                        warn!("Failed to insert into eBPF map: {}", e);
+                    }
+                }
             }
         }
     }
@@ -178,24 +219,30 @@ impl CardwireAnalyzer {
         if pid_map.remove(&event.pid).is_ok() {
             debug!("REMOVE: pid: {}", event.pid);
         }
+        let mut forced_map = self.forced_map.write().await;
+        if forced_map.remove(&event.pid).is_ok() {
+            debug!("REMOVE FORCED: pid: {}", event.pid);
+        }
     }
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app, the u8 is the
     /// gpu id
-    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, u8)> {
+    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, PidType, u32)> {
         let path = format!("/proc/{}/environ", pid);
         let environ = match fs::read(path) {
             Ok(content) => content,
             Err(_) => return None,
         };
-        // First check CARDWIRE_ALLOW, if  None continue
+        // First check CARDWIRE_ALLOW, if None continue
         if let Some(allow) = check_env("CARDWIRE_ALLOW", &environ) {
-            return Some((allow, 1));
+            return Some((allow == 1, PidType::Allowed, 0));
         }
         if let Some(value) = check_env("CARDWIRE_FORCE_DGPU", &environ) {
-            return Some((value, 0));
+            return Some((value == 1, PidType::Forced, value));
         }
-
+        if let Some(value) = check_env("CARDWIRE_FORCE_GPU", &environ) {
+            return Some((true, PidType::Forced, value));
+        }
         let switcheroo_support = desktop_supports_switcheroo(&environ);
 
         let xdg_list = self.xdg_list.read().await;
@@ -212,7 +259,7 @@ impl CardwireAnalyzer {
             };
             result = check_for_flatpak_run(&cmdline, &xdg_list);
         }
-        Some((result, 1))
+        Some((result, PidType::Allowed, 0))
     }
 
     #[allow(dead_code)]
@@ -413,42 +460,29 @@ mod tests {
 
     #[test]
     fn test_report_event_deserialization_from_valid_bytes() {
-        // ReportEvent: pid (4 bytes) + comm (16 bytes) = 20 bytes
-        let mut item: Vec<u8> = vec![
+        // ReportEvent: pid (4 bytes)
+        let item: Vec<u8> = vec![
             0x39, 0x05, 0x00, 0x00, // pid = 1337
         ];
-        // comm = "steam\0\0\0\0\0\0\0\0\0\0\0" (16 bytes, null-padded)
-        item.extend_from_slice(b"steam\0\0\0\0\0\0\0\0\0\0\0");
-        assert_eq!(item.len(), 20);
+        assert_eq!(item.len(), 4);
         assert!(item.len() >= std::mem::size_of::<ReportEvent>());
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
         assert_eq!(event.pid, 1337);
-        // Verify the comm field contains "steam"
-        let comm_str = std::str::from_utf8(&event.comm)
-            .unwrap()
-            .trim_end_matches('\0');
-        assert_eq!(comm_str, "steam");
     }
 
     #[test]
     fn test_report_event_deserialization_rejects_undersized_buffer() {
-        // ReportEvent needs 20 bytes, give only 19
-        let item: Vec<u8> = vec![0u8; 19];
+        // ReportEvent needs 4 bytes, give only 3
+        let item: Vec<u8> = vec![0u8; 3];
         assert!(item.len() < std::mem::size_of::<ReportEvent>());
     }
 
     #[test]
-    fn test_report_event_comm_extraction_with_full_length_name() {
-        // comm is exactly 15 chars + null terminator (16 bytes total)
-        let mut item: Vec<u8> = vec![
+    fn test_report_event_deserialization_pid_extraction() {
+        let item: Vec<u8> = vec![
             0x01, 0x00, 0x00, 0x00, // pid = 1
         ];
-        item.extend_from_slice(b"123456789012345\0"); // 15 chars + null = 16 bytes
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
         assert_eq!(event.pid, 1);
-        let comm_str = std::str::from_utf8(&event.comm)
-            .unwrap()
-            .trim_end_matches('\0');
-        assert_eq!(comm_str, "123456789012345");
     }
 }

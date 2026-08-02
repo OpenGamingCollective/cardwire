@@ -11,7 +11,7 @@ use crate::{
         }, pci::PciDevice
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
-use cardwire_ebpf::EbpfBlocker;
+use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{error, info, warn};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface, object_server::SignalEmitter};
@@ -29,6 +29,7 @@ impl<T, E: std::fmt::Display> FdoResultExt<T> for Result<T, E> {
 // Represent a single gpu
 #[derive(Clone)]
 pub struct GpuInterface {
+    pub id: u32,
     pub device: GpuDevice,
     blocker: Arc<RwLock<EbpfBlocker>>,
     pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
@@ -38,6 +39,7 @@ pub struct GpuInterface {
 
 impl GpuInterface {
     pub fn build(
+        id: u32,
         device: GpuDevice,
         blocker: Arc<RwLock<EbpfBlocker>>,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
@@ -45,6 +47,7 @@ impl GpuInterface {
         mode_state: Arc<RwLock<CardwireModeState>>,
     ) -> anyhow::Result<GpuInterface> {
         Ok(Self {
+            id,
             device,
             blocker,
             pci_list,
@@ -55,8 +58,8 @@ impl GpuInterface {
 }
 
 impl GpuInterface {
-    /// block the gpu, 1 = dGPU, 0 = iGPU
-    pub async fn block_gpu(&mut self, value: u8) -> fdo::Result<()> {
+    /// block the gpu, value = gpu key
+    pub async fn block_gpu(&mut self, value: u32) -> fdo::Result<()> {
         let mut blocker = self.blocker.write().await;
         let pci_list = self.pci_list.read().await;
         // First block the card id
@@ -190,23 +193,25 @@ impl GpuInterface {
     pub async fn gpu_blocked(&self) -> fdo::Result<bool> {
         let blocker = self.blocker.read().await;
 
+        let gpu_id = self.id;
+
         let card = match card_to_inode(*self.device.card()) {
-            Ok(inode) => blocker.is_inode_blocked(inode).into_fdo()?,
+            Ok(inode) => blocker.is_inode_blocked(inode, gpu_id).into_fdo()?,
             Err(err) => return Err(err).into_fdo(),
         };
         let render = match render_to_inode(*self.device.render()) {
-            Ok(inode) => blocker.is_inode_blocked(inode).into_fdo()?,
+            Ok(inode) => blocker.is_inode_blocked(inode, gpu_id).into_fdo()?,
             Err(err) => return Err(err).into_fdo(),
         };
         let pci = match single_pci_to_inode(self.device.pci.pci_address()) {
-            Ok(inode) => blocker.is_inode_blocked(inode).into_fdo()?,
+            Ok(inode) => blocker.is_inode_blocked(inode, gpu_id).into_fdo()?,
             Err(err) => return Err(err).into_fdo(),
         };
         let nvidia = match self.device.nvidia_minor() {
             // GPU is nvidia
             Some(minor) => {
                 if let Ok(inode) = nvidia_to_inode(*minor) {
-                    blocker.is_inode_blocked(inode).into_fdo()?
+                    blocker.is_inode_blocked(inode, gpu_id).into_fdo()?
                 } else {
                     false
                 }
@@ -291,7 +296,7 @@ impl GpuInterface {
                 )));
             }
             // Now block
-            self.block_gpu(1).await?;
+            self.block_gpu(self.id).await?;
             info!("Set GPU {} block={}", self.device.name(), block);
             // save new state to file
             let mut gpu_state = self.gpu_state.write().await;
