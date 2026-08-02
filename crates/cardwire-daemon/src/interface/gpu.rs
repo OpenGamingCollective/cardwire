@@ -29,6 +29,7 @@ impl<T, E: std::fmt::Display> FdoResultExt<T> for Result<T, E> {
 // Represent a single gpu
 #[derive(Clone)]
 pub struct GpuInterface {
+    id: u32,
     pub device: GpuDevice,
     blocker: Arc<RwLock<EbpfBlocker>>,
     pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
@@ -38,6 +39,7 @@ pub struct GpuInterface {
 
 impl GpuInterface {
     pub fn build(
+        id: u32,
         device: GpuDevice,
         blocker: Arc<RwLock<EbpfBlocker>>,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
@@ -45,6 +47,7 @@ impl GpuInterface {
         mode_state: Arc<RwLock<CardwireModeState>>,
     ) -> anyhow::Result<GpuInterface> {
         Ok(Self {
+            id,
             device,
             blocker,
             pci_list,
@@ -291,7 +294,7 @@ impl GpuInterface {
                 )));
             }
             // Now block
-            self.block_gpu(1).await?;
+            self.block_gpu(self.id).await?;
             info!("Set GPU {} block={}", self.device.name(), block);
             // save new state to file
             let mut gpu_state = self.gpu_state.write().await;

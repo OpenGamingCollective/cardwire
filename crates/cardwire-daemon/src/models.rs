@@ -64,6 +64,7 @@ impl DaemonManager {
 
         for (id, device) in gpu_list {
             let gpu = GpuInterface::build(
+                id as u32,
                 device,
                 Arc::clone(&blocker),
                 Arc::clone(&pci_list),

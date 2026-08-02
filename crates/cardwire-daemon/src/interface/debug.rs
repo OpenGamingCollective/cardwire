@@ -111,6 +111,7 @@ impl DebugInterface {
                 gpu::read_gpu(&new_pci_list).map_err(|err| fdo::Error::Failed(err.to_string()))?;
             for (id, device) in new_gpu_list {
                 let gpu = GpuInterface::build(
+                    id as u32,
                     device,
                     Arc::clone(&self.blocker),
                     Arc::clone(&self.pci_list),

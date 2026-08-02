@@ -171,7 +171,7 @@ impl CardwireAnalyzer {
                 PidType::Forced => {
                     info!("FORCE: pid: {} process: {} ", event.pid, real_app_name);
                     let mut forced_map = self.forced_map.write().await;
-                    if let Err(e) = forced_map.insert(event.pid, 1, 0) {
+                    if let Err(e) = forced_map.insert(event.pid, result.2, 0) {
                         warn!("Failed to insert into eBPF map: {}", e);
                     }
                 }
@@ -199,20 +199,22 @@ impl CardwireAnalyzer {
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app, the u8 is the
     /// gpu id
-    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, PidType)> {
+    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, PidType, u32)> {
         let path = format!("/proc/{}/environ", pid);
         let environ = match fs::read(path) {
             Ok(content) => content,
             Err(_) => return None,
         };
-        // First check CARDWIRE_ALLOW, if  None continue
+        // First check CARDWIRE_ALLOW, if None continue
         if let Some(allow) = check_env("CARDWIRE_ALLOW", &environ) {
-            return Some((allow, PidType::Allowed));
+            return Some((allow == 1, PidType::Allowed, 0));
         }
         if let Some(value) = check_env("CARDWIRE_FORCE_DGPU", &environ) {
-            return Some((value, PidType::Forced));
+            return Some((value == 1, PidType::Forced, value));
         }
-
+        if let Some(value) = check_env("CARDWIRE_FORCE_GPU", &environ) {
+            return Some((value == 1, PidType::Forced, value));
+        }
         let switcheroo_support = desktop_supports_switcheroo(&environ);
 
         let xdg_list = self.xdg_list.read().await;
@@ -229,7 +231,7 @@ impl CardwireAnalyzer {
             };
             result = check_for_flatpak_run(&cmdline, &xdg_list);
         }
-        Some((result, PidType::Allowed))
+        Some((result, PidType::Allowed, 0))
     }
 
     #[allow(dead_code)]
