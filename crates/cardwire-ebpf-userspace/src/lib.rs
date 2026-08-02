@@ -5,7 +5,8 @@ pub use crate::errors::{CardwireEbpfError, CardwireEbpfResult};
 use aya::{
     Btf, Ebpf, maps::{Array, HashMap, MapError, RingBuf}, programs::{Lsm, TracePoint}
 };
-use log::info;
+use aya_log::EbpfLogger;
+use log::{Log, error, info};
 
 pub enum EbpfSettings {
     ExperimentalNvidia,
@@ -213,36 +214,147 @@ impl EbpfBlocker {
             .map_err(CardwireEbpfError::aya)
     }
 
+    /// take the CW_OPEN_EVENTS RingBuf map from the blocker
     pub fn get_exec_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
-        let map = self.ebpf.take_map("CW_EXEC_EVENTS").unwrap();
-        let ring_buf: RingBuf<aya::maps::MapData> = RingBuf::try_from(map).unwrap();
+        let map_str = "CW_OPEN_EVENTS";
+        let map = match self.ebpf.take_map(map_str) {
+            Some(map) => map,
+            None => {
+                error!("error while trying to take map {}", map_str);
+                return Err(CardwireEbpfError::MissingMap {
+                    name: map_str.to_string(),
+                });
+            }
+        };
+        let ring_buf: RingBuf<aya::maps::MapData> = match RingBuf::try_from(map) {
+            Ok(ringbuf) => ringbuf,
+            Err(err) => {
+                error!("error while trying to get the exec ring_buf");
+                return Err(CardwireEbpfError::aya(err));
+            }
+        };
         Ok(ring_buf)
     }
+
+    /// take the CW_CLOSE_EVENTS RingBuf map from the blocker
     pub fn get_close_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
-        let map = self.ebpf.take_map("CW_CLOSE_EVENTS").unwrap();
-        let ring_buf: RingBuf<aya::maps::MapData> = RingBuf::try_from(map).unwrap();
+        let map_str = "CW_CLOSE_EVENTS";
+        let map = match self.ebpf.take_map(map_str) {
+            Some(map) => map,
+            None => {
+                error!("error while trying to take map {}", map_str);
+                return Err(CardwireEbpfError::MissingMap {
+                    name: map_str.to_string(),
+                });
+            }
+        };
+        let ring_buf: RingBuf<aya::maps::MapData> = match RingBuf::try_from(map) {
+            Ok(ringbuf) => ringbuf,
+            Err(err) => {
+                error!("error while trying to get the close ring_buf");
+                return Err(CardwireEbpfError::aya(err));
+            }
+        };
         Ok(ring_buf)
     }
+
+    /// take the CW_REPORT_EVENTS RingBuf map from the blocker
     pub fn get_report_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
-        let map = self.ebpf.take_map("CW_REPORT_EVENTS").unwrap();
-        let ring_buf: RingBuf<aya::maps::MapData> = RingBuf::try_from(map).unwrap();
+        let map_str = "CW_REPORT_EVENTS";
+        let map = match self.ebpf.take_map(map_str) {
+            Some(map) => map,
+            None => {
+                error!("error while trying to take map {}", map_str);
+                return Err(CardwireEbpfError::MissingMap {
+                    name: map_str.to_string(),
+                });
+            }
+        };
+        let ring_buf: RingBuf<aya::maps::MapData> = match RingBuf::try_from(map) {
+            Ok(ringbuf) => ringbuf,
+            Err(err) => {
+                error!("error while trying to get the report ring_buf");
+                return Err(CardwireEbpfError::aya(err));
+            }
+        };
         Ok(ring_buf)
     }
+
+    /// take the CW_ALLOWED_PID HashMap map from the blocker
     pub fn get_pid_map(&mut self) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u32>> {
-        let map = self.ebpf.take_map("CW_ALLOWED_PID").unwrap();
-        let map: HashMap<aya::maps::MapData, u32, u32> = HashMap::try_from(map).unwrap();
+        let map_str = "CW_ALLOWED_PID";
+        let map = match self.ebpf.take_map(map_str) {
+            Some(map) => map,
+            None => {
+                error!("error while trying to take map {}", map_str);
+                return Err(CardwireEbpfError::MissingMap {
+                    name: map_str.to_string(),
+                });
+            }
+        };
+        let map: HashMap<aya::maps::MapData, u32, u32> = match HashMap::try_from(map) {
+            Ok(map) => map,
+            Err(err) => {
+                error!("error while trying to get the allowed_pid map");
+                return Err(CardwireEbpfError::aya(err));
+            }
+        };
         Ok(map)
     }
+
+    /// take the CW_FORCED_PID HashMap map from the blocker
     pub fn get_forced_pid_map(
         &mut self,
     ) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u32>> {
-        let map = self.ebpf.take_map("CW_FORCED_PID").unwrap();
-        let map: HashMap<aya::maps::MapData, u32, u32> = HashMap::try_from(map).unwrap();
+        let map_str = "CW_FORCED_PID";
+        let map = match self.ebpf.take_map(map_str) {
+            Some(map) => map,
+            None => {
+                error!("error while trying to take map {}", map_str);
+                return Err(CardwireEbpfError::MissingMap {
+                    name: map_str.to_string(),
+                });
+            }
+        };
+        let map: HashMap<aya::maps::MapData, u32, u32> = match HashMap::try_from(map) {
+            Ok(map) => map,
+            Err(err) => {
+                error!("error while trying to get the forced_pid map");
+                return Err(CardwireEbpfError::aya(err));
+            }
+        };
         Ok(map)
     }
+
+    /// take the CW_MODE Array map from the blocker
     pub fn get_mode_map(&mut self) -> CardwireEbpfResult<Array<aya::maps::MapData, u8>> {
-        let map = self.ebpf.take_map("CW_MODE").unwrap();
-        let map: Array<aya::maps::MapData, u8> = Array::try_from(map).unwrap();
-        Ok(map)
+        let map_str = "CW_MODE";
+        let map = match self.ebpf.take_map(map_str) {
+            Some(map) => map,
+            None => {
+                error!("error while trying to take map {}", map_str);
+                return Err(CardwireEbpfError::MissingMap {
+                    name: map_str.to_string(),
+                });
+            }
+        };
+        let array: Array<aya::maps::MapData, u8> = match Array::try_from(map) {
+            Ok(array) => array,
+            Err(err) => {
+                error!("error while trying to get the mode array");
+                return Err(CardwireEbpfError::aya(err));
+            }
+        };
+        Ok(array)
+    }
+
+    pub fn get_ebpf_logger(&mut self) -> Result<EbpfLogger<&dyn Log>, CardwireEbpfError> {
+        match EbpfLogger::init(&mut self.ebpf) {
+            Ok(logger) => Ok(logger),
+            Err(err) => {
+                error!("failed to initialize eBPF logger");
+                Err(CardwireEbpfError::aya(err))
+            }
+        }
     }
 }
