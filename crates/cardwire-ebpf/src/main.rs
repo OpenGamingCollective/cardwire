@@ -83,7 +83,10 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_cardwired() produced an error in file_open, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
@@ -98,7 +101,10 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_hybrid() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_hybrid() produced an error in file_open, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
@@ -147,7 +153,10 @@ unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_cardwired() produced an error in inode_permission, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
@@ -162,7 +171,10 @@ unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_hybrid() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_hybrid() produced an error in inode_permission, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
@@ -200,7 +212,10 @@ unsafe fn try_inode_getattr(ctx: LsmContext) -> Result<i32, i32> {
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_cardwired() produced an error in inode_getattr, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
@@ -215,7 +230,10 @@ unsafe fn try_inode_getattr(ctx: LsmContext) -> Result<i32, i32> {
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_hybrid() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_hybrid() produced an error in inode_getattr, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
@@ -261,7 +279,10 @@ unsafe fn try_tracepoint_enter_getdents64(ctx: TracePointContext) -> Result<i32,
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_cardwired() produced an error in tracepoint_enter_getdents64, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
@@ -276,14 +297,14 @@ unsafe fn try_tracepoint_enter_getdents64(ctx: TracePointContext) -> Result<i32,
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_hybrid() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_hybrid() produced an error in tracepoint_enter_getdents64, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
 
-    // Arg 0 is the fd
-    // Arg 1 is the linux_dirent
-    // Arg 2 is the count
     const DIRP_OFFSET: usize = 24;
 
     let pid = (bpf_get_current_pid_tgid() >> 32) as u32;
@@ -314,7 +335,10 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_cardwired() produced an error in tracepoint_exit_getdents64, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
@@ -329,7 +353,10 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_hybrid() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_hybrid() produced an error in tracepoint_exit_getdents64, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
@@ -421,7 +448,10 @@ unsafe fn try_tracepoint_sched_process_exec(ctx: TracePointContext) -> Result<i3
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_cardwired() produced an error in tracepoint_sched_process_exec, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
@@ -436,7 +466,7 @@ unsafe fn try_tracepoint_sched_process_exec(ctx: TracePointContext) -> Result<i3
             Some(ring_buf) => ring_buf,
             // Reservation fail, warn and leave
             None => {
-                warn!(&ctx, "failed to reverse bytes for ring_buf: CW_EXEC_EVENTS");
+                warn!(&ctx, "failed to reserve bytes for ring_buf: CW_EXEC_EVENTS");
                 return ReturnCode::SUCCESS;
             }
         };
@@ -472,7 +502,10 @@ unsafe fn try_tracepoint_sched_process_exit(ctx: TracePointContext) -> Result<i3
         None => {
             // This error happen if either the array is not available or the index 0 of the array is
             // empty
-            error!(&ctx, "EBPF is_cardwired() produced an error, exiting");
+            error!(
+                &ctx,
+                "EBPF is_cardwired() produced an error in tracepoint_sched_process_exec, skipping"
+            );
             return ReturnCode::SUCCESS;
         }
     }
@@ -499,7 +532,7 @@ unsafe fn try_tracepoint_sched_process_exit(ctx: TracePointContext) -> Result<i3
             None => {
                 warn!(
                     &ctx,
-                    "failed to reverse bytes for ring_buf: CW_CLOSE_EVENTS"
+                    "failed to reserve bytes for ring_buf: CW_CLOSE_EVENTS"
                 );
                 return ReturnCode::SUCCESS;
             }

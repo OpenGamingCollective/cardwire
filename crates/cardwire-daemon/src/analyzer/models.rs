@@ -1,6 +1,7 @@
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
+use aya_log::EbpfLogger;
 use cardwire_ebpf_userspace::EbpfBlocker;
-use log::{debug, info, warn};
+use log::{Log, debug, error, info, warn};
 use std::{collections::HashMap, fs, path::PathBuf, ptr, sync::Arc};
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock}, task, time::Instant
@@ -42,6 +43,7 @@ pub struct CardwireAnalyzer {
     report_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
+    ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
     #[allow(dead_code)]
     xdg_folders: Vec<PathBuf>,
@@ -55,6 +57,7 @@ impl CardwireAnalyzer {
         let report_ring = blocker.get_report_ring()?;
         let pid_map = blocker.get_pid_map()?;
         let forced_map = blocker.get_forced_pid_map()?;
+        let ebpf_logger = blocker.get_ebpf_logger()?;
 
         let exec_ring = AsyncFd::new(exec_ring)?;
         let close_ring = AsyncFd::new(close_ring)?;
@@ -66,6 +69,9 @@ impl CardwireAnalyzer {
         let forced_map = Arc::new(RwLock::new(forced_map));
         let close_ring = Arc::new(Mutex::new(close_ring));
         let report_ring = Arc::new(Mutex::new(report_ring));
+        let ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>> =
+            Arc::new(Mutex::new(ebpf_logger));
+
         let xdg_result = static_analysis::get_fdo_apps().await?;
         let xdg_list = Arc::new(RwLock::new(xdg_result.0));
         let xdg_folders: Vec<PathBuf> = xdg_result.1;
@@ -75,6 +81,7 @@ impl CardwireAnalyzer {
             report_ring,
             pid_map,
             forced_map,
+            ebpf_logger,
             xdg_list,
             xdg_folders,
         })
@@ -84,6 +91,7 @@ impl CardwireAnalyzer {
         let exec_arc = self.exec_ring.clone();
         let close_arc = self.close_ring.clone();
         let report_arc = self.report_ring.clone();
+        let logger_arc = self.ebpf_logger.clone();
         // Lock the buffers once
         let mut exec_ring = exec_arc.lock().await;
         let mut close_ring = close_arc.lock().await;
@@ -93,6 +101,23 @@ impl CardwireAnalyzer {
         let mut previous_reported_pid = 0;
 
         let shared_self = Arc::new(self);
+
+        // spawn the logger in it's own thread
+        task::spawn(async move {
+            let mut ebpf_logger = logger_arc.lock().await;
+            loop {
+                let mut guard = match ebpf_logger.readable_mut().await {
+                    Ok(guard) => guard,
+                    Err(err) => {
+                        error!("failed to get logger guard: {}", err);
+                        return;
+                    }
+                };
+                guard.get_inner_mut().flush();
+                guard.clear_ready();
+            }
+        });
+
         loop {
             tokio::select! {
                 Ok(mut guard) = exec_ring.ready_mut(Interest::READABLE) => {

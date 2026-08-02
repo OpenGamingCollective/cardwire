@@ -24,6 +24,8 @@ aya.workspace = true
 xdg.workspace = true
 freedesktop-desktop-entry.workspace = true
 udev.workspace = true
+aya-log.workspace = true
+
 
 [[bin]]
 name = "cardwired"

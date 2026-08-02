@@ -7,6 +7,7 @@ use aya::{
 };
 use aya_log::EbpfLogger;
 use log::{Log, error, info};
+use tokio::io::{Interest, unix::AsyncFd};
 
 pub enum EbpfSettings {
     ExperimentalNvidia,
@@ -214,9 +215,9 @@ impl EbpfBlocker {
             .map_err(CardwireEbpfError::aya)
     }
 
-    /// take the CW_OPEN_EVENTS RingBuf map from the blocker
+    /// take the CW_EXEC_EVENTS RingBuf map from the blocker
     pub fn get_exec_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
-        let map_str = "CW_OPEN_EVENTS";
+        let map_str = "CW_EXEC_EVENTS";
         let map = match self.ebpf.take_map(map_str) {
             Some(map) => map,
             None => {
@@ -348,13 +349,23 @@ impl EbpfBlocker {
         Ok(array)
     }
 
-    pub fn get_ebpf_logger(&mut self) -> Result<EbpfLogger<&dyn Log>, CardwireEbpfError> {
-        match EbpfLogger::init(&mut self.ebpf) {
-            Ok(logger) => Ok(logger),
+    pub fn get_ebpf_logger(
+        &mut self,
+    ) -> Result<AsyncFd<EbpfLogger<&'static dyn Log>>, CardwireEbpfError> {
+        let logger = match EbpfLogger::init(&mut self.ebpf) {
+            Ok(logger) => logger,
             Err(err) => {
                 error!("failed to initialize eBPF logger");
-                Err(CardwireEbpfError::aya(err))
+                return Err(CardwireEbpfError::aya(err));
             }
-        }
+        };
+        let async_fd = match AsyncFd::with_interest(logger, Interest::READABLE) {
+            Ok(fd) => fd,
+            Err(err) => {
+                error!("couldn't get the async_fd for ebpf_logger");
+                Err(CardwireEbpfError::aya(err))
+            }?,
+        };
+        Ok(async_fd)
     }
 }
