@@ -206,7 +206,7 @@ impl ModeInterface {
             Ok(res) => res,
             Err(err) => {
                 warn!("failed to read external display topology: {err}");
-                (requested, None)
+                return Err(err);
             }
         };
         let previous = *self.effective_mode.read().await;
@@ -225,7 +225,7 @@ impl ModeInterface {
             Ok(target) => target,
             Err(err) => {
                 warn!("failed to read external display topology at startup: {err}");
-                (requested, None)
+                return Err(err);
             }
         };
         let previous = *self.effective_mode.read().await;
