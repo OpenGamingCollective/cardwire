@@ -1,7 +1,9 @@
 //! DBUS Interface for single gpu interaction
 
 use std::{
-    collections::{BTreeMap, HashMap}, ffi::OsStr, fs::{self, read_dir}, path::{Path, PathBuf}, sync::Arc
+    collections::{BTreeMap, HashMap}, ffi::OsStr, fs::{self, read_dir}, path::{Path, PathBuf}, sync::{
+        Arc, atomic::{AtomicBool, Ordering}
+    }
 };
 
 use crate::{
@@ -13,7 +15,7 @@ use crate::{
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{error, info, warn};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use zbus::{fdo, interface, object_server::SignalEmitter};
 
 pub trait FdoResultExt<T> {
@@ -35,6 +37,8 @@ pub struct GpuInterface {
     pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     mode_state: Arc<RwLock<CardwireModeState>>,
+    latest_state: Arc<Mutex<Option<bool>>>,
+    external_display_required: Arc<AtomicBool>,
 }
 
 impl GpuInterface {
@@ -53,7 +57,26 @@ impl GpuInterface {
             pci_list,
             gpu_state,
             mode_state,
+            latest_state: Arc::new(Mutex::new(None)),
+            external_display_required: Arc::new(AtomicBool::new(false)),
         })
+    }
+
+    pub async fn latest_state(&self) -> Option<bool> {
+        *self.latest_state.lock().await
+    }
+
+    pub async fn set_latest_state(&self, state: Option<bool>) {
+        *self.latest_state.lock().await = state;
+    }
+
+    pub fn external_display_required(&self) -> bool {
+        self.external_display_required.load(Ordering::Relaxed)
+    }
+
+    pub fn set_external_display_required(&self, required: bool) {
+        self.external_display_required
+            .store(required, Ordering::Relaxed);
     }
 }
 
@@ -287,6 +310,12 @@ impl GpuInterface {
             ));
         }
         drop(mode);
+        if block && self.external_display_required() {
+            return Err(fdo::Error::AccessDenied(format!(
+                "GPU {} is required by a connected external display and cannot be blocked",
+                self.device.name()
+            )));
+        }
         if block {
             // Don't block if default
             if self.device.is_default() {
@@ -303,6 +332,7 @@ impl GpuInterface {
             if let Err(e) = gpu_state.save_state(&self.device, true).await {
                 warn!("could not save gpu_state to file: {e}");
             };
+            self.set_latest_state(None).await;
             Ok(())
         } else {
             // unblock
@@ -313,6 +343,7 @@ impl GpuInterface {
             if let Err(e) = gpu_state.save_state(&self.device, false).await {
                 warn!("could not save gpu_state to file: {e}");
             };
+            self.set_latest_state(None).await;
             Ok(())
         }
     }

@@ -6,8 +6,30 @@ use crate::{
 };
 use log::{info, warn};
 use std::{
-    collections::{BTreeMap, HashMap}, fs, io, path::Path
+    collections::{BTreeMap, BTreeSet, HashMap}, fs, io, path::Path
 };
+
+const DRM_CLASS_PATH: &str = "/sys/class/drm";
+
+#[derive(Default)]
+struct GpuStats {
+    internal_displays: usize,
+    desktop_displays: usize,
+    total_displays: usize,
+    connected_displays: usize,
+    connected_internal: usize,
+    connected_desktop: usize,
+}
+
+fn default_gpu_rank(stats: &GpuStats) -> (usize, usize, usize, usize, usize) {
+    (
+        stats.connected_internal,
+        stats.connected_desktop,
+        stats.internal_displays,
+        stats.desktop_displays,
+        stats.total_displays,
+    )
+}
 
 /// read a map of pci devices and return a map of gpu devices
 pub fn read_gpu(
@@ -30,6 +52,51 @@ pub fn read_gpu(
         }
     }
     Ok(gpus)
+}
+
+/// Return the DRM card numbers that currently have a connected external display.
+///
+/// Connector ownership is encoded by sysfs in names such as `card1-HDMI-A-1` and
+/// `card0-DP-2`, so this avoids making assumptions about PCI order or connector names.
+pub fn connected_external_drm_cards() -> io::Result<BTreeSet<u32>> {
+    connected_external_drm_cards_at(Path::new(DRM_CLASS_PATH))
+}
+
+fn connected_external_drm_cards_at(class_path: &Path) -> io::Result<BTreeSet<u32>> {
+    let mut connected_cards = BTreeSet::new();
+
+    for entry in fs::read_dir(class_path)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let Some((card, connector)) = parse_drm_connector_name(&name) else {
+            continue;
+        };
+        if !is_external_connector(connector) {
+            continue;
+        }
+
+        let status = fs::read_to_string(entry.path().join("status"));
+        if status.is_ok_and(|status| status.trim() == "connected") {
+            connected_cards.insert(card);
+        }
+    }
+
+    Ok(connected_cards)
+}
+
+fn parse_drm_connector_name(name: &str) -> Option<(u32, &str)> {
+    let name = name.strip_prefix("card")?;
+    let (card, connector) = name.split_once('-')?;
+    Some((card.parse().ok()?, connector))
+}
+
+fn is_external_connector(connector: &str) -> bool {
+    !is_internal_connector(connector) && !connector.starts_with("Writeback")
+}
+
+fn is_internal_connector(connector: &str) -> bool {
+    connector.starts_with("eDP") || connector.starts_with("LVDS") || connector.starts_with("DSI")
 }
 
 /// Take a pci device and build a gpu device from it
@@ -252,16 +319,6 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> 
     } else {
         warn!("/sys/class/drm does not exist, skipping default detection");
     }
-    #[derive(Default)]
-    struct GpuStats {
-        internal_displays: usize,
-        desktop_displays: usize,
-        total_displays: usize,
-        connected_displays: usize,
-        connected_internal: usize,
-        connected_desktop: usize,
-    }
-
     let mut stats: HashMap<usize, GpuStats> = HashMap::new();
 
     for (id, gpu) in &mut *gpu_list {
@@ -269,6 +326,9 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> 
         let prefix = format!("card{}-", gpu.device.card());
         for name in &drm_entries {
             if let Some(drm) = name.strip_prefix(&prefix) {
+                if !is_internal_connector(drm) && !is_external_connector(drm) {
+                    continue;
+                }
                 let status_path = class_path.join(name).join("status");
                 //
                 if let Ok(status) = fs::read_to_string(&status_path) {
@@ -277,7 +337,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> 
                     if is_connected {
                         stat.connected_displays += 1;
                     }
-                    if drm.starts_with("eDP") {
+                    if is_internal_connector(drm) {
                         stat.internal_displays += 1;
                         if is_connected {
                             stat.connected_internal += 1;
@@ -309,15 +369,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> 
 
     let default = stats
         .iter()
-        .max_by_key(|&(_, stats)| {
-            (
-                stats.connected_internal,
-                stats.connected_desktop,
-                stats.internal_displays,
-                stats.desktop_displays,
-                stats.total_displays,
-            )
-        })
+        .max_by_key(|&(&id, stats)| (default_gpu_rank(stats), std::cmp::Reverse(id)))
         .unzip();
 
     for (id, gpu) in &mut *gpu_list {
@@ -341,4 +393,95 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> 
     *gpu_list = gpus.into_iter().enumerate().collect();
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        path::PathBuf, sync::atomic::{AtomicU64, Ordering}
+    };
+
+    static NEXT_TEMP_DIR: AtomicU64 = AtomicU64::new(0);
+
+    struct TempDrmRoot(PathBuf);
+
+    impl TempDrmRoot {
+        fn new() -> Self {
+            let id = NEXT_TEMP_DIR.fetch_add(1, Ordering::Relaxed);
+            let path =
+                std::env::temp_dir().join(format!("cardwire-drm-test-{}-{id}", std::process::id()));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn connector(&self, name: &str, status: &str) {
+            let path = self.0.join(name);
+            fs::create_dir_all(&path).unwrap();
+            fs::write(path.join("status"), status).unwrap();
+        }
+    }
+
+    impl Drop for TempDrmRoot {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn parse_connector_names_keeps_card_ownership() {
+        assert_eq!(
+            parse_drm_connector_name("card1-HDMI-A-1"),
+            Some((1, "HDMI-A-1"))
+        );
+        assert_eq!(parse_drm_connector_name("card12-DP-3"), Some((12, "DP-3")));
+        assert_eq!(parse_drm_connector_name("renderD128"), None);
+        assert_eq!(parse_drm_connector_name("card1"), None);
+    }
+
+    #[test]
+    fn external_connector_classification_ignores_panels_and_writeback() {
+        for connector in ["eDP-1", "LVDS-1", "DSI-1", "Writeback-1"] {
+            assert!(!is_external_connector(connector));
+        }
+        for connector in ["HDMI-A-1", "DP-1", "DVI-D-1"] {
+            assert!(is_external_connector(connector));
+        }
+        for connector in ["eDP-1", "LVDS-1", "DSI-1"] {
+            assert!(is_internal_connector(connector));
+        }
+        assert!(!is_internal_connector("Writeback-1"));
+    }
+
+    #[test]
+    fn connected_external_cards_are_discovered_from_status() {
+        let root = TempDrmRoot::new();
+        root.connector("card0-eDP-1", "connected\n");
+        root.connector("card0-DP-1", "connected\n");
+        root.connector("card1-HDMI-A-1", "connected\n");
+        root.connector("card2-DP-2", "disconnected\n");
+        root.connector("card3-Writeback-1", "connected\n");
+        fs::create_dir_all(root.0.join("card4-DP-3")).unwrap();
+
+        assert_eq!(
+            connected_external_drm_cards_at(&root.0).unwrap(),
+            BTreeSet::from([0, 1])
+        );
+    }
+
+    #[test]
+    fn connected_external_display_outranks_disconnected_internal_connector() {
+        let integrated = GpuStats {
+            internal_displays: 1,
+            ..GpuStats::default()
+        };
+        let discrete = GpuStats {
+            desktop_displays: 1,
+            connected_displays: 1,
+            connected_desktop: 1,
+            ..GpuStats::default()
+        };
+
+        assert!(default_gpu_rank(&discrete) > default_gpu_rank(&integrated));
+    }
 }

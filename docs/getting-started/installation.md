@@ -41,6 +41,7 @@ services.cardwire = {
      experimental_nvidia_block = true;
      battery_auto_switch = true;
      battery_auto_switch_mode = "hybrid";
+     external_display_auto_switch = false;
  };
 };
 ```
@@ -151,6 +152,3 @@ git clone https://github.com/OpenGamingCollective/cardwire.git
 make build
 sudo make install
 ```
-
-
-

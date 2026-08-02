@@ -35,6 +35,11 @@ in
           type = types.str;
           default = "hybrid";
         };
+        external_display_auto_switch = mkOption {
+          type = types.bool;
+          default = false;
+          description = "Automatically make GPUs available for displays connected to dGPU-only ports";
+        };
       };
     };
   };

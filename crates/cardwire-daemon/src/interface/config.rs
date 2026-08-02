@@ -16,6 +16,7 @@ pub struct ConfigMemory {
     pub experimental_nvidia_block: Arc<AtomicBool>,
     pub battery_auto_switch: Arc<AtomicBool>,
     pub battery_auto_switch_mode: Arc<AtomicU32>,
+    pub external_display_auto_switch: Arc<AtomicBool>,
 }
 impl ConfigMemory {
     /// build a ConfigMemory from CardwireConfig
@@ -27,11 +28,14 @@ impl ConfigMemory {
         let battery_auto_switch_mode = Arc::new(AtomicU32::new(
             user_config.battery_auto_switch_mode().into(),
         ));
+        let external_display_auto_switch =
+            Arc::new(AtomicBool::new(user_config.external_display_auto_switch()));
         ConfigMemory {
             auto_apply_gpu_state,
             experimental_nvidia_block,
             battery_auto_switch,
             battery_auto_switch_mode,
+            external_display_auto_switch,
         }
     }
 }
@@ -123,6 +127,9 @@ impl ConfigInterface {
             self.config.battery_auto_switch.load(Ordering::Relaxed),
             Modes::try_from(self.config.battery_auto_switch_mode.load(Ordering::Relaxed))
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?,
+            self.config
+                .external_display_auto_switch
+                .load(Ordering::Relaxed),
         );
         match config.save_config().await {
             Ok(_) => Ok(()),
@@ -152,17 +159,19 @@ mod tests {
         assert!(memory.auto_apply_gpu_state.load(Ordering::Relaxed));
         assert!(!memory.experimental_nvidia_block.load(Ordering::Relaxed));
         assert!(!memory.battery_auto_switch.load(Ordering::Relaxed));
+        assert!(!memory.external_display_auto_switch.load(Ordering::Relaxed));
     }
 
     #[test]
     fn test_config_memory_build_from_custom_config() {
-        let config = CardwireConfig::new(false, true, true, Modes::Smart);
+        let config = CardwireConfig::new(false, true, true, Modes::Smart, true);
         let memory = ConfigMemory::build(config);
         assert!(!memory.auto_apply_gpu_state.load(Ordering::Relaxed));
         assert!(memory.experimental_nvidia_block.load(Ordering::Relaxed));
         assert!(memory.battery_auto_switch.load(Ordering::Relaxed));
         let mode_val = memory.battery_auto_switch_mode.load(Ordering::Relaxed);
         assert_eq!(Modes::try_from(mode_val).unwrap(), Modes::Smart);
+        assert!(memory.external_display_auto_switch.load(Ordering::Relaxed));
     }
 
     #[test]
@@ -172,5 +181,9 @@ mod tests {
         // Mutate the atomic
         memory.auto_apply_gpu_state.store(false, Ordering::Relaxed);
         assert!(!memory.auto_apply_gpu_state.load(Ordering::Relaxed));
+        memory
+            .external_display_auto_switch
+            .store(true, Ordering::Relaxed);
+        assert!(memory.external_display_auto_switch.load(Ordering::Relaxed));
     }
 }
