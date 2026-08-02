@@ -107,6 +107,60 @@ impl ModeInterface {
         })
     }
 
+    /// set the mode in the `cardwire_mode` bpf map
+    async fn update_mode_bpf_map(&self, mode: Modes) -> fdo::Result<()> {
+        let mut mode_map = self.mode_map.lock().await;
+        let mode: u32 = Modes::into(mode);
+        mode_map
+            .set(0, mode as u8, 0)
+            .map_err(|err| fdo::Error::Failed(err.to_string()))
+    }
+
+    /// restart the nvidia-powerd service using systemctl
+    async fn restart_nvidia_powerd() {
+        let service = "nvidia-powerd.service";
+
+        let enabled = match Command::new("systemctl")
+            .arg("is-enabled")
+            .arg(service)
+            .output()
+            .await
+        {
+            Ok(output) => {
+                if let Ok(output_str) = str::from_utf8(&output.stdout) {
+                    output_str.contains("enabled")
+                } else {
+                    false
+                }
+            }
+            Err(err) => {
+                error!("error while trying to detect nvidia-powerd: {}", err);
+                return;
+            }
+        };
+        if enabled {
+            match Command::new("systemctl")
+                .arg("restart")
+                .arg(service)
+                .arg("--no-block")
+                .stdout(Stdio::null())
+                .status()
+                .await
+            {
+                Ok(status) => {
+                    if status.success() {
+                        info!("successfully restart nvidia-powerd.service");
+                    } else {
+                        warn!("error restarting nvidia-powerd: {:?}", status.code())
+                    }
+                }
+                Err(err) => {
+                    error!("error while trying to restart nvidia-powerd: {}", err)
+                }
+            };
+        }
+    }
+
     async fn required_external_card(&self) -> fdo::Result<Option<u32>> {
         let card = {
             let gpu_list = self.gpu_list.read().await;
@@ -284,15 +338,6 @@ impl ModeInterface {
         Ok(())
     }
 
-    /// set the mode in the `cardwire_mode` bpf map
-    async fn update_mode_bpf_map(&self, mode: Modes) -> fdo::Result<()> {
-        let mut mode_map = self.mode_map.lock().await;
-        let mode: u32 = Modes::into(mode);
-        mode_map
-            .set(0, mode as u8, 0)
-            .map_err(|err| fdo::Error::Failed(err.to_string()))
-    }
-
     pub(crate) async fn apply_mode(&self, mode: Modes) -> fdo::Result<()> {
         let mut gpu_list = self.gpu_list.write().await;
         match mode {
@@ -361,51 +406,6 @@ impl ModeInterface {
 
         info!("Switched to {}", mode);
         Ok(())
-    }
-
-    /// restart the nvidia-powerd service using systemctl
-    async fn restart_nvidia_powerd() {
-        let service = "nvidia-powerd.service";
-
-        let enabled = match Command::new("systemctl")
-            .arg("is-enabled")
-            .arg(service)
-            .output()
-            .await
-        {
-            Ok(output) => {
-                if let Ok(output_str) = str::from_utf8(&output.stdout) {
-                    output_str.contains("enabled")
-                } else {
-                    false
-                }
-            }
-            Err(err) => {
-                error!("error while trying to detect nvidia-powerd: {}", err);
-                return;
-            }
-        };
-        if enabled {
-            match Command::new("systemctl")
-                .arg("restart")
-                .arg(service)
-                .arg("--no-block")
-                .stdout(Stdio::null())
-                .status()
-                .await
-            {
-                Ok(status) => {
-                    if status.success() {
-                        info!("successfully restart nvidia-powerd.service");
-                    } else {
-                        warn!("error restarting nvidia-powerd: {:?}", status.code())
-                    }
-                }
-                Err(err) => {
-                    error!("error while trying to restart nvidia-powerd: {}", err)
-                }
-            };
-        }
     }
 }
 
