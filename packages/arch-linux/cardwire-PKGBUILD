@@ -24,7 +24,7 @@ build(){
 	export CARGO_TARGET_DIR=target
 	export RUSTFLAGS="$RUSTFLAGS --remap-path-prefix=$srcdir=/usr/src"
 
-	cargo build --frozen --release --workspace --bins
+	cargo build --frozen --release --bins
 }
 
 package(){
