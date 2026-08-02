@@ -77,13 +77,7 @@ async fn reconcile_display_mode(
     was_connected: bool,
 ) -> fdo::Result<(bool, Option<u32>)> {
     let mut requested = mode.requested_mode_value().await;
-    let (mut target, mut card) = match mode.detect_display_target(requested).await {
-        Ok(res) => res,
-        Err(err) => {
-            warn!("failed to read external display topology: {err}");
-            (requested, None)
-        }
-    };
+    let (mut target, mut card) = mode.detect_display_target(requested).await?;
 
     if was_connected && card.is_none() && matches!(requested, Modes::Integrated | Modes::Smart) {
         info!(
@@ -92,13 +86,7 @@ async fn reconcile_display_mode(
         );
         tokio::time::sleep(DISPLAY_RESTORE_WAIT).await;
         requested = mode.requested_mode_value().await;
-        (target, card) = match mode.detect_display_target(requested).await {
-            Ok(res) => res,
-            Err(err) => {
-                warn!("failed to read external display topology after disconnect wait: {err}");
-                (requested, None)
-            }
-        };
+        (target, card) = mode.detect_display_target(requested).await?;
         if card.is_some() {
             info!("external display reconnected; keeping the current mode");
         }
