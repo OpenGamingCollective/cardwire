@@ -241,7 +241,7 @@ impl CardwireAnalyzer {
             return Some((value == 1, PidType::Forced, value));
         }
         if let Some(value) = check_env("CARDWIRE_FORCE_GPU", &environ) {
-            return Some((value == 1, PidType::Forced, value));
+            return Some((true, PidType::Forced, value));
         }
         let switcheroo_support = desktop_supports_switcheroo(&environ);
 
@@ -460,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_report_event_deserialization_from_valid_bytes() {
-        // ReportEvent: pid (4 bytes) + comm (16 bytes) = 20 bytes
+        // ReportEvent: pid (4 bytes)
         let item: Vec<u8> = vec![
             0x39, 0x05, 0x00, 0x00, // pid = 1337
         ];
@@ -478,8 +478,7 @@ mod tests {
     }
 
     #[test]
-    fn test_report_event_comm_extraction_with_full_length_name() {
-        // comm is exactly 15 chars + null terminator (16 bytes total)
+    fn test_report_event_deserialization_pid_extraction() {
         let item: Vec<u8> = vec![
             0x01, 0x00, 0x00, 0x00, // pid = 1
         ];

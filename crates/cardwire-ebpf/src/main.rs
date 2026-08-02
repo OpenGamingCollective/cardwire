@@ -113,11 +113,12 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
         }
     }
 
-    let d: *mut dentry = unsafe {
-        // arg.0 of file_open is a file
-        let file_ptr: *const file = ctx.arg(0);
-        (*file_ptr).__bindgen_anon_1.f_path.dentry
-    };
+    let file_ptr: *const file = ctx.arg(0);
+    if file_ptr.is_null() {
+        return ReturnCode::SUCCESS;
+    }
+
+    let d: *mut dentry = unsafe { (*file_ptr).__bindgen_anon_1.f_path.dentry };
 
     // if no dentry, exit
     if d.is_null() {
@@ -251,6 +252,9 @@ unsafe fn try_inode_getattr(ctx: LsmContext) -> Result<i32, i32> {
     }
 
     let path_ptr: *const path = ctx.arg(0);
+    if path_ptr.is_null() {
+        return ReturnCode::SUCCESS;
+    }
 
     let dentry_ptr: *mut dentry = unsafe { (*path_ptr).dentry };
 

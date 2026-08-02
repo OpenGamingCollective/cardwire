@@ -193,15 +193,17 @@ impl EbpfBlocker {
             .map_err(CardwireEbpfError::aya)
     }
 
+    /// Turn a comm string into a 16-byte key with a guaranteed terminating NUL
+    pub fn comm_to_key(comm: &str) -> [u8; 16] {
+        let mut key = [0u8; 16];
+        let bytes = comm.as_bytes();
+        let len = bytes.len().min(15);
+        key[..len].copy_from_slice(&bytes[..len]);
+        key
+    }
+
     pub fn allow_comm(&mut self, comm: &str) -> CardwireEbpfResult<()> {
-        // turn the comm str into a char[16]
-        let comm = {
-            let mut key = [0u8; 16];
-            let bytes = comm.as_bytes();
-            let len = bytes.len().min(16);
-            key[..len].copy_from_slice(&bytes[..len]);
-            key
-        };
+        let comm = Self::comm_to_key(comm);
         let mut allowed_comm_map: HashMap<_, [u8; 16], u8> = HashMap::try_from(
             self.ebpf
                 .map_mut("CW_ALLOWED_COMM")
@@ -361,9 +363,37 @@ impl EbpfBlocker {
             Ok(fd) => fd,
             Err(err) => {
                 error!("couldn't get the async_fd for ebpf_logger");
-                Err(CardwireEbpfError::aya(err))
-            }?,
+                return Err(CardwireEbpfError::aya(err));
+            }
         };
         Ok(async_fd)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_comm_to_key_short_string() {
+        let key = EbpfBlocker::comm_to_key("pacman");
+        assert_eq!(&key[..6], b"pacman");
+        assert_eq!(&key[6..], &[0u8; 10]);
+    }
+
+    #[test]
+    fn test_comm_to_key_exact_15_bytes() {
+        let name = "123456789012345";
+        let key = EbpfBlocker::comm_to_key(name);
+        assert_eq!(&key[..15], name.as_bytes());
+        assert_eq!(key[15], 0);
+    }
+
+    #[test]
+    fn test_comm_to_key_truncates_to_15_bytes_reserving_nul() {
+        let name = "1234567890123456789";
+        let key = EbpfBlocker::comm_to_key(name);
+        assert_eq!(&key[..15], b"123456789012345");
+        assert_eq!(key[15], 0);
     }
 }
