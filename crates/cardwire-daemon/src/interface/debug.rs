@@ -10,12 +10,13 @@ use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface, Modes}
+    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface, ModeInterface, Modes}
 };
 
 #[derive(Clone)]
 pub struct DebugInterface {
     pub mode_state: Arc<RwLock<CardwireModeState>>,
+    pub mode_interface: ModeInterface,
     pub gpu_state: Arc<RwLock<CardwireGpuState>>,
     pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
     pub config: Arc<ConfigMemory>,
@@ -28,6 +29,7 @@ impl DebugInterface {
     #[allow(clippy::too_many_arguments)]
     pub fn build(
         mode_state: Arc<RwLock<CardwireModeState>>,
+        mode_interface: ModeInterface,
         gpu_state: Arc<RwLock<CardwireGpuState>>,
         gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
         config: Arc<ConfigMemory>,
@@ -38,6 +40,7 @@ impl DebugInterface {
     ) -> anyhow::Result<DebugInterface> {
         Ok(DebugInterface {
             mode_state,
+            mode_interface,
             gpu_state,
             gpu_list,
             config,
@@ -126,7 +129,7 @@ impl DebugInterface {
                 warn!("Failed to determine default GPU: {}", err);
             }
 
-            let mode = self.mode_state.read().await.mode();
+            let mode = self.mode_interface.current_mode_value().await;
             let config = self
                 .config
                 .auto_apply_gpu_state

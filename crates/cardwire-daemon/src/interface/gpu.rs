@@ -1,9 +1,7 @@
 //! DBUS Interface for single gpu interaction
 
 use std::{
-    collections::{BTreeMap, HashMap}, ffi::OsStr, fs::{self, read_dir}, path::{Path, PathBuf}, sync::{
-        Arc, atomic::{AtomicBool, Ordering}
-    }
+    collections::{BTreeMap, HashMap}, ffi::OsStr, fs::{self, read_dir}, path::{Path, PathBuf}, sync::Arc
 };
 
 use crate::{
@@ -37,7 +35,6 @@ pub struct GpuInterface {
     pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     mode_state: Arc<RwLock<CardwireModeState>>,
-    external_display_required: Arc<AtomicBool>,
 }
 
 impl GpuInterface {
@@ -56,17 +53,7 @@ impl GpuInterface {
             pci_list,
             gpu_state,
             mode_state,
-            external_display_required: Arc::new(AtomicBool::new(false)),
         })
-    }
-
-    pub fn external_display_required(&self) -> bool {
-        self.external_display_required.load(Ordering::Relaxed)
-    }
-
-    pub fn set_external_display_required(&self, required: bool) {
-        self.external_display_required
-            .store(required, Ordering::Relaxed);
     }
 }
 
@@ -300,12 +287,6 @@ impl GpuInterface {
             ));
         }
         drop(mode);
-        if block && self.external_display_required() {
-            return Err(fdo::Error::AccessDenied(format!(
-                "GPU {} is required by a connected external display and cannot be blocked",
-                self.device.name()
-            )));
-        }
         if block {
             // Don't block if default
             if self.device.is_default() {

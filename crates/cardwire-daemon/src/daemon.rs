@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
             "/com/github/opengamingcollective/cardwire",
         )
         .await?;
-    task::spawn(daemon.battery_switch_future(mode_interface.clone()));
+    task::spawn(daemon.battery_switch_future());
     task::spawn(daemon.monitor_udev_future());
     task::spawn(daemon.monitor_display_future(mode_interface));
     task::spawn(daemon.run_analyzer());

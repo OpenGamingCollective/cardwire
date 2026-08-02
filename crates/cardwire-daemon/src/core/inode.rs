@@ -163,10 +163,12 @@ pub fn sys_drm_inodes(render: u32, card: u32) -> Result<Vec<u64>> {
     let mut inodes = Vec::new();
     let sys_path = Path::new("/sys/class/drm");
 
+    let card = format!("card{}", card);
+    let render = format!("renderD{}", render);
     for entry in fs::read_dir(sys_path)? {
         let entry = entry?;
         if let Ok(entry_name) = entry.file_name().into_string()
-            && is_drm_entry_for_device(&entry_name, render, card)
+            && (entry_name.contains(&card) || entry_name.contains(&render))
         {
             // we matched with the blocked device, get the inodes without following the link
             let inode_res = fs::symlink_metadata(entry.path());
@@ -177,47 +179,4 @@ pub fn sys_drm_inodes(render: u32, card: u32) -> Result<Vec<u64>> {
     }
 
     Ok(inodes)
-}
-
-fn is_drm_entry_for_device(entry_name: &str, render: u32, card: u32) -> bool {
-    let card_name = format!("card{card}");
-
-    entry_name == card_name
-        || entry_name
-            .strip_prefix(&card_name)
-            .is_some_and(|suffix| suffix.starts_with('-'))
-        || entry_name == format!("renderD{render}")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_drm_entry_for_device;
-
-    #[test]
-    fn drm_entry_matches_exact_card_and_its_connectors() {
-        assert!(is_drm_entry_for_device("card1", 128, 1));
-        assert!(is_drm_entry_for_device("card1-HDMI-A-1", 128, 1));
-        assert!(is_drm_entry_for_device("card1-DP-2", 128, 1));
-        assert!(is_drm_entry_for_device("card1-Writeback-1", 128, 1));
-    }
-
-    #[test]
-    fn drm_entry_does_not_match_cards_with_the_same_numeric_prefix() {
-        assert!(!is_drm_entry_for_device("card10", 128, 1));
-        assert!(!is_drm_entry_for_device("card10-HDMI-A-1", 128, 1));
-        assert!(!is_drm_entry_for_device("card11-DP-1", 128, 1));
-    }
-
-    #[test]
-    fn drm_entry_matches_only_the_exact_render_node() {
-        assert!(is_drm_entry_for_device("renderD128", 128, 1));
-        assert!(!is_drm_entry_for_device("renderD1280", 128, 1));
-        assert!(!is_drm_entry_for_device("renderD12", 128, 1));
-    }
-
-    #[test]
-    fn drm_entry_rejects_unrelated_drm_entries() {
-        assert!(!is_drm_entry_for_device("controlD64", 128, 1));
-        assert!(!is_drm_entry_for_device("version", 128, 1));
-    }
 }

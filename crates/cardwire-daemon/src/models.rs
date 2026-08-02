@@ -94,6 +94,7 @@ impl DaemonManager {
             )?,
             debug_interface: DebugInterface::build(
                 Arc::clone(&mode_state),
+                mode_interface.clone(),
                 Arc::clone(&gpu_state),
                 Arc::clone(&gpu_interfaces),
                 Arc::clone(&user_config),
@@ -225,17 +226,11 @@ impl DaemonManager {
         }
         Ok(())
     }
-    pub fn battery_switch_future(
-        &self,
-        mode_interface: InterfaceRef<ModeInterface>,
-    ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
+    pub fn battery_switch_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let auto_switch = Arc::clone(&self.inner.config.battery_auto_switch);
         let auto_switch_mode = Arc::clone(&self.inner.config.battery_auto_switch_mode);
-        let mode = self.mode_interface.clone();
         async move {
-            let res =
-                tasks::watch_battery_status(auto_switch, auto_switch_mode, mode, mode_interface)
-                    .await;
+            let res = tasks::watch_battery_status(auto_switch, auto_switch_mode).await;
             if let Err(ref e) = res {
                 error!("battery_switch task failed: {}", e);
             }

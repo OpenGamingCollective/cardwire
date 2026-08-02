@@ -1,8 +1,8 @@
 //! Monitor DRM topology and apply automatic external-display mode changes.
 
-use std::{collections::BTreeSet, time::Duration};
+use std::time::Duration;
 
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use tokio::{
     io::{Interest, unix::AsyncFd}, time::Instant
 };
@@ -15,176 +15,86 @@ const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 const DISPLAY_RESTORE_QUIET_PERIOD: Duration = Duration::from_secs(5);
 
 #[derive(Default)]
-struct DisplayRestoreGuard {
-    deadline: Option<Instant>,
-}
-
-impl DisplayRestoreGuard {
-    fn defer(&mut self, now: Instant, restart: bool) {
-        if restart || self.deadline.is_none() {
-            self.deadline = Some(now + DISPLAY_RESTORE_QUIET_PERIOD);
-        }
-    }
-
-    fn cancel(&mut self) -> bool {
-        self.deadline.take().is_some()
-    }
-
-    fn deadline(&self) -> Option<Instant> {
-        self.deadline
-    }
-
-    fn is_pending(&self) -> bool {
-        self.deadline.is_some()
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum TopologyChange {
-    Initialize,
-    Connected,
-    Disconnected,
-    Changed,
-    Unchanged,
-}
-
-fn topology_change(
-    previous: Option<&BTreeSet<u32>>,
-    cards: &BTreeSet<u32>,
-) -> TopologyChange {
-    match previous {
-        None => TopologyChange::Initialize,
-        Some(previous) if previous.is_empty() && !cards.is_empty() => TopologyChange::Connected,
-        Some(previous) if !previous.is_empty() && cards.is_empty() => {
-            TopologyChange::Disconnected
-        }
-        Some(previous) if previous != cards => TopologyChange::Changed,
-        Some(_) => TopologyChange::Unchanged,
-    }
-}
-
 struct DisplayMonitorState {
-    last_cards: Option<BTreeSet<u32>>,
-    restore: DisplayRestoreGuard,
+    last_connected: Option<bool>,
+    restore_deadline: Option<Instant>,
 }
 
 impl DisplayMonitorState {
-    fn new(last_cards: Option<BTreeSet<u32>>) -> Self {
-        Self {
-            last_cards,
-            restore: DisplayRestoreGuard::default(),
+    fn record_topology(
+        &mut self,
+        connected: bool,
+        topology_event: bool,
+        enabled: bool,
+        now: Instant,
+    ) -> bool {
+        let previous = self.last_connected.replace(connected);
+
+        if !enabled {
+            self.restore_deadline = None;
+            return true;
+        }
+
+        if connected {
+            self.restore_deadline = None;
+            return true;
+        }
+
+        if previous.is_none()
+            || previous == Some(true)
+            || (topology_event && self.restore_deadline.is_some())
+        {
+            self.restore_deadline = Some(now + DISPLAY_RESTORE_QUIET_PERIOD);
+            false
+        } else {
+            self.restore_deadline.is_none()
         }
     }
 }
 
-async fn apply_automatic_mode(
-    mode: &ModeInterface,
-    interface: &InterfaceRef<ModeInterface>,
-    cards: &BTreeSet<u32>,
-) -> bool {
-    match mode.reconcile_external_display_cards(cards).await {
+async fn apply_automatic_mode(mode: &ModeInterface, interface: &InterfaceRef<ModeInterface>) {
+    match mode.reconcile_external_display().await {
         Ok(changed) => {
             if let Err(err) = mode.emit_mode_change(interface, changed).await {
                 error!("failed to emit automatic mode change: {err}");
             }
-            true
         }
-        Err(err) => {
-            warn!("failed to apply automatic external-display mode: {err}");
-            false
-        }
+        Err(err) => warn!("failed to apply automatic external-display mode: {err}"),
     }
 }
 
-async fn reconcile_display_topology(
+async fn observe_topology(
     mode: &ModeInterface,
     interface: &InterfaceRef<ModeInterface>,
     state: &mut DisplayMonitorState,
     topology_event: bool,
 ) {
-    let cards = match mode.required_external_cards().await {
-        Ok(cards) => cards,
-        Err(err) => {
-            warn!("failed to inspect external display topology: {err}");
-            return;
-        }
-    };
-
-    if !mode.external_display_auto_switch_enabled() {
-        if state.restore.cancel() {
-            info!("external-display mode restoration canceled because auto-switch is disabled");
-        }
-        state.last_cards = Some(cards);
-        return;
-    }
-
-    match topology_change(state.last_cards.as_ref(), &cards) {
-        TopologyChange::Initialize | TopologyChange::Connected | TopologyChange::Changed => {
-            if state.restore.cancel() {
-                info!("external display reconnected; pending mode restoration canceled");
-            }
-            if apply_automatic_mode(mode, interface, &cards).await {
-                state.last_cards = Some(cards);
+    let enabled = mode.external_display_monitor_enabled().await;
+    let connected = if enabled {
+        match mode.required_external_display_connected().await {
+            Ok(connected) => connected,
+            Err(err) => {
+                warn!("failed to inspect external display topology: {err}");
+                return;
             }
         }
-        TopologyChange::Disconnected => {
-            state.last_cards = Some(BTreeSet::new());
-            state.restore.defer(Instant::now(), true);
-            info!(
-                "external dGPU display disconnected; restoring the configured mode after {} seconds",
-                DISPLAY_RESTORE_QUIET_PERIOD.as_secs()
-            );
-        }
-        TopologyChange::Unchanged => {
-            if cards.is_empty() && state.restore.is_pending() && topology_event {
-                state.restore.defer(Instant::now(), true);
-                debug!(
-                    "DRM topology changed while mode restoration was pending; restarting the quiet period"
-                );
-            }
-        }
-    }
-}
-
-async fn restore_mode_after_settle(
-    mode: &ModeInterface,
-    interface: &InterfaceRef<ModeInterface>,
-    state: &mut DisplayMonitorState,
-) {
-    state.restore.cancel();
-
-    if !mode.external_display_auto_switch_enabled() {
-        return;
-    }
-
-    let cards = match mode.required_external_cards().await {
-        Ok(cards) => cards,
-        Err(err) => {
-            warn!("failed to verify external display topology: {err}");
-            state.restore.defer(Instant::now(), false);
-            return;
-        }
-    };
-
-    if !cards.is_empty() {
-        info!("external display reconnected before mode restoration");
-        if apply_automatic_mode(mode, interface, &cards).await {
-            state.last_cards = Some(cards);
-        } else {
-            state.last_cards = Some(BTreeSet::new());
-        }
-        return;
-    }
-
-    info!("external display topology settled; restoring the previous mode and GPU state");
-    if apply_automatic_mode(mode, interface, &cards).await {
-        state.last_cards = Some(BTreeSet::new());
     } else {
-        state.restore.defer(Instant::now(), false);
-        warn!(
-            "previous mode and GPU state restoration failed; retrying in {} seconds",
+        false
+    };
+    let previous = state.last_connected;
+    let reconcile = state.record_topology(connected, topology_event, enabled, Instant::now());
+
+    if enabled && previous == Some(true) && !connected {
+        info!(
+            "external dGPU display disconnected; restoring the configured mode after {} seconds",
             DISPLAY_RESTORE_QUIET_PERIOD.as_secs()
         );
+    }
+    if previous == Some(false) && connected {
+        info!("external display reconnected; pending mode restoration canceled");
+    }
+    if reconcile {
+        apply_automatic_mode(mode, interface).await;
     }
 }
 
@@ -196,52 +106,37 @@ async fn run_display_monitor(
     let drm_fd = AsyncFd::new(drm_monitor.listen()?)?;
     let mut retry = tokio::time::interval(RETRY_INTERVAL);
     retry.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let initial_cards = mode.required_external_cards().await.ok();
-    let mut display_state = DisplayMonitorState::new(initial_cards);
+    let mut state = DisplayMonitorState::default();
+
+    observe_topology(mode, mode_interface, &mut state, false).await;
 
     loop {
-        let restore_deadline = display_state
-            .restore
-            .deadline()
-            .unwrap_or_else(Instant::now);
+        let restore_deadline = state.restore_deadline.unwrap_or_else(Instant::now);
         tokio::select! {
             ready = drm_fd.ready(Interest::READABLE) => {
                 let mut guard = ready?;
-                let mut reconcile = false;
+                let mut topology_event = false;
                 if guard.ready().is_readable() {
                     for event in drm_fd.get_ref().iter() {
-                        if event.action().is_some_and(|action| {
+                        topology_event |= event.action().is_some_and(|action| {
                             action == "add" || action == "remove" || action == "change"
-                        }) {
-                            reconcile = true;
-                        }
+                        });
                     }
                 }
                 guard.clear_ready();
                 drop(guard);
 
-                if reconcile {
+                if topology_event {
                     tokio::time::sleep(DISPLAY_DEBOUNCE).await;
-                    reconcile_display_topology(
-                        mode,
-                        mode_interface,
-                        &mut display_state,
-                        true,
-                    )
-                    .await;
+                    observe_topology(mode, mode_interface, &mut state, true).await;
                 }
             }
             _ = retry.tick() => {
-                reconcile_display_topology(
-                    mode,
-                    mode_interface,
-                    &mut display_state,
-                    false,
-                )
-                .await;
+                observe_topology(mode, mode_interface, &mut state, false).await;
             }
-            _ = tokio::time::sleep_until(restore_deadline), if display_state.restore.is_pending() => {
-                restore_mode_after_settle(mode, mode_interface, &mut display_state).await;
+            _ = tokio::time::sleep_until(restore_deadline), if state.restore_deadline.is_some() => {
+                state.restore_deadline = None;
+                observe_topology(mode, mode_interface, &mut state, false).await;
             }
         }
     }
@@ -266,81 +161,42 @@ pub async fn monitor_display_changes(
 mod tests {
     use super::*;
 
-    fn cards(cards: &[u32]) -> BTreeSet<u32> {
-        cards.iter().copied().collect()
-    }
-
     #[test]
-    fn topology_changes_track_the_required_card_set() {
-        let empty = cards(&[]);
-        let card_one = cards(&[1]);
-        let card_two = cards(&[2]);
-
-        assert_eq!(topology_change(None, &empty), TopologyChange::Initialize);
-        assert_eq!(
-            topology_change(Some(&empty), &card_one),
-            TopologyChange::Connected
-        );
-        assert_eq!(
-            topology_change(Some(&card_one), &empty),
-            TopologyChange::Disconnected
-        );
-        assert_eq!(
-            topology_change(Some(&card_one), &card_two),
-            TopologyChange::Changed
-        );
-        assert_eq!(
-            topology_change(Some(&card_one), &card_one),
-            TopologyChange::Unchanged
-        );
-    }
-
-    #[test]
-    fn self_replayed_drm_event_does_not_create_a_new_topology_edge() {
-        let connected_cards = cards(&[1, 2]);
-        assert_eq!(
-            topology_change(Some(&connected_cards), &connected_cards),
-            TopologyChange::Unchanged
-        );
-    }
-
-    #[test]
-    fn topology_event_restarts_restore_quiet_period() {
+    fn disconnect_waits_and_repeated_event_restarts_deadline() {
         let start = Instant::now();
-        let mut guard = DisplayRestoreGuard::default();
-        guard.defer(start, true);
-        let first_deadline = guard.deadline().unwrap();
+        let mut state = DisplayMonitorState {
+            last_connected: Some(true),
+            ..DisplayMonitorState::default()
+        };
 
-        let second_event = start + Duration::from_secs(1);
-        guard.defer(second_event, true);
-
-        assert_eq!(
-            guard.deadline(),
-            Some(second_event + DISPLAY_RESTORE_QUIET_PERIOD)
-        );
-        assert!(guard.deadline().unwrap() > first_deadline);
+        assert!(!state.record_topology(false, true, true, start));
+        let first = state.restore_deadline.unwrap();
+        assert!(!state.record_topology(false, true, true, start + Duration::from_secs(1)));
+        assert!(state.restore_deadline.unwrap() > first);
     }
 
     #[test]
     fn retry_does_not_extend_pending_restore() {
         let start = Instant::now();
-        let mut guard = DisplayRestoreGuard::default();
-        guard.defer(start, false);
-        guard.defer(start, false);
-        let deadline = guard.deadline();
+        let mut state = DisplayMonitorState::default();
+        assert!(!state.record_topology(false, false, true, start));
+        let deadline = state.restore_deadline;
 
-        guard.defer(start + Duration::from_secs(2), false);
-
-        assert_eq!(guard.deadline(), deadline);
+        assert!(!state.record_topology(false, false, true, start + Duration::from_secs(2)));
+        assert_eq!(state.restore_deadline, deadline);
     }
 
     #[test]
-    fn reconnect_cancels_pending_restore() {
-        let mut guard = DisplayRestoreGuard::default();
-        guard.defer(Instant::now(), false);
+    fn reconnect_or_disable_cancels_pending_restore() {
+        let start = Instant::now();
+        let mut state = DisplayMonitorState::default();
+        state.record_topology(false, false, true, start);
 
-        assert!(guard.cancel());
-        assert!(!guard.is_pending());
-        assert!(!guard.cancel());
+        assert!(state.record_topology(true, true, true, start));
+        assert!(state.restore_deadline.is_none());
+
+        state.record_topology(false, true, true, start);
+        assert!(state.record_topology(false, false, false, start));
+        assert!(state.restore_deadline.is_none());
     }
 }
