@@ -56,9 +56,9 @@ pub fn tray_sub() -> Subscription<Message> {
 // CardwireMode is used to listen to mode change signals
 
 #[proxy(
-    default_service = "com.github.opengamingcollective.cardwire",
-    default_path = "/com/github/opengamingcollective/cardwire",
-    interface = "com.github.opengamingcollective.cardwire.Mode"
+    default_service = "org.opengamingcollective.cardwire",
+    default_path = "/org/opengamingcollective/cardwire",
+    interface = "org.opengamingcollective.cardwire.Mode"
 )]
 // org.freedesktop.DBus.Properties
 trait CardwireMode {
@@ -125,9 +125,9 @@ fn mode_sub() -> Subscription<Message> {
 
 // CardwireSetting is used to listen to config changes signal
 #[proxy(
-    default_service = "com.github.opengamingcollective.cardwire",
-    default_path = "/com/github/opengamingcollective/cardwire",
-    interface = "com.github.opengamingcollective.cardwire.Config"
+    default_service = "org.opengamingcollective.cardwire",
+    default_path = "/org/opengamingcollective/cardwire",
+    interface = "org.opengamingcollective.cardwire.Config"
 )]
 trait CardwireConfig {
     #[zbus(property)]
@@ -218,8 +218,8 @@ fn config_sub() -> Subscription<Message> {
 // daemon doesn't send signal on gpu_refresh event, will be implemented later
 // for now this one implement power_state and block
 #[proxy(
-    default_service = "com.github.opengamingcollective.cardwire",
-    default_path = "/com/github/opengamingcollective/cardwire",
+    default_service = "org.opengamingcollective.cardwire",
+    default_path = "/org/opengamingcollective/cardwire",
     interface = "org.freedesktop.DBus.ObjectManager"
 )]
 trait CardwireGpuInt {
@@ -277,15 +277,15 @@ fn gpu_sub() -> Subscription<Message> {
             for (path, _) in gpu_objects {
                 let path_str = path.as_str();
                 if let Some(id_str) =
-                    path_str.strip_prefix("/com/github/opengamingcollective/cardwire/Gpu/")
+                    path_str.strip_prefix("/org/opengamingcollective/cardwire/Gpu/")
                     && let Ok(id) = id_str.parse::<u32>()
                 {
-                    let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+                    let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
                     let gpu_proxy = match Proxy::new(
                         &connection,
-                        "com.github.opengamingcollective.cardwire",
+                        "org.opengamingcollective.cardwire",
                         path,
-                        "com.github.opengamingcollective.cardwire.Gpu",
+                        "org.opengamingcollective.cardwire.Gpu",
                     )
                     .await
                     {
@@ -364,9 +364,9 @@ fn gpu_sub() -> Subscription<Message> {
 }
 
 #[proxy(
-    default_service = "com.github.opengamingcollective.cardwire",
-    default_path = "/com/github/opengamingcollective/cardwire",
-    interface = "com.github.opengamingcollective.cardwire.Debug"
+    default_service = "org.opengamingcollective.cardwire",
+    default_path = "/org/opengamingcollective/cardwire",
+    interface = "org.opengamingcollective.cardwire.Debug"
 )]
 trait CardwireDebug {
     fn get_pci_devices(&self) -> zbus::Result<BTreeMap<String, PciDevice>>;

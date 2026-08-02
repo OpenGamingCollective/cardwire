@@ -24,9 +24,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn connect(connection: &'a Connection) -> zbus::Result<Self> {
         let proxy = zbus::Proxy::new(
             connection,
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire",
         )
         .await?;
 
@@ -45,20 +45,20 @@ impl<'a> DaemonClient<'a> {
         >,
     > {
         let proxy = zbus::fdo::ObjectManagerProxy::builder(self.proxy.connection())
-            .destination("com.github.opengamingcollective.cardwire")?
-            .path("/com/github/opengamingcollective/cardwire")?
+            .destination("org.opengamingcollective.cardwire")?
+            .path("/org/opengamingcollective/cardwire")?
             .build()
             .await?;
         proxy.get_managed_objects().await
     }
 
     pub async fn get_device(&self, id: u32) -> zbus::Result<DbusGpuDevice> {
-        let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
+            "org.opengamingcollective.cardwire",
             path.as_str(),
-            "com.github.opengamingcollective.cardwire.Gpu",
+            "org.opengamingcollective.cardwire.Gpu",
         )
         .await?;
         proxy.call("GetDevice", &()).await
@@ -66,9 +66,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn get_pci_device(&self) -> zbus::Result<BTreeMap<String, PciDevice>> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Debug",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Debug",
         )
         .await?;
         proxy.call("GetPciDevices", &()).await
@@ -77,9 +77,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn set_mode(&self, mode: &u32) -> zbus::fdo::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Mode",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Mode",
         )
         .await
         .map_err(|e| zbus::fdo::Error::Failed(format!("Failed to create Mode proxy: {}", e)))?;
@@ -89,21 +89,21 @@ impl<'a> DaemonClient<'a> {
     pub async fn get_mode(&self) -> zbus::Result<u32> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Mode",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Mode",
         )
         .await?;
         proxy.get_property("Mode").await
     }
 
     pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::fdo::Result<()> {
-        let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
         let block_proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
+            "org.opengamingcollective.cardwire",
             path.as_str(),
-            "com.github.opengamingcollective.cardwire.Gpu",
+            "org.opengamingcollective.cardwire.Gpu",
         )
         .await
         .map_err(|e| zbus::fdo::Error::Failed(format!("Failed to create proxy: {}", e)))?;
@@ -111,12 +111,12 @@ impl<'a> DaemonClient<'a> {
     }
 
     pub async fn get_power_state(&self, id: u32) -> zbus::Result<String> {
-        let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
+            "org.opengamingcollective.cardwire",
             path.as_str(),
-            "com.github.opengamingcollective.cardwire.Gpu",
+            "org.opengamingcollective.cardwire.Gpu",
         )
         .await?;
         proxy.call("PowerState", &()).await
@@ -126,12 +126,12 @@ impl<'a> DaemonClient<'a> {
         &self,
         id: u32,
     ) -> zbus::Result<std::collections::HashMap<String, Vec<String>>> {
-        let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
+            "org.opengamingcollective.cardwire",
             path.as_str(),
-            "com.github.opengamingcollective.cardwire.Gpu",
+            "org.opengamingcollective.cardwire.Gpu",
         )
         .await?;
         proxy.call("Lsof", &()).await
@@ -140,9 +140,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn get_auto_apply_gpu_state(&self) -> zbus::Result<bool> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await?;
         proxy.get_property("AutoApplyGpuState").await
@@ -150,9 +150,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn set_auto_apply_gpu_state(&self, state: bool) -> zbus::fdo::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await
         .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
@@ -162,9 +162,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn get_experimental_nvidia_block(&self) -> zbus::Result<bool> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await?;
         proxy.get_property("ExperimentalNvidiaBlock").await
@@ -172,9 +172,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn set_experimental_nvidia_block(&self, state: bool) -> zbus::fdo::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await
         .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
@@ -184,9 +184,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn get_battery_auto_switch(&self) -> zbus::Result<bool> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await?;
         proxy.get_property("BatteryAutoSwitch").await
@@ -194,9 +194,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn set_battery_auto_switch(&self, state: bool) -> zbus::fdo::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await
         .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
@@ -205,9 +205,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn get_battery_auto_switch_mode(&self) -> zbus::Result<u32> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await?;
         proxy.get_property("BatteryAutoSwitchMode").await
@@ -215,9 +215,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn set_battery_auto_switch_mode(&self, mode: &u32) -> zbus::fdo::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await
         .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
@@ -226,9 +226,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn save_to_file(&self) -> zbus::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await?;
         proxy.call("SaveToFile", &()).await
@@ -237,9 +237,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn manager_status(&self) -> zbus::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Manager",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Manager",
         )
         .await?;
         proxy.call("Status", &()).await
@@ -248,9 +248,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn diagnostic_gpu(&self) -> zbus::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Debug",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Debug",
         )
         .await?;
         proxy.call("DiagnosticGpu", &()).await
@@ -259,9 +259,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn refresh_gpu(&self) -> zbus::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Debug",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Debug",
         )
         .await?;
         proxy.call("RefreshGpu", &()).await

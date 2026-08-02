@@ -145,7 +145,7 @@ impl ModeInterface {
     }
 }
 
-#[interface(name = "com.github.opengamingcollective.cardwire.Mode")]
+#[interface(name = "org.opengamingcollective.cardwire.Mode")]
 impl ModeInterface {
     /*
         Set the mode

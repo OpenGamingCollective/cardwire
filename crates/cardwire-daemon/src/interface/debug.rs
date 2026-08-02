@@ -49,7 +49,7 @@ impl DebugInterface {
     }
 }
 
-#[interface(name = "com.github.opengamingcollective.cardwire.Debug")]
+#[interface(name = "org.opengamingcollective.cardwire.Debug")]
 impl DebugInterface {
     pub async fn get_pci_devices(&self) -> fdo::Result<BTreeMap<String, DbusPciDevice>> {
         let pci_list = &self.pci_list.read().await;
@@ -96,7 +96,7 @@ impl DebugInterface {
 
             // get rid of the old gpu api and the old tasks
             for id in gpu_interfaces.keys() {
-                let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+                let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
                 let _ = object_server.remove::<GpuInterface, &str>(&path).await;
                 // if task is present, abort
                 if let Some(handle) = power_tasks.remove(id) {
@@ -158,7 +158,7 @@ impl DebugInterface {
             }
             // now re-populate the gpu api
             for (id, gpu_interface) in gpu_interfaces.iter() {
-                let path = format!("/com/github/opengamingcollective/cardwire/Gpu/{}", id);
+                let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
                 object_server
                     .at(path.clone(), gpu_interface.clone())
                     .await?;

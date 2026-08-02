@@ -47,14 +47,14 @@ assets = [
     ["target/release/cardwire-gui", "usr/bin/", "755"],
     ["../../assets/cardwired.service", "usr/lib/systemd/system/", "644"],
     ["../../assets/99-cardwired.preset", "usr/lib/systemd/system-preset/", "644"],
-    ["../../assets/com.github.opengamingcollective.cardwire.conf", "usr/share/dbus-1/system.d/", "644"],
+    ["../../assets/org.opengamingcollective.cardwire.conf", "usr/share/dbus-1/system.d/", "644"],
     ["../../assets/cardwire-gui.desktop", "usr/share/applications/", "644"],
-    ["../../assets/com.github.opengamingcollective.cardwire.metainfo.xml", "usr/share/metainfo/", "644"],
-    ["../../assets/icons/com.github.opengamingcollective.cardwire.tray.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["../../assets/icons/com.github.opengamingcollective.cardwire.tray-integrated.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["../../assets/icons/com.github.opengamingcollective.cardwire.tray-hybrid.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["../../assets/icons/com.github.opengamingcollective.cardwire.tray-manual.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["../../assets/icons/com.github.opengamingcollective.cardwire.tray-smart.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["../../assets/org.opengamingcollective.cardwire.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["../../assets/icons/org.opengamingcollective.cardwire.tray.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["../../assets/icons/org.opengamingcollective.cardwire.tray-integrated.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["../../assets/icons/org.opengamingcollective.cardwire.tray-hybrid.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["../../assets/icons/org.opengamingcollective.cardwire.tray-manual.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["../../assets/icons/org.opengamingcollective.cardwire.tray-smart.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
 ]
 maintainer-scripts = "../../packages/debian/DEBIAN"
 changelog = "../../packages/debian/changelog"

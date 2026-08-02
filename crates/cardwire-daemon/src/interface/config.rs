@@ -50,7 +50,7 @@ impl ConfigInterface {
     }
 }
 
-#[interface(name = "com.github.opengamingcollective.cardwire.Config")]
+#[interface(name = "org.opengamingcollective.cardwire.Config")]
 impl ConfigInterface {
     // getters
     #[zbus(property)]

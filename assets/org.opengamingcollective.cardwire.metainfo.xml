@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <component type="desktop-application">
-  <id>com.github.opengamingcollective.cardwire</id>
+  <id>org.opengamingcollective.cardwire</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <!-- Temporary until we have an icon -->
-  <icon type="local">/usr/share/icons/hicolor/scalable/apps/com.github.opengamingcollective.cardwire.tray.svg</icon>
+  <icon type="local">/usr/share/icons/hicolor/scalable/apps/org.opengamingcollective.cardwire.tray.svg</icon>
 
   <name>Cardwire</name>
   <summary>A GPU Manager for linux that uses eBPF LSM hooks to block GPUs</summary>
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/OpenGamingCollective/cardwire/metainfo-screenshot/assets/com.github.opengamingcollective.cardwire.screenshot.png</image>
+      <image>https://raw.githubusercontent.com/OpenGamingCollective/cardwire/metainfo-screenshot/assets/org.opengamingcollective.cardwire.screenshot.png</image>
     </screenshot>
   </screenshots>
 
