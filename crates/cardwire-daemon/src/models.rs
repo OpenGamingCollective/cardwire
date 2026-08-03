@@ -12,7 +12,7 @@ use log::error;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, task};
 use zbus::{
-    fdo::{self}, interface
+    fdo::{self}, interface, object_server::InterfaceRef
 };
 
 /// Contain the variable used by the daemon in daemon.rs
@@ -77,15 +77,17 @@ impl DaemonManager {
         let gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>> =
             Arc::new(RwLock::new(gpu_interfaces_map));
 
+        let mode_interface = ModeInterface::build(
+            Arc::clone(&mode_state),
+            Arc::clone(&gpu_state),
+            Arc::clone(&gpu_interfaces),
+            Arc::clone(&user_config),
+            Arc::clone(&blocker),
+        )
+        .await?;
+
         Ok(Self {
-            mode_interface: ModeInterface::build(
-                Arc::clone(&mode_state),
-                Arc::clone(&gpu_state),
-                Arc::clone(&gpu_interfaces),
-                Arc::clone(&user_config),
-                Arc::clone(&blocker),
-            )
-            .await?,
+            mode_interface: mode_interface.clone(),
             gpu_interfaces: Arc::clone(&gpu_interfaces),
             config_interface: ConfigInterface::build(
                 Arc::clone(&user_config),
@@ -93,6 +95,7 @@ impl DaemonManager {
             )?,
             debug_interface: DebugInterface::build(
                 Arc::clone(&mode_state),
+                mode_interface.clone(),
                 Arc::clone(&gpu_state),
                 Arc::clone(&gpu_interfaces),
                 Arc::clone(&user_config),
@@ -235,19 +238,18 @@ impl DaemonManager {
                 Modes::into(mode_lock.mode())
             }
         };
-        // store the result to return it later
+        let mode = Modes::try_from(mode_to_apply).map_err(anyhow::Error::msg)?;
+        // Store the result to return after any fallback mode state has been updated.
         let res = self
             .mode_interface
-            .set_mode(mode_to_apply)
+            .apply_mode_at_startup(mode, true)
             .await
-            .map_err(|err| err.into());
-        // If a mode was supplied as arg and we can convert u32 -> Modes, we bring back the user
-        // configured mode
-        if mode_arg.is_some()
-            && let Ok(mode_var) = Modes::try_from(mode_to_apply)
-        {
+            .map_err(anyhow::Error::from);
+        // If the configured mode failed, persist the supplied fallback instead of retrying the
+        // failing mode on every daemon start.
+        if mode_arg.is_some() {
             let mut mode_lock = self.inner.mode_state.write().await;
-            mode_lock.save_state(mode_var).await?;
+            mode_lock.save_state(mode).await?;
         }
         res
     }
@@ -268,6 +270,20 @@ impl DaemonManager {
             let res = tasks::monitor_pci_changes(debug_int).await;
             if let Err(ref e) = res {
                 error!("monitor_udev task failed: {}", e);
+            }
+            res
+        }
+    }
+    pub fn monitor_display_future(
+        &self,
+        mode_interface: InterfaceRef<ModeInterface>,
+    ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
+        // Clone the shared D-Bus interface into the long-running monitor task.
+        let mode = self.mode_interface.clone();
+        async move {
+            let res = tasks::monitor_display_changes(mode, mode_interface).await;
+            if let Err(ref e) = res {
+                error!("monitor_display task failed: {}", e);
             }
             res
         }

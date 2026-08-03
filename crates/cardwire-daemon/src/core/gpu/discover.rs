@@ -32,6 +32,59 @@ pub fn read_gpu(
     Ok(gpus)
 }
 
+/// Return whether a DRM card currently owns a connected physical external display.
+///
+/// Connector ownership is encoded in sysfs names such as `card1-HDMI-A-1`. Internal panels and
+/// virtual connectors are excluded so only physical external outputs keep the card available.
+pub fn external_display_connected(card: u32) -> io::Result<bool> {
+    // These connector types are internal panels or do not represent a physical display output.
+    const NON_EXTERNAL: &[&str] = &[
+        "eDP-",
+        "LVDS-",
+        "DSI-",
+        "DPI-",
+        "SPI-",
+        "Virtual-",
+        "Unknown-",
+        "Writeback-",
+    ];
+    let card_prefix = format!("card{card}-");
+    // An unreadable status is not proof of a disconnect. Keep the first error while checking
+    // whether another connector can still confirm that the card is in use.
+    let mut status_error = None;
+
+    for entry in fs::read_dir("/sys/class/drm")? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let Some(connector) = name.strip_prefix(&card_prefix) else {
+            continue;
+        };
+        if connector.is_empty()
+            || NON_EXTERNAL
+                .iter()
+                .any(|prefix| connector.starts_with(prefix))
+        {
+            continue;
+        }
+
+        match fs::read_to_string(entry.path().join("status")) {
+            // A confirmed connection takes precedence over errors from other connectors.
+            Ok(status) if status.trim() == "connected" => return Ok(true),
+            Ok(_) => {}
+            Err(err) => {
+                status_error.get_or_insert(err);
+            }
+        }
+    }
+
+    // Fail safely instead of allowing incomplete topology information to block a display GPU.
+    match status_error {
+        Some(err) => Err(err),
+        None => Ok(false),
+    }
+}
+
 /// Take a pci device and build a gpu device from it
 fn build_gpu(device: &PciDevice) -> io::Result<GpuDevice> {
     let gpu_vendor = match device.vendor_id() {

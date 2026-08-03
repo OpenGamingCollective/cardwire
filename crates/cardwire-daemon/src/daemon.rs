@@ -67,8 +67,14 @@ async fn main() -> Result<()> {
     let object_server: &zbus::ObjectServer = conn.object_server();
     spawn_dbus_api(object_server, &mut daemon).await?;
     // Spawn background tasks
+    // Automatic transitions happen outside a D-Bus call, so the monitor needs this reference to
+    // emit Mode property changes to clients.
+    let mode_interface = object_server
+        .interface::<_, crate::interface::ModeInterface>("/org/opengamingcollective/cardwire")
+        .await?;
     task::spawn(daemon.battery_switch_future());
     task::spawn(daemon.monitor_udev_future());
+    task::spawn(daemon.monitor_display_future(mode_interface));
     task::spawn(daemon.run_analyzer());
     info!("Daemon started succesfully");
     pending::<()>().await;
