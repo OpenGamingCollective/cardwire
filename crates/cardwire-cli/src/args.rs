@@ -80,6 +80,20 @@ pub enum Commands {
         action: DebugAction,
     },
 
+    #[command(about = "Launch a program on the specified GPU")]
+    Launch {
+        #[arg(long, help = "Select the gpu")]
+        gpu: Option<u32>,
+
+        #[arg(
+            required = true,
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "The program to launch and its arguments (e.g., `nvtop -s`)"
+        )]
+        program: Vec<String>,
+    },
+
     #[command(about = "Generate shell completions", hide = true)]
     Completion {
         #[arg(help = "The shell to generate the completions for")]

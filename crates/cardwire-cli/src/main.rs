@@ -6,6 +6,7 @@ mod display;
 use args::{Args, CliMode, Commands, ConfigAction, DebugAction, ManagerAction};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
+use zbus::zvariant::{self};
 
 use crate::display::print_devices_pci;
 
@@ -255,6 +256,88 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         },
+        Commands::Launch { gpu, program } => {
+            let available_gpu = client.get_gpu_switcheroo().await?;
+
+            #[derive(Debug)]
+            struct SwitcherooGpu {
+                name: String,
+                environment: Vec<String>,
+                default: bool,
+                discrete: bool,
+            }
+
+            let mut switcheroo_list: Vec<SwitcherooGpu> = Vec::new();
+
+            for gpu in available_gpu {
+                let mut parsed_gpu = SwitcherooGpu {
+                    name: String::new(),
+                    environment: Vec::new(),
+                    default: false,
+                    discrete: false,
+                };
+
+                for (key, value) in gpu.iter() {
+                    if *key == "Name" {
+                        if let Ok(s) = value.downcast_ref::<zvariant::Str>() {
+                            parsed_gpu.name = s.as_str().to_string();
+                        }
+                    } else if *key == "Environment" {
+                        if let Ok(arr) = value.downcast_ref::<zvariant::Array>() {
+                            let env_val: zvariant::Value<'_> = arr.into();
+                            if let Ok(env_vec) = env_val.try_into() {
+                                parsed_gpu.environment = env_vec;
+                            }
+                        }
+                    } else if *key == "Default"
+                        && let Ok(b) = value.downcast_ref::<bool>()
+                    {
+                        parsed_gpu.default = b;
+                    } else if *key == "Discrete"
+                        && let Ok(b) = value.downcast_ref::<bool>()
+                    {
+                        parsed_gpu.discrete = b;
+                    }
+                }
+
+                switcheroo_list.push(parsed_gpu);
+            }
+
+            let target_gpu = if let Some(gpu_id) = gpu {
+                switcheroo_list.get(gpu_id as usize)
+            } else {
+                switcheroo_list
+                    .iter()
+                    .find(|g| !g.default && g.discrete)
+                    .or_else(|| switcheroo_list.iter().find(|g| g.discrete))
+                    .or_else(|| switcheroo_list.iter().find(|g| g.default))
+                    .or_else(|| switcheroo_list.first())
+            };
+
+            if let Some(gpu) = target_gpu {
+                let mut command = std::process::Command::new(&program[0]);
+
+                if program.len() > 1 {
+                    command.args(&program[1..]);
+                }
+
+                for chunk in gpu.environment.chunks(2) {
+                    if let [key, value] = chunk {
+                        command.env(key, value);
+                    }
+                }
+                match command.status() {
+                    Ok(status) => {
+                        if !status.success() {
+                            eprintln!("Process exited with status: {}", status);
+                        }
+                    }
+                    Err(e) => eprintln!("Failed to launch process '{}': {}", program[0], e),
+                }
+            } else {
+                eprintln!("No GPUs found. Ensure cardwire is running.");
+            }
+        }
         Commands::CompleteGpus => {
             let objects = client.get_managed_objects().await.unwrap_or_default();
             for (path, _) in objects {
