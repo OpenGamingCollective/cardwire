@@ -1,12 +1,14 @@
 //! main lib code of cardwire-ebpf
 mod errors;
 
+use std::{fs, path::Path};
+
 pub use crate::errors::{CardwireEbpfError, CardwireEbpfResult};
 use aya::{
     Btf, Ebpf, maps::{Array, HashMap, MapError, RingBuf}, programs::{Lsm, TracePoint}
 };
 use aya_log::EbpfLogger;
-use log::{Log, error, info};
+use log::{Log, error, info, warn};
 use tokio::io::{Interest, unix::AsyncFd};
 
 pub enum EbpfSettings {
@@ -62,20 +64,14 @@ impl EbpfBlocker {
         close_program
             .attach("sched", "sched_process_exit")
             .map_err(CardwireEbpfError::aya)?;
-        // to hide files
-        let cardwire_sys_enter_getdents64: &mut TracePoint = ebpf
-            .program_mut("tracepoint_enter_getdents64")
-            .ok_or_else(|| CardwireEbpfError::missing_lsm("tracepoint_enter_getdents64"))?
-            .try_into()
-            .map_err(CardwireEbpfError::aya)?;
 
-        cardwire_sys_enter_getdents64
-            .load()
-            .map_err(CardwireEbpfError::aya)?;
+        /*
+           This part can get rejected by the kernel if the lockdown is enabled, we warn but we do not exit carwired, it will just run in a weakened state
+           sys_exit_getdents64 re-write userspace memory to hide an entry (file/folder), it can be rejected
+        */
 
-        cardwire_sys_enter_getdents64
-            .attach("syscalls", "sys_enter_getdents64")
-            .map_err(CardwireEbpfError::aya)?;
+        let mut did_sys_exit_getdents64_success = false;
+
         // to hide files
         let cardwire_sys_exit_getdents64: &mut TracePoint = ebpf
             .program_mut("tracepoint_exit_getdents64")
@@ -83,13 +79,57 @@ impl EbpfBlocker {
             .try_into()
             .map_err(CardwireEbpfError::aya)?;
 
-        cardwire_sys_exit_getdents64
+        // Try to load the program, if success attach it, else just warn the user
+        match cardwire_sys_exit_getdents64
             .load()
+            .map_err(CardwireEbpfError::aya)
+        {
+            Ok(_) => {
+                did_sys_exit_getdents64_success = true;
+                cardwire_sys_exit_getdents64
+                    .attach("syscalls", "sys_exit_getdents64")
+                    .map_err(CardwireEbpfError::aya)?;
+            }
+            Err(err) => {
+                // If we cannot load the program, it usually mean the kernel lockdown is enabled
+                let lockdown = is_lockdown_enabled();
+                warn!(
+                    "Failed to load sys_exit_getdents64. Lockdown status: {}",
+                    lockdown
+                );
+                warn!("{}", err);
+                warn!("falling back to a weakened cardwired...");
+            }
+        };
+        // to hide files
+        let cardwire_sys_enter_getdents64: &mut TracePoint = ebpf
+            .program_mut("tracepoint_enter_getdents64")
+            .ok_or_else(|| CardwireEbpfError::missing_lsm("tracepoint_enter_getdents64"))?
+            .try_into()
             .map_err(CardwireEbpfError::aya)?;
 
-        cardwire_sys_exit_getdents64
-            .attach("syscalls", "sys_exit_getdents64")
-            .map_err(CardwireEbpfError::aya)?;
+        if did_sys_exit_getdents64_success {
+            match cardwire_sys_enter_getdents64
+                .load()
+                .map_err(CardwireEbpfError::aya)
+            {
+                Ok(_) => {
+                    cardwire_sys_enter_getdents64
+                        .attach("syscalls", "sys_enter_getdents64")
+                        .map_err(CardwireEbpfError::aya)?;
+                }
+                Err(err) => {
+                    let lockdown = is_lockdown_enabled();
+                    warn!(
+                        "Failed to load sys_enter_getdents64. Lockdown status: {}",
+                        lockdown
+                    );
+                    warn!("{}", err);
+                    warn!("falling back to a weakened cardwired...");
+                }
+            };
+        }
+        // Try to load the program, if success attach it, else just warn the user
 
         Ok(Self { ebpf })
     }
@@ -368,6 +408,17 @@ impl EbpfBlocker {
         };
         Ok(async_fd)
     }
+}
+
+fn is_lockdown_enabled() -> bool {
+    let path = Path::new("/sys/kernel/security/lockdown");
+    if let Ok(entry) = fs::read_to_string(path)
+        && (entry.contains("[integrity]") || entry.contains("[confidentiality]"))
+    {
+        return true;
+    }
+
+    false
 }
 
 #[cfg(test)]
