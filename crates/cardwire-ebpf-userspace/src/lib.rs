@@ -34,8 +34,8 @@ impl EbpfBlocker {
 
         let btf = Btf::from_sys_fs().map_err(CardwireEbpfError::aya)?;
 
-        let load_list: [&str; 3] = ["file_open", "inode_permission", "inode_getattr"];
-        for entity in load_list {
+        let lsm_load_list: [&str; 3] = ["file_open", "inode_permission", "inode_getattr"];
+        for entity in lsm_load_list {
             let program: &mut Lsm = ebpf
                 .program_mut(entity)
                 .ok_or_else(|| CardwireEbpfError::missing_lsm(entity))?
@@ -68,18 +68,18 @@ impl EbpfBlocker {
         /*
            This part can get rejected by the kernel if the lockdown is enabled, we warn but we do not exit carwired, it will just run in a weakened state
            sys_exit_getdents64 re-write userspace memory to hide an entry (file/folder), it can be rejected
+           Only load sys_enter_getdents64 (syscall that will populate the CW_DIRENT MAP) if sys_exit_getdents64 doesnt fail, else the map will overflow
         */
 
         let mut did_sys_exit_getdents64_success = false;
 
-        // to hide files
         let cardwire_sys_exit_getdents64: &mut TracePoint = ebpf
             .program_mut("tracepoint_exit_getdents64")
             .ok_or_else(|| CardwireEbpfError::missing_lsm("tracepoint_exit_getdents64"))?
             .try_into()
             .map_err(CardwireEbpfError::aya)?;
 
-        // Try to load the program, if success attach it, else just warn the user
+        // Try to load the program into the kernel, if success attach it, else just warn the user
         match cardwire_sys_exit_getdents64
             .load()
             .map_err(CardwireEbpfError::aya)
@@ -101,7 +101,9 @@ impl EbpfBlocker {
                 warn!("falling back to a weakened cardwired...");
             }
         };
-        // to hide files
+
+        // Now we try to load sys_enter_getdents64
+
         let cardwire_sys_enter_getdents64: &mut TracePoint = ebpf
             .program_mut("tracepoint_enter_getdents64")
             .ok_or_else(|| CardwireEbpfError::missing_lsm("tracepoint_enter_getdents64"))?
@@ -129,8 +131,6 @@ impl EbpfBlocker {
                 }
             };
         }
-        // Try to load the program, if success attach it, else just warn the user
-
         Ok(Self { ebpf })
     }
 
