@@ -245,12 +245,20 @@ impl ModeInterface {
             // Integrated and Smart modes only work on hybrid setups with a offload discrete GPU
             // (laptops)
             Modes::Integrated | Modes::Smart => {
-                if gpu_list
+                let available: Vec<(u32, bool, bool, u32)> = gpu_list
                     .iter()
                     .filter(|(_, gpu)| gpu.device.is_available())
-                    .count()
-                    != 2
-                {
+                    .map(|(id, gpu)| {
+                        (
+                            *id as u32,
+                            gpu.device.is_discrete(),
+                            gpu.device.is_default(),
+                            *gpu.device.card(),
+                        )
+                    })
+                    .collect();
+
+                if available.len() != 2 {
                     let error_message = format!(
                         "Couldn't set mode to {}, the mode requires exactly 2 GPUs",
                         mode
@@ -260,14 +268,12 @@ impl ModeInterface {
                 }
 
                 // Check if there is an offload discrete GPU (discrete and not the default display)
-                let has_offload_dgpu = gpu_list
-                    .values()
-                    .filter(|gpu| gpu.device.is_available())
-                    .any(|gpu| gpu.device.is_discrete() && !gpu.device.is_default())
-                    && gpu_list
-                        .values()
-                        .filter(|gpu| gpu.device.is_available())
-                        .any(|gpu| !gpu.device.is_discrete() && gpu.device.is_default());
+                let has_offload_dgpu = available
+                    .iter()
+                    .any(|(_, discrete, default, _)| *discrete && !*default)
+                    && available
+                        .iter()
+                        .any(|(_, discrete, default, _)| !*discrete && *default);
 
                 if !has_offload_dgpu {
                     let error_message = format!(
@@ -278,13 +284,13 @@ impl ModeInterface {
                     return Err(fdo::Error::NotSupported(error_message));
                 }
 
-                // Never block a GPU that is currently driving a connected display
-                let offload_card = match gpu_list
-                    .values()
-                    .filter(|gpu| gpu.device.is_available())
-                    .find(|gpu| gpu.device.is_discrete() && !gpu.device.is_default())
+                // Never block a GPU that is currently driving a connected display, the display
+                // would go black.
+                let offload_card = match available
+                    .iter()
+                    .find(|(_, discrete, default, _)| *discrete && !*default)
                 {
-                    Some(gpu) => *gpu.device.card(),
+                    Some((_, _, _, card)) => *card,
                     // has_offload_dgpu already guaranteed a matching GPU, fail gracefully anyway
                     None => {
                         return Err(fdo::Error::Failed(
