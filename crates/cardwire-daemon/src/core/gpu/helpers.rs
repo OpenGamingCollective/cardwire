@@ -1,5 +1,4 @@
-//! Read a pci list and return a list of gpu
-use crate::core::gpu::models::GpuDevice;
+use crate::core::gpu::models::{GpuDevice, GpuVendor};
 use log::{info, warn};
 use std::{
     collections::{BTreeMap, HashMap}, fs, io, path::Path, time::Duration
@@ -294,6 +293,9 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
                 gpu.set_default(Some(true));
             } else {
                 gpu.set_default(Some(false));
+                if gpu.gpu_vendor() == GpuVendor::Other && !gpu.is_discrete() {
+                    gpu.set_discrete(true);
+                }
             }
         }
     }

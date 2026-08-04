@@ -242,33 +242,56 @@ impl ModeInterface {
     pub(crate) async fn apply_mode(&self, mode: Modes) -> fdo::Result<()> {
         let mut gpu_list = self.gpu_list.write().await;
         match mode {
-            // Integrated/Hybrid/Smart only works on laptop with two gpus, will refuse if the
-            // computer has more than 2 gpus
-            Modes::Integrated | Modes::Hybrid | Modes::Smart => {
+            // Integrated and Smart modes only work on hybrid setups with a offload discrete GPU
+            // (laptops)
+            Modes::Integrated | Modes::Smart => {
                 if gpu_list.len() != 2 {
                     let error_message = format!(
-                        "Couldn't set mode to {}, the mode require exactly 2 GPUs",
+                        "Couldn't set mode to {}, the mode requires exactly 2 GPUs",
                         mode
                     );
                     error!("{}", error_message);
-                    return Err(fdo::Error::NotSupported(error_message.to_string()));
+                    return Err(fdo::Error::NotSupported(error_message));
                 }
-                // Loop to find the non default gpu and block it,
+
+                // Check if there is an offload discrete GPU (discrete and not the default display)
+                let has_offload_dgpu = gpu_list
+                    .values()
+                    .any(|gpu| gpu.device.is_discrete() && !gpu.device.is_default())
+                    && gpu_list
+                        .values()
+                        .any(|gpu| !gpu.device.is_discrete() && gpu.device.is_default());
+
+                if !has_offload_dgpu {
+                    let error_message = format!(
+                        "Couldn't set mode to {}, Integrated and Smart modes require a offload discrete GPU (not supported on desktops where the discrete GPU is the primary display)",
+                        mode
+                    );
+                    error!("{}", error_message);
+                    return Err(fdo::Error::NotSupported(error_message));
+                }
+
                 for (id, gpu) in gpu_list.iter_mut() {
-                    if !gpu.device.is_default() {
-                        if mode == Modes::Integrated || mode == Modes::Smart {
-                            // Here we block the dGPU
-                            gpu.block_gpu(*id as u32).await?;
-                        } else {
-                            gpu.unblock_gpu().await?;
-                        }
-                    } else if mode == Modes::Smart && gpu.device.is_default() {
+                    if gpu.device.is_discrete() && !gpu.device.is_default() {
+                        // Here we block the offload dGPU
+                        gpu.block_gpu(*id as u32).await?;
+                    } else if mode == Modes::Smart
+                        && gpu.device.is_default()
+                        && !gpu.device.is_discrete()
+                    {
                         // push default gpu (iGPU) into the blocked inode map for tracking only
                         gpu.block_gpu(*id as u32).await?;
                     } else {
-                        // clear
+                        // unblock default GPU
                         gpu.unblock_gpu().await?;
                     }
+                }
+            }
+
+            // Hybrid mode unblocks all GPUs so all are available to the system
+            Modes::Hybrid => {
+                for gpu in gpu_list.values_mut() {
+                    gpu.unblock_gpu().await?;
                 }
             }
 

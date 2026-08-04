@@ -50,7 +50,7 @@ pub(crate) async fn detect_external_display_target(
         }
         gpu_list
             .values()
-            .find(|gpu| !gpu.device.is_default())
+            .find(|gpu| gpu.device.is_discrete() && !gpu.device.is_default())
             .map(|gpu| *gpu.device.card())
     };
 

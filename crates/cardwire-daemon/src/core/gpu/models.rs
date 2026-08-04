@@ -118,6 +118,14 @@ impl GpuDevice {
         self.discrete
     }
 
+    pub fn set_discrete(&mut self, discrete: bool) {
+        self.discrete = discrete;
+    }
+
+    pub fn is_available(&self) -> bool {
+        self.available
+    }
+
     pub fn _vfio(&self) -> bool {
         self.vfio
     }
