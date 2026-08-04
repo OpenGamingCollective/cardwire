@@ -180,6 +180,7 @@ impl DebugInterface {
                     .await
                 {
                     warn!("failed to fall back to hybrid mode on hotplug: {fb}");
+                    return Err(fb);
                 }
             }
         }
