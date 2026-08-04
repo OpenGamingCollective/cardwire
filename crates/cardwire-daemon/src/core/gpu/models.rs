@@ -79,6 +79,9 @@ pub struct GpuDevice {
     default: Option<bool>,
     gpu_vendor: GpuVendor,
     nvidia_minor: Option<u32>,
+    discrete: bool,
+    vfio: bool,
+    available: bool,
 }
 impl GpuDevice {
     pub fn pci(&self) -> &PciDevice {
@@ -111,6 +114,15 @@ impl GpuDevice {
         &self.nvidia_minor
     }
 
+    pub fn is_discrete(&self) -> bool {
+        self.discrete
+    }
+
+    pub fn _vfio(&self) -> bool {
+        self.vfio
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: String,
         pci: PciDevice,
@@ -119,6 +131,9 @@ impl GpuDevice {
         default: Option<bool>,
         gpu_vendor: GpuVendor,
         nvidia_minor: Option<u32>,
+        discrete: bool,
+        vfio: bool,
+        available: bool,
     ) -> GpuDevice {
         GpuDevice {
             name,
@@ -128,6 +143,9 @@ impl GpuDevice {
             default,
             gpu_vendor,
             nvidia_minor,
+            discrete,
+            vfio,
+            available,
         }
     }
 
@@ -256,6 +274,9 @@ mod tests {
             Some(true),
             GpuVendor::Amd,
             None,
+            true,
+            false,
+            true,
         );
         assert_eq!(gpu.name(), "RX 7900 XTX");
         assert_eq!(*gpu.render(), 128);
@@ -263,6 +284,7 @@ mod tests {
         assert_eq!(gpu.default(), Some(true));
         assert_eq!(gpu.gpu_vendor(), GpuVendor::Amd);
         assert_eq!(*gpu.nvidia_minor(), None);
+        assert!(gpu.is_discrete());
         assert_eq!(gpu.pci().pci_address(), "0000:01:00.0");
     }
 
@@ -276,6 +298,9 @@ mod tests {
             Some(true),
             GpuVendor::Amd,
             None,
+            true,
+            false,
+            true,
         );
         assert!(gpu.is_default());
     }
@@ -290,6 +315,9 @@ mod tests {
             Some(false),
             GpuVendor::Amd,
             None,
+            true,
+            false,
+            true,
         );
         assert!(!gpu.is_default());
     }
@@ -304,8 +332,12 @@ mod tests {
             None,
             GpuVendor::Amd,
             None,
+            false,
+            false,
+            true,
         );
         assert!(!gpu.is_default());
+        assert!(!gpu.is_discrete());
     }
 
     #[test]
@@ -318,6 +350,9 @@ mod tests {
             None,
             GpuVendor::Amd,
             None,
+            true,
+            false,
+            true,
         );
         assert!(!gpu.is_default());
         gpu.set_default(Some(true));
@@ -334,8 +369,12 @@ mod tests {
             Some(false),
             GpuVendor::Nvidia,
             Some(0),
+            true,
+            false,
+            true,
         );
         assert_eq!(gpu.gpu_vendor(), GpuVendor::Nvidia);
         assert_eq!(*gpu.nvidia_minor(), Some(0));
+        assert!(gpu.is_discrete());
     }
 }

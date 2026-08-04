@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        gpu::{self, check_default_drm_class}, pci::{self, DbusPciDevice, PciDevice}
+        gpu::GpuEnumerator, pci::{self, DbusPciDevice, PciDevice}
     }, tasks::watch_power_state
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
@@ -110,8 +110,8 @@ impl DebugInterface {
             // Empty the current gpu_interfaces
             gpu_interfaces.clear();
             // Read the new list
-            let new_gpu_list =
-                gpu::read_gpu(&new_pci_list).map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            let gpu_enumator = GpuEnumerator::build();
+            let new_gpu_list = gpu_enumator.enumerate(&new_pci_list);
             for (id, device) in new_gpu_list {
                 let gpu = GpuInterface::build(
                     id as u32,
@@ -124,9 +124,6 @@ impl DebugInterface {
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
                 gpu_interfaces.insert(id, gpu);
-            }
-            if let Err(err) = check_default_drm_class(&mut gpu_interfaces) {
-                warn!("Failed to determine default GPU: {}", err);
             }
 
             // Rebuild hotplug state from the effective mode; an external display may have

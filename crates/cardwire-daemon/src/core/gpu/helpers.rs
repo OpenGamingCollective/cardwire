@@ -1,36 +1,10 @@
 //! Read a pci list and return a list of gpu
-use crate::{
-    core::{
-        gpu::models::{GpuDevice, GpuVendor}, pci::PciDevice
-    }, interface::GpuInterface
-};
+use crate::core::gpu::models::GpuDevice;
 use log::{info, warn};
 use std::{
-    collections::{BTreeMap, HashMap}, fs, io, path::Path
+    collections::{BTreeMap, HashMap}, fs, io, path::Path, time::Duration
 };
-
-/// read a map of pci devices and return a map of gpu devices
-pub fn read_gpu(
-    pci_devices: &BTreeMap<String, PciDevice>,
-) -> io::Result<BTreeMap<usize, GpuDevice>> {
-    let mut gpus: BTreeMap<usize, GpuDevice> = BTreeMap::new();
-    // We use i as the key to have some sort of sorted list, this number will get re-assigned later
-    // when searching for the default gpu
-    let mut i = 0;
-    // take pci_devices map and filter to only keep display controller class
-    // 03 means it's a display controller, see <https://admin.pci-ids.ucw.cz/read/PD/>
-    for device in pci_devices.values().filter(|dev| {
-        dev.class()
-            .as_ref()
-            .is_some_and(|class| class.starts_with("0x03"))
-    }) {
-        gpus.insert(i, build_gpu(device)?);
-        if gpus.contains_key(&i) {
-            i += 1;
-        }
-    }
-    Ok(gpus)
-}
+use udev::{Device, Enumerator};
 
 /// Return whether a DRM card currently owns a connected physical external display.
 ///
@@ -85,130 +59,71 @@ pub fn external_display_connected(card: u32) -> io::Result<bool> {
     }
 }
 
-/// Take a pci device and build a gpu device from it
-fn build_gpu(device: &PciDevice) -> io::Result<GpuDevice> {
-    let gpu_vendor = match device.vendor_id() {
-        Some(vendor_id) => GpuVendor::from(vendor_id.as_str()),
-        // Default to other
-        None => GpuVendor::default(),
-    };
-    // nvidia_minor is used in /dev/nvidia<i>, where i is the minor number eg: nvidia0
-    // None if not a nvidia device
-    let nvidia_minor: Option<u32> = match gpu_vendor {
-        GpuVendor::Nvidia => nvidia_get_minor(device.pci_address()),
-        _ => None,
-    };
+/// Reads both the card and render node IDs (e.g., (1, 128)) for a given PCI address.
+/// Retries until both DRM nodes are spawned by the kernel and initialized by udev
+pub fn drm_node_ids(pci_address: &str) -> io::Result<(u32, u32)> {
+    const MAX_RETRIES: u32 = 10;
+    const RETRY_INTERVAL: Duration = Duration::from_millis(500);
 
-    let device_name = match gpu_vendor {
-        GpuVendor::Nvidia => nvidia_get_device_model(device.pci_address()),
-        GpuVendor::Amd => match device.device_id() {
-            Some(id) => amd_get_device_model(id, device.pci_address()),
-            None => None,
-        },
-        _ => None,
+    let pci_syspath = Path::new("/sys/bus/pci/devices").join(pci_address);
+
+    for attempt in 1..=MAX_RETRIES {
+        let mut card_id = None;
+        let mut render_id = None;
+
+        if let Ok(parent) = Device::from_syspath(&pci_syspath)
+            && let Ok(mut enumerator) = Enumerator::new()
+        {
+            let _ = enumerator.match_parent(&parent);
+            let _ = enumerator.match_subsystem("drm");
+
+            if let Ok(devices) = enumerator.scan_devices() {
+                for dev in devices {
+                    // Skip if uninitialized
+                    if !dev.is_initialized() {
+                        continue;
+                    }
+
+                    let sysname = dev.sysname().to_string_lossy();
+
+                    if let Some(num) = dev.sysnum() {
+                        if sysname == format!("card{num}") {
+                            card_id = Some(num as u32);
+                        } else if sysname == format!("renderD{num}") {
+                            render_id = Some(num as u32);
+                        }
+                    }
+                }
+            }
+        }
+
+        if let (Some(card), Some(render)) = (card_id, render_id) {
+            info!(
+                "Successfully resolved card{} and renderD{} for PCI {}",
+                card, render, pci_address
+            );
+            return Ok((card, render));
+        }
+
+        if attempt < MAX_RETRIES {
+            warn!(
+                "DRM nodes (card/render) for PCI {} not fully ready, attempt {}/{MAX_RETRIES}, retrying in 500ms...",
+                pci_address, attempt
+            );
+            std::thread::sleep(RETRY_INTERVAL);
+        }
     }
-    // If none, just use the hwdata name or a placeholder
-    .unwrap_or_else(|| {
-        warn!("Couldn't get device_name, falling back to hwdata");
-        device.device_name().clone().unwrap_or_else(|| {
-            warn!("Couldn't get name using hwdata, falling back to default");
-            "Unknown Device".to_string()
-        })
-    });
 
-    Ok(GpuDevice::new(
-        device_name,
-        device.clone(),
-        // propagate err on purpose if the drm nodes return errors, if there is no nodes we want to
-        // skip this gpu
-        drm_node_path(device.pci_address(), "render")?,
-        drm_node_path(device.pci_address(), "card")?,
-        None,
-        gpu_vendor,
-        nvidia_minor,
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        format!(
+            "Failed to find both initialized card and render DRM nodes for PCI {}",
+            pci_address
+        ),
     ))
 }
 
-/// Try to read from sysfs first, then fallback to udev /dev/dri
-/// with a sleep at each attempt so the system has time to spawn the drm nodes
-/// May block for up to ~5s per path (10 retries × 500ms)
-fn drm_node_path(pci_address: &str, node_kind: &str) -> io::Result<u32> {
-    const MAX_RETRIES: u32 = 10;
-    const RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
-
-    let kind_prefix = match node_kind {
-        "render" => "renderD",
-        other => other,
-    };
-    let sysfs_drm_path = format!("/sys/bus/pci/devices/{}/drm", pci_address);
-    let udev_drm_path = format!("/dev/dri/by-path/pci-{pci_address}-{node_kind}");
-    let mut last_err: Option<io::Error> = None;
-
-    for attempt in 1..=MAX_RETRIES {
-        if let Ok(entries) = fs::read_dir(&sysfs_drm_path) {
-            for entry in entries.flatten() {
-                let file_name = entry.file_name();
-                let name = file_name.to_string_lossy();
-                let kind_number = name.strip_prefix(kind_prefix).unwrap_or_default();
-                let is_match = (kind_prefix == "renderD" && name.starts_with("renderD"))
-                    || (kind_prefix == "card" && name.starts_with("card") && !name.contains('-'));
-                if is_match {
-                    info!(
-                        "Successfully read {}{} from sysfs for {}",
-                        kind_prefix, kind_number, pci_address
-                    );
-                    return kind_number.parse::<u32>().map_err(|_| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!("Failed to parse DRM node number from '{name}'"),
-                        )
-                    });
-                }
-            }
-            break;
-        }
-        warn!(
-            "Could not find drm {} for pci {}, attempt: {}/{MAX_RETRIES}, retrying in 500ms",
-            kind_prefix, pci_address, attempt
-        );
-        std::thread::sleep(RETRY_INTERVAL);
-    }
-    warn!(
-        "Could not read {} drm {} from sysfs, falling back to /dev/dri",
-        pci_address, kind_prefix
-    );
-    for attempt in 1..=MAX_RETRIES {
-        match fs::canonicalize(&udev_drm_path) {
-            Ok(kind_path) => {
-                let file_name =
-                    kind_path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .ok_or_else(|| {
-                            io::Error::new(io::ErrorKind::InvalidData, "Invalid device path")
-                        })?;
-                let kind_number = file_name.strip_prefix(kind_prefix).unwrap_or_default();
-                return kind_number.parse::<u32>().map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("Failed to parse DRM node number from '{file_name}'"),
-                    )
-                });
-            }
-            Err(err) => {
-                warn!(
-                    "Could not find {} node for {}: {}, attempt: {}/{MAX_RETRIES}, retrying in 500ms",
-                    kind_prefix, pci_address, err, attempt
-                );
-                last_err = Some(err);
-                std::thread::sleep(RETRY_INTERVAL);
-            }
-        }
-    }
-    Err(last_err.unwrap_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Node not found")))
-}
-
-fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
+pub fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
     let nvidia_driver_proc = Path::new("/proc/driver/nvidia/gpus/")
         .join(pci_address)
         .join("information");
@@ -223,8 +138,8 @@ fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
         .ok()
 }
 
-/// find the nvidai model using the device information file
-fn nvidia_get_device_model(pci_address: &str) -> Option<String> {
+/// find the nvidia model using the device information file
+pub fn nvidia_get_device_model(pci_address: &str) -> Option<String> {
     let nvidia_driver_proc = Path::new("/proc/driver/nvidia/gpus/")
         .join(pci_address)
         .join("information");
@@ -243,7 +158,7 @@ fn nvidia_get_device_model(pci_address: &str) -> Option<String> {
 }
 
 /// Find the amd model using amdgpu.ids, require the device id and the revision for precise matching
-fn amd_get_device_model(device_id: &str, pci: &str) -> Option<String> {
+pub fn amd_get_device_model(device_id: &str, pci: &str) -> Option<String> {
     let path = "/usr/share/libdrm/amdgpu.ids";
     let device_id = device_id.to_string().replace("0x", "").to_ascii_uppercase();
 
@@ -280,7 +195,7 @@ fn amd_get_device_model(device_id: &str, pci: &str) -> Option<String> {
 }
 
 /// Method from kwin
-pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> io::Result<()> {
+pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io::Result<()> {
     // skip if empty
     if gpu_list.is_empty() {
         return Ok(());
@@ -319,7 +234,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> 
 
     for (id, gpu) in &mut *gpu_list {
         let mut stat = GpuStats::default();
-        let prefix = format!("card{}-", gpu.device.card());
+        let prefix = format!("card{}-", gpu.card());
         for name in &drm_entries {
             if let Some(drm) = name.strip_prefix(&prefix) {
                 let status_path = class_path.join(name).join("status");
@@ -347,7 +262,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> 
 
         info!(
             "gpu {} id: {} internal: {}, desktop: {}, connected: {}, total: {}, connected_internal: {}, connected_desktop: {}",
-            gpu.device.name(),
+            gpu.name(),
             id,
             stat.internal_displays,
             stat.desktop_displays,
@@ -376,20 +291,19 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuInterface>) -> 
     for (id, gpu) in &mut *gpu_list {
         if let Some(default_id) = default.0 {
             if id == default_id {
-                gpu.device.set_default(Some(true));
+                gpu.set_default(Some(true));
             } else {
-                gpu.device.set_default(Some(false));
+                gpu.set_default(Some(false));
             }
         }
     }
 
     // Default GPU gets ID 0, rest ordered by PCI address
-    let mut gpus: Vec<GpuInterface> = std::mem::take(gpu_list).into_values().collect();
+    let mut gpus: Vec<GpuDevice> = std::mem::take(gpu_list).into_values().collect();
     gpus.sort_by(|a, b| {
-        b.device
-            .default()
-            .cmp(&a.device.default())
-            .then(a.device.pci.pci_address().cmp(b.device.pci.pci_address()))
+        b.default()
+            .cmp(&a.default())
+            .then(a.pci.pci_address().cmp(b.pci.pci_address()))
     });
     *gpu_list = gpus.into_iter().enumerate().collect();
 
