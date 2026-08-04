@@ -245,7 +245,12 @@ impl ModeInterface {
             // Integrated and Smart modes only work on hybrid setups with a offload discrete GPU
             // (laptops)
             Modes::Integrated | Modes::Smart => {
-                if gpu_list.len() != 2 {
+                if gpu_list
+                    .iter()
+                    .filter(|(_, gpu)| gpu.device.is_available())
+                    .count()
+                    != 2
+                {
                     let error_message = format!(
                         "Couldn't set mode to {}, the mode requires exactly 2 GPUs",
                         mode
@@ -257,9 +262,11 @@ impl ModeInterface {
                 // Check if there is an offload discrete GPU (discrete and not the default display)
                 let has_offload_dgpu = gpu_list
                     .values()
+                    .filter(|gpu| gpu.device.is_available())
                     .any(|gpu| gpu.device.is_discrete() && !gpu.device.is_default())
                     && gpu_list
                         .values()
+                        .filter(|gpu| gpu.device.is_available())
                         .any(|gpu| !gpu.device.is_discrete() && gpu.device.is_default());
 
                 if !has_offload_dgpu {
@@ -271,7 +278,10 @@ impl ModeInterface {
                     return Err(fdo::Error::NotSupported(error_message));
                 }
 
-                for (id, gpu) in gpu_list.iter_mut() {
+                for (id, gpu) in gpu_list
+                    .iter_mut()
+                    .filter(|(_, gpu)| gpu.device.is_available())
+                {
                     if gpu.device.is_discrete() && !gpu.device.is_default() {
                         // Here we block the offload dGPU
                         gpu.block_gpu(*id as u32).await?;
@@ -290,7 +300,10 @@ impl ModeInterface {
 
             // Hybrid mode unblocks all GPUs so all are available to the system
             Modes::Hybrid => {
-                for gpu in gpu_list.values_mut() {
+                for gpu in gpu_list
+                    .values_mut()
+                    .filter(|gpu| gpu.device.is_available())
+                {
                     gpu.unblock_gpu().await?;
                 }
             }
@@ -303,7 +316,10 @@ impl ModeInterface {
                     .auto_apply_gpu_state
                     .load(std::sync::atomic::Ordering::Relaxed);
                 let gpu_state = self.gpu_state.read().await;
-                for (id, gpu) in gpu_list.iter_mut() {
+                for (id, gpu) in gpu_list
+                    .iter_mut()
+                    .filter(|(_, gpu)| gpu.device.is_available())
+                {
                     if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && config {
                         if gpu.device.is_default() {
                             // For safety, warn and unblock if default

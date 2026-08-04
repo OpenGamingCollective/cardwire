@@ -232,6 +232,11 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
     let mut stats: HashMap<usize, GpuStats> = HashMap::new();
 
     for (id, gpu) in &mut *gpu_list {
+        if !gpu.is_available() {
+            gpu.set_default(Some(false));
+            continue;
+        }
+
         let mut stat = GpuStats::default();
         let prefix = format!("card{}-", gpu.card());
         for name in &drm_entries {
@@ -288,6 +293,11 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
         .unzip();
 
     for (id, gpu) in &mut *gpu_list {
+        if !gpu.is_available() {
+            gpu.set_default(Some(false));
+            continue;
+        }
+
         if let Some(default_id) = default.0 {
             if id == default_id {
                 gpu.set_default(Some(true));

@@ -103,12 +103,14 @@ async fn spawn_dbus_api(
         object_server
             .at(path.clone(), gpu_interface.clone())
             .await?;
-        // spawn power state watcher
-        let handle = task::spawn(watch_power_state(
-            gpu_interface.clone(),
-            object_server.interface(path).await?,
-        ));
-        power_tasks.insert(*id, handle);
+        // spawn power state watcher only for available GPUs
+        if gpu_interface.device.is_available() {
+            let handle = task::spawn(watch_power_state(
+                gpu_interface.clone(),
+                object_server.interface(path).await?,
+            ));
+            power_tasks.insert(*id, handle);
+        }
     }
     drop(power_tasks);
     // drop gpu list to prevent deadlock

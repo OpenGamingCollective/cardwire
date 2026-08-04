@@ -295,6 +295,12 @@ impl GpuInterface {
                     self.device.name()
                 )));
             }
+            if !self.device.is_available() {
+                return Err(fdo::Error::AccessDenied(format!(
+                    "GPU {} is not available and cannot be blocked",
+                    self.device.name()
+                )));
+            }
             // Now block
             self.block_gpu(self.id).await?;
             info!("Set GPU {} block={}", self.device.name(), block);

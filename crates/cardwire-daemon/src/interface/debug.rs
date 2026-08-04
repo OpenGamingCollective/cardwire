@@ -132,15 +132,17 @@ impl DebugInterface {
                 object_server
                     .at(path.clone(), gpu_interface.clone())
                     .await?;
-                // spawn power state tasks
-                let handle = task::spawn(watch_power_state(
-                    gpu_interface.clone(),
-                    object_server
-                        .interface(path)
-                        .await
-                        .map_err(|err| fdo::Error::Failed(err.to_string()))?,
-                ));
-                power_tasks.insert(*id, handle);
+                // spawn power state tasks only for available GPUs
+                if gpu_interface.device.is_available() {
+                    let handle = task::spawn(watch_power_state(
+                        gpu_interface.clone(),
+                        object_server
+                            .interface(path)
+                            .await
+                            .map_err(|err| fdo::Error::Failed(err.to_string()))?,
+                    ));
+                    power_tasks.insert(*id, handle);
+                }
             }
 
             drop(power_tasks);

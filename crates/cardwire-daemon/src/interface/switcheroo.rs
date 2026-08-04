@@ -93,7 +93,7 @@ pub fn compute_switcheroo_env(
                 format!("pci-{}", pci_address.replace([':', '.'], "_"))
             };
             env.push("DRI_PRIME".to_string());
-            env.push(dri_prime_val.to_string());
+            env.push(dri_prime_val);
         }
     }
 
