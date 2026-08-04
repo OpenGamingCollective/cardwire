@@ -10,7 +10,7 @@ use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface, ModeInterface, Modes}
+    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface, ModeInterface}
 };
 
 #[derive(Clone)]
@@ -126,38 +126,6 @@ impl DebugInterface {
                 gpu_interfaces.insert(id, gpu);
             }
 
-            // Rebuild hotplug state from the effective mode; an external display may have
-            // temporarily overridden the persisted request with Hybrid.
-            let mode = self.mode_interface.current_mode_value().await;
-            let config = self
-                .config
-                .auto_apply_gpu_state
-                .load(std::sync::atomic::Ordering::Relaxed);
-
-            for gpu in gpu_interfaces.values_mut() {
-                let should_block = match mode {
-                    Modes::Integrated | Modes::Smart => !gpu.device.is_default(),
-                    Modes::Hybrid => false,
-                    Modes::Manual => {
-                        let state = self.gpu_state.read().await;
-                        state.gpu_block_state(gpu.device.pci.pci_address()) && config
-                    }
-                };
-
-                if should_block {
-                    info!(
-                        "GPU {} should be blocked, re-applying block on hotplug",
-                        gpu.device.name()
-                    );
-                    if let Err(e) = gpu.block_gpu(gpu.id).await {
-                        warn!(
-                            "failed to automatically re-block {}: {}",
-                            gpu.device.name(),
-                            e
-                        );
-                    }
-                }
-            }
             // now re-populate the gpu api
             for (id, gpu_interface) in gpu_interfaces.iter() {
                 let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
@@ -173,6 +141,15 @@ impl DebugInterface {
                         .map_err(|err| fdo::Error::Failed(err.to_string()))?,
                 ));
                 power_tasks.insert(*id, handle);
+            }
+
+            drop(power_tasks);
+            drop(gpu_interfaces);
+
+            // Rebuild hotplug state from the effective mode using mode_interface
+            let mode = self.mode_interface.current_mode_value().await;
+            if let Err(e) = self.mode_interface.effective_set_mode(mode, true).await {
+                warn!("failed to re-apply mode on hotplug: {e}");
             }
         }
 
