@@ -57,7 +57,15 @@ pub fn is_discrete_egl(render: u32) -> Result<bool, String> {
             return Err("Error at second query_device!!!".to_string());
         }
 
+        // eglQueryDevicesEXT rewrites num_devices with the count it actually filled, so the tail
+        // of the array can stay null. Never pass null handles to the driver
+        device_array.truncate(num_devices as usize);
+
         for dev_ptr in device_array {
+            if dev_ptr.is_null() {
+                continue;
+            }
+
             let c_str_ptr = query_device_str(dev_ptr, EGL_DRM_RENDER_NODE_FILE_EXT);
             if c_str_ptr.is_null() {
                 continue;
