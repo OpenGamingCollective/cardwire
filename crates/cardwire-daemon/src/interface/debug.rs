@@ -10,7 +10,7 @@ use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface, ModeInterface}
+    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface, ModeInterface, Modes}
 };
 
 #[derive(Clone)]
@@ -148,10 +148,37 @@ impl DebugInterface {
             drop(power_tasks);
             drop(gpu_interfaces);
 
-            // Rebuild hotplug state from the effective mode using mode_interface
+            // Rebuild hotplug state from the effective mode. Resolve the display target first so
+            // a hotplug never blocks a GPU that is driving a connected display. If anything fails
+            // here the eBPF block map is left stale, so fall back to hybrid (unblocks every GPU)
+            // instead of manual: manual can re-block a GPU from a saved gpu_state without a
+            // display guard.
             let mode = self.mode_interface.current_mode_value().await;
-            if let Err(e) = self.mode_interface.effective_set_mode(mode, true).await {
-                warn!("failed to re-apply mode on hotplug: {e}");
+            let target = match self.mode_interface.detect_display_target(mode).await {
+                Ok((target, _)) => target,
+                Err(err) => {
+                    warn!(
+                        "failed to resolve display target on hotplug, falling back to hybrid: {err}"
+                    );
+                    if let Err(fb) = self
+                        .mode_interface
+                        .effective_set_mode(Modes::Hybrid, true)
+                        .await
+                    {
+                        warn!("failed to fall back to hybrid mode on hotplug: {fb}");
+                    }
+                    return Err(err);
+                }
+            };
+            if let Err(e) = self.mode_interface.effective_set_mode(target, true).await {
+                warn!("failed to re-apply mode on hotplug, falling back to hybrid: {e}");
+                if let Err(fb) = self
+                    .mode_interface
+                    .effective_set_mode(Modes::Hybrid, true)
+                    .await
+                {
+                    warn!("failed to fall back to hybrid mode on hotplug: {fb}");
+                }
             }
         }
 
