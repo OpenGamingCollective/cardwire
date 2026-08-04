@@ -63,10 +63,10 @@ pkgs.rustPlatform.buildRustPackage {
 
     # Point to the correct hwdata location
     substituteInPlace crates/cardwire-daemon/src/core/pci/pci_device.rs \
-      --replace-warn "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
+      --replace-fail "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
 
     substituteInPlace crates/cardwire-daemon/src/core/gpu/helpers.rs \
-      --replace-warn "/usr/share/libdrm/amdgpu.ids" "${pkgs.libdrm}/share/libdrm/amdgpu.ids"
+      --replace-fail "/usr/share/libdrm/amdgpu.ids" "${pkgs.libdrm}/share/libdrm/amdgpu.ids"
   '';
 
   env = {
