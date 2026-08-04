@@ -236,6 +236,38 @@ impl ModeInterface {
         Ok(())
     }
 
+    /// Rebuild the applied state after a GPU hotplug
+    pub async fn reconcile_after_hotplug(&self) -> fdo::Result<()> {
+        let _transition = self.transition.lock().await;
+        let requested = self.requested_mode_value().await;
+
+        let (target, _card) = match self.detect_display_target(requested).await {
+            Ok(target) => target,
+            Err(err) => {
+                warn!("failed to resolve display target on hotplug, falling back to hybrid: {err}");
+                if let Err(fb) = self.apply_mode(Modes::Hybrid).await {
+                    warn!("failed to fall back to hybrid mode on hotplug: {fb}");
+                    return Err(fb);
+                }
+                *self.effective_mode.write().await = Modes::Hybrid;
+                return Err(err);
+            }
+        };
+
+        if let Err(err) = self.apply_mode(target).await {
+            warn!("failed to re-apply mode on hotplug, falling back to hybrid: {err}");
+            if let Err(fb) = self.apply_mode(Modes::Hybrid).await {
+                warn!("failed to fall back to hybrid mode on hotplug: {fb}");
+                return Err(fb);
+            }
+            *self.effective_mode.write().await = Modes::Hybrid;
+            return Ok(());
+        }
+
+        *self.effective_mode.write().await = target;
+        Ok(())
+    }
+
     /// Apply a mode to GPU blocking and the eBPF map without persisting it.
     ///
     /// Keeping persistence out of this helper lets display overrides restore the requested mode.
