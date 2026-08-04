@@ -109,7 +109,9 @@ impl DebugInterface {
 
             // Empty the current gpu_interfaces
             gpu_interfaces.clear();
-            // Read the new list
+            // Read the new list. The blocking enumeration is intentional: the gpu_list write lock
+            // serializes readers until the new list is complete, and the multi-threaded runtime
+            // absorbs the stall
             let gpu_enumator = GpuEnumerator::build();
             let new_gpu_list = gpu_enumator.enumerate(&new_pci_list);
             for (id, device) in new_gpu_list {
