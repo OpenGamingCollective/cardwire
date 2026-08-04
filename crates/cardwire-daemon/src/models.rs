@@ -178,6 +178,7 @@ impl DaemonManager {
         // Only block if the device has a Nvidia gpu
         for (id, gpu) in gpus_list.iter() {
             if gpu.device.gpu_vendor() == GpuVendor::Nvidia
+                && !gpu.device.is_default()
                 && let Ok(inodes) = exp_nvidia_inodes()
                 && !inodes.is_empty()
             {
