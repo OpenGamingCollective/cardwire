@@ -122,14 +122,17 @@ impl GpuEnumerator {
             }
         };
 
+        // Skip the EGL probe for unavailable GPUs: the render node is unknown (u32::MAX) and the
+        // lookup would always fail on a phantom /dev/dri/renderD4294967295 path
         let discrete = self.is_discrete_vulkan(device.pci_address())
-            || match is_discrete_egl(render) {
-                Ok(discrete) => discrete,
-                Err(err) => {
-                    warn!("{}: EGL discrete check failed: {}", device_name, err);
-                    false
-                }
-            };
+            || (available
+                && match is_discrete_egl(render) {
+                    Ok(discrete) => discrete,
+                    Err(err) => {
+                        warn!("{}: EGL discrete check failed: {}", device_name, err);
+                        false
+                    }
+                });
 
         Ok(GpuDevice::new(
             device_name,
