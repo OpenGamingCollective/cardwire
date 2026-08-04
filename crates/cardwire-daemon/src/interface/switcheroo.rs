@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, HashMap}, sync::Arc
 };
 
+use log::warn;
 use tokio::sync::RwLock;
 use zbus::{
     interface, zvariant::{self, OwnedValue, Value}
@@ -63,7 +64,7 @@ pub fn compute_switcheroo_env(
             env.push("__VK_LAYER_NV_optimus".to_string());
             env.push("NVIDIA_only".to_string());
             env.push("VK_LOADER_DRIVERS_SELECT".to_string());
-            env.push("*nvidia*".to_string());
+            env.push("*nvidia*,*nouveau*".to_string());
         }
         GpuVendor::Amd => {
             env.push("DRI_PRIME".to_string());
@@ -134,7 +135,18 @@ impl SwitcherooInterface {
             );
 
             let env_val = Value::from(env_vars);
-            dict.insert("Environment", OwnedValue::try_from(env_val).unwrap());
+            match OwnedValue::try_from(env_val) {
+                Ok(value) => {
+                    dict.insert("Environment", value);
+                }
+                Err(err) => {
+                    warn!(
+                        "could not convert switcheroo environment for {}: {err}",
+                        gpu.device.name()
+                    );
+                    continue;
+                }
+            }
             // "Default" (b)
             dict.insert("Default", OwnedValue::from(gpu.device.is_default()));
             // "Discrete" (b)
@@ -169,7 +181,7 @@ mod tests {
                 "__VK_LAYER_NV_optimus",
                 "NVIDIA_only",
                 "VK_LOADER_DRIVERS_SELECT",
-                "*nvidia*"
+                "*nvidia*,*nouveau*"
             ]
         );
     }
