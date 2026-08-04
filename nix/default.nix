@@ -25,6 +25,11 @@ pkgs.rustPlatform.buildRustPackage {
     pkgs.hwdata
     pkgs.libbpf
     pkgs.udev
+    pkgs.vulkan-headers
+    pkgs.libglvnd
+    pkgs.egl-wayland
+    pkgs.egl-x11
+    pkgs.libxcb
   ];
 
   runtimeDeps = [
@@ -33,6 +38,8 @@ pkgs.rustPlatform.buildRustPackage {
     pkgs.udev
     pkgs.wayland
     pkgs.libxkbcommon
+    pkgs.vulkan-loader
+    pkgs.libglvnd
   ];
 
   doCheck = false;
@@ -56,10 +63,10 @@ pkgs.rustPlatform.buildRustPackage {
 
     # Point to the correct hwdata location
     substituteInPlace crates/cardwire-daemon/src/core/pci/pci_device.rs \
-      --replace "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
+      --replace-warn "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
 
-    substituteInPlace crates/cardwire-daemon/src/core/gpu/discover.rs \
-      --replace "/usr/share/libdrm/amdgpu.ids" "${pkgs.libdrm}/share/libdrm/amdgpu.ids"
+    substituteInPlace crates/cardwire-daemon/src/core/gpu/helpers.rs \
+      --replace-warn "/usr/share/libdrm/amdgpu.ids" "${pkgs.libdrm}/share/libdrm/amdgpu.ids"
   '';
 
   env = {
@@ -89,6 +96,8 @@ pkgs.rustPlatform.buildRustPackage {
       lib.makeLibraryPath [
         pkgs.udev
         pkgs.upower
+        pkgs.vulkan-loader
+        pkgs.libglvnd
       ]
     }
 
