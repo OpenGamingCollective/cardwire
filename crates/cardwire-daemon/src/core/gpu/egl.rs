@@ -1,6 +1,6 @@
 use std::ffi::{c_char, c_int, c_void};
 
-use khronos_egl::{Instance, Static};
+use khronos_egl::DynamicInstance;
 
 // For legacy device, use egl EXT to check if it's discrete or not
 pub fn is_discrete_egl(render: u32) -> Result<bool, String> {
@@ -21,7 +21,9 @@ pub fn is_discrete_egl(render: u32) -> Result<bool, String> {
 
     let render_path = format!("/dev/dri/renderD{}", render);
 
-    let egl = Instance::new(Static);
+    // Load libEGL at runtime so the daemon still starts on systems without it.
+    let egl = unsafe { DynamicInstance::load() }
+        .map_err(|err| format!("Couldn't load libEGL at runtime: {err}"))?;
     let query_devices: EglQueryDeviceExt = unsafe {
         std::mem::transmute(
             egl.get_proc_address("eglQueryDevicesEXT")
@@ -78,5 +80,6 @@ pub fn is_discrete_egl(render: u32) -> Result<bool, String> {
             }
         }
     }
-    Ok(false)
+    // Don't guess when the device is unknown to EGL, report it so the caller can log it
+    Err(format!("No EGL device matches {render_path}"))
 }

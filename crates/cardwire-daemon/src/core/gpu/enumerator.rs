@@ -122,7 +122,13 @@ impl GpuEnumerator {
         };
 
         let discrete = self.is_discrete_vulkan(device.pci_address())
-            || is_discrete_egl(render).unwrap_or(false);
+            || match is_discrete_egl(render) {
+                Ok(discrete) => discrete,
+                Err(err) => {
+                    warn!("{}: EGL discrete check failed: {}", device_name, err);
+                    false
+                }
+            };
 
         Ok(GpuDevice::new(
             device_name,
