@@ -82,6 +82,7 @@ pub struct GpuDevice {
     discrete: bool,
     vfio: bool,
     available: bool,
+    virtual_gpu: bool,
 }
 impl GpuDevice {
     pub fn pci(&self) -> &PciDevice {
@@ -130,6 +131,11 @@ impl GpuDevice {
         self.vfio
     }
 
+    /// True for virtual GPUs (e.g. virtio-gpu in qemu) that expose no PCI display controller.
+    pub fn is_virtual(&self) -> bool {
+        self.virtual_gpu
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: String,
@@ -142,6 +148,7 @@ impl GpuDevice {
         discrete: bool,
         vfio: bool,
         available: bool,
+        virtual_gpu: bool,
     ) -> GpuDevice {
         GpuDevice {
             name,
@@ -154,6 +161,7 @@ impl GpuDevice {
             discrete,
             vfio,
             available,
+            virtual_gpu,
         }
     }
 
@@ -285,6 +293,7 @@ mod tests {
             true,
             false,
             true,
+            false,
         );
         assert_eq!(gpu.name(), "RX 7900 XTX");
         assert_eq!(*gpu.render(), 128);
@@ -309,6 +318,7 @@ mod tests {
             true,
             false,
             true,
+            false,
         );
         assert!(gpu.is_default());
     }
@@ -326,6 +336,7 @@ mod tests {
             true,
             false,
             true,
+            false,
         );
         assert!(!gpu.is_default());
     }
@@ -343,6 +354,7 @@ mod tests {
             false,
             false,
             true,
+            false,
         );
         assert!(!gpu.is_default());
         assert!(!gpu.is_discrete());
@@ -361,6 +373,7 @@ mod tests {
             true,
             false,
             true,
+            false,
         );
         assert!(!gpu.is_default());
         gpu.set_default(Some(true));
@@ -380,6 +393,7 @@ mod tests {
             true,
             false,
             true,
+            false,
         );
         assert_eq!(gpu.gpu_vendor(), GpuVendor::Nvidia);
         assert_eq!(*gpu.nvidia_minor(), Some(0));

@@ -104,6 +104,7 @@ impl GpuEnumerator {
                 false,
                 true,
                 false,
+                false,
             ));
         }
 
@@ -141,6 +142,7 @@ impl GpuEnumerator {
             discrete,
             false,
             available,
+            self.is_virtual_gpu(device),
         ))
     }
     fn is_discrete_vulkan(&self, pci_id: &str) -> bool {
@@ -151,5 +153,21 @@ impl GpuEnumerator {
         }
 
         false
+    }
+    /// Detect virtual GPUs (e.g. virtio-gpu in qemu) through Vulkan when available, falling
+    /// back to the virtio PCI vendor id.
+    fn is_virtual_gpu(&self, device: &PciDevice) -> bool {
+        const VIRTIO_VENDOR_ID: &str = "0x1af4";
+
+        if let Some(vlk_map) = &self.vlk_physical_devices
+            && let Some(vlk_dev) = vlk_map.get(device.pci_address())
+        {
+            return vlk_dev.properties().device_type == PhysicalDeviceType::VirtualGpu;
+        }
+
+        device
+            .vendor_id()
+            .as_deref()
+            .is_some_and(|id| id == VIRTIO_VENDOR_ID)
     }
 }
