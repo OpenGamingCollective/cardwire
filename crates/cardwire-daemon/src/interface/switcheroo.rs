@@ -52,6 +52,8 @@ pub fn compute_switcheroo_env(
     }
 
     // Standard switcheroo-control / Mesa / NVIDIA offload variables
+    // DRI_PRIME=pci-<addr> selects the render node by PCI address
+    let dri_prime_val = format!("pci-{}", pci_address.replace([':', '.'], "_"));
     match vendor {
         GpuVendor::Nvidia => {
             env.push("__NV_PRIME_RENDER_OFFLOAD".to_string());
@@ -64,34 +66,18 @@ pub fn compute_switcheroo_env(
             env.push("*nvidia*".to_string());
         }
         GpuVendor::Amd => {
-            // DRI_PRIME=1 or DRI_PRIME=pci if we got multiple GPUs
-            let dri_prime_val = if gpu_count == 2 {
-                "1".to_string()
-            } else {
-                format!("pci-{}", pci_address.replace([':', '.'], "_"))
-            };
             env.push("DRI_PRIME".to_string());
             env.push(dri_prime_val);
             env.push("VK_LOADER_DRIVERS_SELECT".to_string());
             env.push("*radeon*".to_string());
         }
         GpuVendor::Intel => {
-            let dri_prime_val = if gpu_count == 2 {
-                "1".to_string()
-            } else {
-                format!("pci-{}", pci_address.replace([':', '.'], "_"))
-            };
             env.push("DRI_PRIME".to_string());
             env.push(dri_prime_val);
             env.push("VK_LOADER_DRIVERS_SELECT".to_string());
             env.push("*intel*".to_string());
         }
         GpuVendor::Other => {
-            let dri_prime_val = if gpu_count == 2 {
-                "1".to_string()
-            } else {
-                format!("pci-{}", pci_address.replace([':', '.'], "_"))
-            };
             env.push("DRI_PRIME".to_string());
             env.push(dri_prime_val);
         }
@@ -198,7 +184,7 @@ mod tests {
                 "CARDWIRE_FORCE_DGPU",
                 "1",
                 "DRI_PRIME",
-                "1",
+                "pci-0000_03_00_0",
                 "VK_LOADER_DRIVERS_SELECT",
                 "*radeon*"
             ]
@@ -218,7 +204,7 @@ mod tests {
                 "CARDWIRE_FORCE_GPU",
                 "1",
                 "DRI_PRIME",
-                "1",
+                "pci-0000_0d_00_0",
                 "VK_LOADER_DRIVERS_SELECT",
                 "*radeon*"
             ]
