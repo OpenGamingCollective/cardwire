@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     core::{
-        gpu::{DbusGpuDevice, GpuDevice, GpuVendor}, inode::{
+        gpu::{DbusGpuDevice, GpuDevice, GpuVendor, external_display_connected}, inode::{
             backlight_to_inode, card_to_inode, nvidia_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode, sys_drm_inodes
         }, pci::PciDevice
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
@@ -300,6 +300,23 @@ impl GpuInterface {
                     "GPU {} is not available and cannot be blocked",
                     self.device.name()
                 )));
+            }
+            // Refuse to block a GPU that is currently driving a connected display, the display
+            // would go black. On read errors, fail safely instead of blocking on incomplete data.
+            match external_display_connected(*self.device.card()) {
+                Ok(true) => {
+                    return Err(fdo::Error::AccessDenied(format!(
+                        "GPU {} is driving a connected display and cannot be blocked",
+                        self.device.name()
+                    )));
+                }
+                Err(err) => {
+                    return Err(fdo::Error::AccessDenied(format!(
+                        "could not verify the display state of GPU {}, refusing to block: {err}",
+                        self.device.name()
+                    )));
+                }
+                Ok(false) => {}
             }
             // Now block
             self.block_gpu(self.id).await?;

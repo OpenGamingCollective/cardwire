@@ -278,6 +278,37 @@ impl ModeInterface {
                     return Err(fdo::Error::NotSupported(error_message));
                 }
 
+                // Never block a GPU that is currently driving a connected display
+                let offload_card = match gpu_list
+                    .values()
+                    .filter(|gpu| gpu.device.is_available())
+                    .find(|gpu| gpu.device.is_discrete() && !gpu.device.is_default())
+                {
+                    Some(gpu) => *gpu.device.card(),
+                    // has_offload_dgpu already guaranteed a matching GPU, fail gracefully anyway
+                    None => {
+                        return Err(fdo::Error::Failed(
+                            "offload GPU disappeared during mode switch".to_string(),
+                        ));
+                    }
+                };
+                let connected = tokio::task::spawn_blocking(move || {
+                    crate::core::gpu::external_display_connected(offload_card)
+                })
+                .await
+                .map_err(|err| fdo::Error::Failed(format!("DRM probe task failed: {err}")))?
+                .map_err(|err| {
+                    fdo::Error::Failed(format!("failed to read DRM connector state: {err}"))
+                })?;
+                if connected {
+                    let error_message = format!(
+                        "Couldn't set mode to {}, the offload GPU is driving a connected display",
+                        mode
+                    );
+                    error!("{}", error_message);
+                    return Err(fdo::Error::NotSupported(error_message));
+                }
+
                 for (id, gpu) in gpu_list
                     .iter_mut()
                     .filter(|(_, gpu)| gpu.device.is_available())
