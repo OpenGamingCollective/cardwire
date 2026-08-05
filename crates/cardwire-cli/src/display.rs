@@ -16,6 +16,11 @@ pub struct GpuDevice {
     pub render: u32,
     pub card: u32,
     pub default: bool,
+    pub discrete: bool,
+    pub virtual_gpu: bool,
+    pub available: bool,
+    pub vendor: String,
+    pub driver: String,
     pub blocked: bool,
     pub nvidia: bool,
     pub nvidia_minor: String,
@@ -33,7 +38,7 @@ pub struct PciDevice {
     child_pci: String,
 }
 
-/// Take a Map and print it  
+/// Take a Map and print it
 pub fn print_devices(gpu_list: BTreeMap<usize, GpuDevice>, is_json: bool) -> Result<()> {
     if is_json {
         println!("{}", serde_json::to_string_pretty(&gpu_list)?);
@@ -43,7 +48,7 @@ pub fn print_devices(gpu_list: BTreeMap<usize, GpuDevice>, is_json: bool) -> Res
 
     Ok(())
 }
-/// Take a Map and print it  
+/// Take a Map and print it
 pub fn print_devices_pci(pci_list: BTreeMap<String, PciDevice>) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&pci_list)?);
     Ok(())
@@ -56,6 +61,7 @@ fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
     let mut render_w = 6usize;
     let mut card_w = 4usize;
     let default_w = 7usize;
+    let discrete_w = 7usize;
     let blocked_w = 7usize;
 
     // Calculate widths
@@ -72,13 +78,14 @@ fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
 
     // Header
     println!(
-        "{:<id_w$}  {:<name_w$}  {:<pci_w$}  {:<render_w$}  {:<card_w$}  {:<default_w$}  {:<blocked_w$}",
+        "{:<id_w$}  {:<name_w$}  {:<pci_w$}  {:<render_w$}  {:<card_w$}  {:<default_w$} {:<discrete_w$}  {:<blocked_w$}",
         "ID",
         "NAME",
         "PCI",
         "RENDER",
         "CARD",
         "DEFAULT",
+        "DISCRETE",
         "BLOCKED",
         id_w = id_w,
         name_w = name_w,
@@ -86,29 +93,32 @@ fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
         render_w = render_w,
         card_w = card_w,
         default_w = default_w,
+        discrete_w = discrete_w,
         blocked_w = blocked_w,
     );
     println!(
-        "{}  {}  {}  {}  {}  {}  {}",
+        "{}  {}  {}  {}  {}  {}  {}  {}",
         "-".repeat(id_w),
         "-".repeat(name_w),
         "-".repeat(pci_w),
         "-".repeat(render_w),
         "-".repeat(card_w),
         "-".repeat(default_w),
+        "-".repeat(discrete_w),
         "-".repeat(blocked_w),
     );
     for (id, gpu) in gpu_list {
         let render_full = format!("renderD{}", gpu.render);
         let card_full = format!("card{}", gpu.card);
         println!(
-            "{:<id_w$}  {:<name_w$}  {:<pci_w$}  {:<render_w$}  {:<card_w$}  {:<default_w$}  {:<blocked_w$}",
+            "{:<id_w$}  {:<name_w$}  {:<pci_w$}  {:<render_w$}  {:<card_w$}  {:<default_w$}  {:<discrete_w$}  {:<blocked_w$}",
             id,
             gpu.name,
             gpu.pci,
             render_full,
             card_full,
             if gpu.default { "(*)" } else { "( )" },
+            if gpu.discrete { "(*)" } else { "( )" },
             gpu.blocked,
             id_w = id_w,
             name_w = name_w,
@@ -116,6 +126,7 @@ fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
             render_w = render_w,
             card_w = card_w,
             default_w = default_w,
+            discrete_w = discrete_w,
             blocked_w = blocked_w,
         );
     }
@@ -126,7 +137,19 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    fn make_gpu(id: u32, name: &str, pci: &str, default: bool, blocked: bool) -> GpuDevice {
+    #[allow(clippy::too_many_arguments)]
+    fn make_gpu(
+        id: u32,
+        name: &str,
+        pci: &str,
+        default: bool,
+        discrete: bool,
+        virtual_gpu: bool,
+        available: bool,
+        vendor: &str,
+        driver: &str,
+        blocked: bool,
+    ) -> GpuDevice {
         GpuDevice {
             id,
             name: name.to_string(),
@@ -134,6 +157,11 @@ mod tests {
             render: 128,
             card: 0,
             default,
+            discrete,
+            virtual_gpu,
+            available,
+            vendor: vendor.to_string(),
+            driver: driver.to_string(),
             blocked,
             nvidia: false,
             nvidia_minor: String::new(),
@@ -143,8 +171,36 @@ mod tests {
     #[test]
     fn test_print_devices_json_produces_valid_json() {
         let mut map = BTreeMap::new();
-        map.insert(0, make_gpu(0, "Intel UHD", "0000:00:02.0", true, false));
-        map.insert(1, make_gpu(1, "RTX 4060", "0000:01:00.0", false, true));
+        map.insert(
+            0,
+            make_gpu(
+                0,
+                "Intel UHD",
+                "0000:00:02.0",
+                true,
+                false,
+                false,
+                true,
+                "Intel",
+                "xe",
+                false,
+            ),
+        );
+        map.insert(
+            1,
+            make_gpu(
+                1,
+                "RTX 4060",
+                "0000:01:00.0",
+                false,
+                true,
+                false,
+                true,
+                "Nvidia",
+                "nouveau",
+                true,
+            ),
+        );
 
         let json_str = serde_json::to_string_pretty(&map).unwrap();
         // Verify it parses back
@@ -163,7 +219,18 @@ mod tests {
 
     #[test]
     fn test_gpu_device_fields_roundtrip_through_serde() {
-        let gpu = make_gpu(42, "RX 7900 XTX", "0000:03:00.0", false, false);
+        let gpu = make_gpu(
+            42,
+            "RX 7900 XTX",
+            "0000:03:00.0",
+            false,
+            true,
+            false,
+            true,
+            "AMD",
+            "amdgpu",
+            false,
+        );
         let json = serde_json::to_string(&gpu).unwrap();
         let parsed: GpuDevice = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.id, 42);

@@ -12,6 +12,11 @@ pub struct DbusGpuDevice {
     pub render: u32,
     pub card: u32,
     pub default: bool,
+    pub discrete: bool,
+    pub virtual_gpu: bool,
+    pub available: bool,
+    pub vendor: String,
+    pub driver: String,
     pub nvidia: bool,
     pub nvidia_minor: String,
 }
