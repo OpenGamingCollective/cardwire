@@ -165,6 +165,7 @@ impl CardwireAnalyzer {
                                     pid: event.pid,
                                     comm: app_id.clone(),
                                     gpu_id: 1,
+                                    wayland_app_id: app_id.clone(),
                                 };
                                 report_vec.push_back(log_entry.clone());
                                 info!(
@@ -187,6 +188,7 @@ impl CardwireAnalyzer {
                                     pid: event.pid,
                                     comm: process_name.clone(),
                                     gpu_id: 1,
+                                    wayland_app_id: String::new(),
                                 };
                                 report_vec.push_back(log_entry.clone());
                                 info!(

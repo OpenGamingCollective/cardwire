@@ -10,6 +10,7 @@ pub struct LogEntry {
     pub pid: u32,
     pub comm: String,
     pub gpu_id: u32,
+    pub wayland_app_id: String,
 }
 
 #[derive(Clone)]
@@ -27,8 +28,9 @@ impl LoggerInterface {
 
 #[interface(name = "org.opengamingcollective.cardwire.Logger")]
 impl LoggerInterface {
-    pub async fn process_blocked(&self) -> fdo::Result<LogEntry> {
-        Err(fdo::Error::AccessDenied("only use signal".to_string()))
+    pub async fn process_blocked(&self) -> fdo::Result<VecDeque<LogEntry>> {
+        let vec = self.report_logs.read().await;
+        Ok(vec.clone())
     }
 
     #[zbus(signal)]
