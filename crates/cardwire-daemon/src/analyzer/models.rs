@@ -172,14 +172,13 @@ impl CardwireAnalyzer {
                                     "{}[{}] tried to access the dGPU (blocked by cardwire)",
                                     app_id, event.pid
                                 );
-                                if let Some(signal) = signal {
-                                    if let Err(e) = LoggerInterfaceSignals::process_blocked_changed(
+                                if let Some(signal) = signal
+                                    && let Err(e) = LoggerInterfaceSignals::process_blocked_changed(
                                         &signal, log_entry,
                                     )
                                     .await
-                                    {
-                                        error!("failed to emit process_blocked_changed: {}", e);
-                                    }
+                                {
+                                    error!("failed to emit process_blocked_changed: {}", e);
                                 }
                             } else if let Some(process_name) = get_real_process_name(event.pid) {
                                 let mut report_vec = report_vec.write().await;
@@ -195,14 +194,13 @@ impl CardwireAnalyzer {
                                     "{}[{}] tried to access the dGPU (blocked by cardwire)",
                                     process_name, event.pid
                                 );
-                                if let Some(signal) = signal {
-                                    if let Err(e) = LoggerInterfaceSignals::process_blocked_changed(
+                                if let Some(signal) = signal
+                                    && let Err(e) = LoggerInterfaceSignals::process_blocked_changed(
                                         &signal, log_entry,
                                     )
                                     .await
-                                    {
-                                        error!("failed to emit process_blocked_changed: {}", e);
-                                    }
+                                {
+                                    error!("failed to emit process_blocked_changed: {}", e);
                                 }
                             }
                         });
