@@ -2,15 +2,20 @@ use aya::maps::{HashMap as AyaHashMap, RingBuf};
 use aya_log::EbpfLogger;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{Log, debug, error, info, warn};
-use std::{collections::HashMap, fs, path::PathBuf, ptr, sync::Arc};
+use std::{
+    collections::{HashMap, VecDeque}, fs, path::PathBuf, ptr, sync::Arc, time::SystemTime
+};
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock}, task, time::Instant
 };
+use zbus::object_server::SignalEmitter;
 
-use crate::analyzer::{
-    dynamic_analysis::{
-        check_env, check_fdo_app_id, check_for_flatpak_run, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland
-    }, static_analysis
+use crate::{
+    analyzer::{
+        dynamic_analysis::{
+            check_env, check_fdo_app_id, check_for_flatpak_run, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland
+        }, static_analysis
+    }, interface::{LogEntry, LoggerInterfaceSignals}
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -45,12 +50,18 @@ pub struct CardwireAnalyzer {
     forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
+    report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
+    signal: Option<SignalEmitter<'static>>,
     #[allow(dead_code)]
     xdg_folders: Vec<PathBuf>,
 }
 
 impl CardwireAnalyzer {
-    pub async fn build(blocker: Arc<RwLock<EbpfBlocker>>) -> anyhow::Result<CardwireAnalyzer> {
+    pub async fn build(
+        blocker: Arc<RwLock<EbpfBlocker>>,
+        report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
+        signal: Option<SignalEmitter<'static>>,
+    ) -> anyhow::Result<CardwireAnalyzer> {
         let mut blocker = blocker.write().await;
         let exec_ring = blocker.get_exec_ring()?;
         let close_ring = blocker.get_close_ring()?;
@@ -83,6 +94,8 @@ impl CardwireAnalyzer {
             forced_map,
             ebpf_logger,
             xdg_list,
+            report_vec,
+            signal,
             xdg_folders,
         })
     }
@@ -92,6 +105,8 @@ impl CardwireAnalyzer {
         let close_arc = self.close_ring.clone();
         let report_arc = self.report_ring.clone();
         let logger_arc = self.ebpf_logger.clone();
+        let report_vec = self.report_vec.clone();
+
         // Lock the buffers once
         let mut exec_ring = exec_arc.lock().await;
         let mut close_ring = close_arc.lock().await;
@@ -118,6 +133,7 @@ impl CardwireAnalyzer {
         });
 
         // spawn the blocked event report in it's own thread
+        let shared_self_report = Arc::clone(&shared_self);
         task::spawn(async move {
             let mut report_ring = report_arc.lock().await;
             loop {
@@ -139,17 +155,53 @@ impl CardwireAnalyzer {
                         previous_reported_pid = event.pid;
                         // Spawn in another task to prevent blocking the report logger while
                         // fetching informations about this process
+                        let report_vec = report_vec.clone();
+                        let signal = shared_self_report.signal.clone();
                         task::spawn(async move {
                             if let Some(app_id) = get_app_id_wayland(event.pid).await {
+                                let mut report_vec = report_vec.write().await;
+                                let log_entry = LogEntry {
+                                    timestamp: SystemTime::now(),
+                                    pid: event.pid,
+                                    comm: app_id.clone(),
+                                    gpu_id: 1,
+                                };
+                                report_vec.push_back(log_entry.clone());
                                 info!(
                                     "{}[{}] tried to access the dGPU (blocked by cardwire)",
                                     app_id, event.pid
                                 );
+                                if let Some(signal) = signal {
+                                    if let Err(e) = LoggerInterfaceSignals::process_blocked_changed(
+                                        &signal, log_entry,
+                                    )
+                                    .await
+                                    {
+                                        error!("failed to emit process_blocked_changed: {}", e);
+                                    }
+                                }
                             } else if let Some(process_name) = get_real_process_name(event.pid) {
+                                let mut report_vec = report_vec.write().await;
+                                let log_entry = LogEntry {
+                                    timestamp: SystemTime::now(),
+                                    pid: event.pid,
+                                    comm: process_name.clone(),
+                                    gpu_id: 1,
+                                };
+                                report_vec.push_back(log_entry.clone());
                                 info!(
                                     "{}[{}] tried to access the dGPU (blocked by cardwire)",
                                     process_name, event.pid
                                 );
+                                if let Some(signal) = signal {
+                                    if let Err(e) = LoggerInterfaceSignals::process_blocked_changed(
+                                        &signal, log_entry,
+                                    )
+                                    .await
+                                    {
+                                        error!("failed to emit process_blocked_changed: {}", e);
+                                    }
+                                }
                             }
                         });
                     }

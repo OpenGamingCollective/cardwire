@@ -3,7 +3,7 @@ use crate::{
     analyzer::CardwireAnalyzer, core::{
         gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self}
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
-        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes, SwitcherooInterface
+        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SwitcherooInterface
     }, tasks
 };
 use anyhow::{Context, Result};
@@ -12,7 +12,7 @@ use log::error;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, task};
 use zbus::{
-    fdo::{self}, interface, object_server::InterfaceRef
+    fdo::{self}, interface, object_server::{InterfaceRef, SignalEmitter}
 };
 
 /// Contain the variable used by the daemon in daemon.rs
@@ -33,6 +33,8 @@ pub struct DaemonManager {
     pub config_interface: ConfigInterface,
     pub debug_interface: DebugInterface,
     pub switcheroo_interface: SwitcherooInterface,
+    pub logger_interface: LoggerInterface,
+    pub logger_signal: Option<SignalEmitter<'static>>,
     pub inner: DaemonInner,
 }
 
@@ -87,6 +89,8 @@ impl DaemonManager {
         )
         .await?;
 
+        let logger_interface = LoggerInterface::build();
+
         Ok(Self {
             mode_interface: mode_interface.clone(),
             gpu_interfaces: Arc::clone(&gpu_interfaces),
@@ -106,6 +110,8 @@ impl DaemonManager {
                 Arc::clone(&power_tasks),
             )?,
             switcheroo_interface: SwitcherooInterface::build(Arc::clone(&gpu_interfaces)),
+            logger_interface,
+            logger_signal: None,
             inner: DaemonInner {
                 mode_state: Arc::clone(&mode_state),
                 gpu_state: Arc::clone(&gpu_state),
@@ -284,8 +290,10 @@ impl DaemonManager {
     }
     pub fn run_analyzer(&self) -> impl Future<Output = Result<(), anyhow::Error>> + 'static {
         let blocker = Arc::clone(&self.inner.blocker);
+        let logger = Arc::clone(&self.logger_interface.report_logs);
+        let signal = self.logger_signal.clone();
         async move {
-            let cardwire_analyzer = CardwireAnalyzer::build(Arc::clone(&blocker))
+            let cardwire_analyzer = CardwireAnalyzer::build(blocker, logger, signal)
                 .await
                 .map_err(|err| {
                     error!("Failed to build CardwireAnalyzer: {}", err);

@@ -112,6 +112,14 @@ async fn spawn_dbus_api(
             power_tasks.insert(*id, handle);
         }
     }
+    // Cardwire logger
+    object_server
+        .at(path, daemon.logger_interface.clone())
+        .await?;
+    let logger_ref = object_server
+        .interface::<_, crate::interface::LoggerInterface>(path)
+        .await?;
+    daemon.logger_signal = Some(logger_ref.signal_emitter().clone());
     drop(power_tasks);
     // drop gpu list to prevent deadlock
     drop(gpu_interfaces);
