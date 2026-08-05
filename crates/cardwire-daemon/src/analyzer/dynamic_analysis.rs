@@ -153,11 +153,12 @@ pub async fn get_app_id_wayland_with_retry(pid: u32) -> Option<String> {
         if !Path::new(&format!("/proc/{}", pid)).exists() {
             return None;
         }
-        if let Some(app_id) = get_app_id_wayland(pid).await {
-            return Some(app_id);
-        }
-        if Instant::now() >= deadline {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
             return None;
+        }
+        if let Ok(Some(app_id)) = tokio::time::timeout(remaining, get_app_id_wayland(pid)).await {
+            return Some(app_id);
         }
         tokio::time::sleep(delay).await;
     }
