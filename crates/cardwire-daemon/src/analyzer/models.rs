@@ -6,14 +6,14 @@ use std::{
     collections::{HashMap, VecDeque}, fs, path::PathBuf, ptr, sync::Arc, time::SystemTime
 };
 use tokio::{
-    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock}, task, time::Instant
+    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore}, task, time::Instant
 };
 use zbus::object_server::SignalEmitter;
 
 use crate::{
     analyzer::{
         dynamic_analysis::{
-            check_env, check_fdo_app_id, check_for_flatpak_run, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland
+            check_env, check_fdo_app_id, check_for_flatpak_run, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland_with_retry
         }, static_analysis
     }, interface::{LogEntry, LoggerInterfaceSignals}
 };
@@ -51,10 +51,18 @@ pub struct CardwireAnalyzer {
     ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
     report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
+    report_semaphore: Arc<Semaphore>,
     signal: Option<SignalEmitter<'static>>,
     #[allow(dead_code)]
     xdg_folders: Vec<PathBuf>,
 }
+
+// Bound the number of concurrent report tasks
+const REPORT_SEMAPHORE_PERMITS: usize = 32;
+// A pid already in the report history is considered a duplicate and is skipped
+const REPORT_DEDUP_MAX_PIDS: usize = 4096;
+// Max entries kept in the report history
+const MAX_REPORT_ENTRIES: usize = 4096;
 
 impl CardwireAnalyzer {
     pub async fn build(
@@ -95,6 +103,7 @@ impl CardwireAnalyzer {
             ebpf_logger,
             xdg_list,
             report_vec,
+            report_semaphore: Arc::new(Semaphore::new(REPORT_SEMAPHORE_PERMITS)),
             signal,
             xdg_folders,
         })
@@ -103,16 +112,11 @@ impl CardwireAnalyzer {
         // Clone the Arcs and Sender to move into the background task
         let exec_arc = self.exec_ring.clone();
         let close_arc = self.close_ring.clone();
-        let report_arc = self.report_ring.clone();
         let logger_arc = self.ebpf_logger.clone();
-        let report_vec = self.report_vec.clone();
 
         // Lock the buffers once
         let mut exec_ring = exec_arc.lock().await;
         let mut close_ring = close_arc.lock().await;
-
-        // Used to prevent duplicated logs burst
-        let mut previous_reported_pid = 0;
 
         let shared_self = Arc::new(self);
 
@@ -134,81 +138,7 @@ impl CardwireAnalyzer {
 
         // spawn the blocked event report in it's own thread
         let shared_self_report = Arc::clone(&shared_self);
-        task::spawn(async move {
-            let mut report_ring = report_arc.lock().await;
-            loop {
-                let mut guard = match report_ring.ready_mut(Interest::READABLE).await {
-                    Ok(guard) => guard,
-                    Err(err) => {
-                        error!("failed to get report logger guard: {}", err);
-                        return;
-                    }
-                };
-                while let Some(item) = guard.get_inner_mut().next() {
-                    if item.len() < std::mem::size_of::<ReportEvent>() {
-                        debug!("Skipping malformed report event. Size: {}", item.len());
-                        continue;
-                    }
-                    let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
-                    // only log if we didn't see the pid before
-                    if event.pid != previous_reported_pid {
-                        previous_reported_pid = event.pid;
-                        // Spawn in another task to prevent blocking the report logger while
-                        // fetching informations about this process
-                        let report_vec = report_vec.clone();
-                        let signal = shared_self_report.signal.clone();
-                        task::spawn(async move {
-                            if let Some(app_id) = get_app_id_wayland(event.pid).await {
-                                let mut report_vec = report_vec.write().await;
-                                let log_entry = LogEntry {
-                                    timestamp: SystemTime::now(),
-                                    pid: event.pid,
-                                    comm: app_id.clone(),
-                                    gpu_id: 1,
-                                    wayland_app_id: app_id.clone(),
-                                };
-                                report_vec.push_back(log_entry.clone());
-                                info!(
-                                    "{}[{}] tried to access the dGPU (blocked by cardwire)",
-                                    app_id, event.pid
-                                );
-                                if let Some(signal) = signal
-                                    && let Err(e) = LoggerInterfaceSignals::process_blocked_changed(
-                                        &signal, log_entry,
-                                    )
-                                    .await
-                                {
-                                    error!("failed to emit process_blocked_changed: {}", e);
-                                }
-                            } else if let Some(process_name) = get_real_process_name(event.pid) {
-                                let mut report_vec = report_vec.write().await;
-                                let log_entry = LogEntry {
-                                    timestamp: SystemTime::now(),
-                                    pid: event.pid,
-                                    comm: process_name.clone(),
-                                    gpu_id: 1,
-                                    wayland_app_id: String::new(),
-                                };
-                                report_vec.push_back(log_entry.clone());
-                                info!(
-                                    "{}[{}] tried to access the dGPU (blocked by cardwire)",
-                                    process_name, event.pid
-                                );
-                                if let Some(signal) = signal
-                                    && let Err(e) = LoggerInterfaceSignals::process_blocked_changed(
-                                        &signal, log_entry,
-                                    )
-                                    .await
-                                {
-                                    error!("failed to emit process_blocked_changed: {}", e);
-                                }
-                            }
-                        });
-                    }
-                }
-                guard.clear_ready();
-            }
-        });
+        task::spawn(async move { shared_self_report.report_logger().await });
 
         loop {
             tokio::select! {
@@ -297,6 +227,65 @@ impl CardwireAnalyzer {
         }
     }
 
+    async fn report_logger(&self) -> () {
+        let report_arc = self.report_ring.clone();
+        let mut report_ring = report_arc.lock().await;
+        let report_vec = self.report_vec.clone();
+
+        // Used to prevent duplicated logs burst, a pid is only reported once
+        // until it is evicted from the history by newer entries
+        let mut reported_pids: VecDeque<u32> = VecDeque::new();
+        let report_semaphore = self.report_semaphore.clone();
+        loop {
+            let mut guard = match report_ring.ready_mut(Interest::READABLE).await {
+                Ok(guard) => guard,
+                Err(err) => {
+                    error!("failed to get report logger guard: {}", err);
+                    return;
+                }
+            };
+            while let Some(item) = guard.get_inner_mut().next() {
+                if item.len() < std::mem::size_of::<ReportEvent>() {
+                    debug!("Skipping malformed report event. Size: {}", item.len());
+                    continue;
+                }
+                let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
+                // only log if we didn't see the pid recently
+                if reported_pids.contains(&event.pid) {
+                    continue;
+                }
+                reported_pids.push_back(event.pid);
+                if reported_pids.len() > REPORT_DEDUP_MAX_PIDS {
+                    reported_pids.pop_front();
+                }
+                // Bound the number of concurrent report tasks
+                if let Ok(permit) = report_semaphore.clone().acquire_owned().await {
+                    // Spawn in another task to prevent blocking the report logger while
+                    // fetching informations about this process
+                    let report_vec = report_vec.clone();
+                    let signal = self.signal.clone();
+                    task::spawn(async move {
+                        let _permit = permit;
+                        if let Some(app_id) = get_app_id_wayland_with_retry(event.pid).await {
+                            report_blocked(report_vec, signal, event.pid, app_id.clone(), app_id)
+                                .await;
+                        } else if let Some(process_name) = get_real_process_name(event.pid) {
+                            report_blocked(
+                                report_vec,
+                                signal,
+                                event.pid,
+                                process_name,
+                                String::new(),
+                            )
+                            .await;
+                        }
+                    });
+                }
+            }
+            guard.clear_ready();
+        }
+    }
+
     /// Default app are blocked, try to find if it's a game or a gpu intensive app, the u8 is the
     /// gpu id
     async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, PidType, u32)> {
@@ -341,6 +330,39 @@ impl CardwireAnalyzer {
     #[allow(dead_code)]
     pub fn xdg_folders(&self) -> &Vec<PathBuf> {
         &self.xdg_folders
+    }
+}
+
+/// Record a blocked process in the report history and notify listeners
+async fn report_blocked(
+    report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
+    signal: Option<SignalEmitter<'static>>,
+    pid: u32,
+    name: String,
+    wayland_app_id: String,
+) {
+    let log_entry = LogEntry {
+        timestamp: SystemTime::now(),
+        pid,
+        comm: name.clone(),
+        gpu_id: 1,
+        wayland_app_id,
+    };
+    {
+        let mut report_vec = report_vec.write().await;
+        report_vec.push_back(log_entry.clone());
+        while report_vec.len() > MAX_REPORT_ENTRIES {
+            report_vec.pop_front();
+        }
+    }
+    info!(
+        "{}[{}] tried to access the dGPU (blocked by cardwire)",
+        name, pid
+    );
+    if let Some(signal) = signal
+        && let Err(e) = LoggerInterfaceSignals::process_blocked_changed(&signal, log_entry).await
+    {
+        error!("failed to emit process_blocked_changed: {}", e);
     }
 }
 

@@ -21,7 +21,7 @@ pub struct LoggerInterface {
 impl LoggerInterface {
     pub fn build() -> Self {
         Self {
-            report_logs: Arc::new(RwLock::new(VecDeque::new())),
+            report_logs: Arc::new(RwLock::new(VecDeque::with_capacity(4096))),
         }
     }
 }
