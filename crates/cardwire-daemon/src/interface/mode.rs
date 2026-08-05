@@ -17,8 +17,8 @@ use zbus::{fdo, interface, object_server::InterfaceRef};
 #[serde(rename_all = "snake_case")]
 pub enum Modes {
     Integrated,
-    Hybrid,
     #[default]
+    Hybrid,
     Manual,
     Smart,
 }
@@ -483,8 +483,8 @@ mod tests {
     }
 
     #[test]
-    fn test_modes_default_is_manual() {
-        assert_eq!(Modes::default(), Modes::Manual);
+    fn test_modes_default_is_hybrid() {
+        assert_eq!(Modes::default(), Modes::Hybrid);
     }
 
     #[test]
