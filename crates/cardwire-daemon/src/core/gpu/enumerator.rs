@@ -69,6 +69,7 @@ impl GpuEnumerator {
             .as_ref()
             .and_then(|map| map.get(device.pci_address()))
             .map(|vlk_dev| vlk_dev.properties().device_name.clone())
+            .map(|name| name.split('(').next().unwrap_or(&name).trim().to_string())
             //  Fallback to vendor-specific lookup
             .or_else(|| match gpu_vendor {
                 GpuVendor::Nvidia => nvidia_get_device_model(device.pci_address()),
