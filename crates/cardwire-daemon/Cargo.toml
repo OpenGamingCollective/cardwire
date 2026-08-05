@@ -25,7 +25,8 @@ xdg.workspace = true
 freedesktop-desktop-entry.workspace = true
 udev.workspace = true
 aya-log.workspace = true
-
+vulkano.workspace = true
+khronos-egl.workspace = true
 
 [[bin]]
 name = "cardwired"

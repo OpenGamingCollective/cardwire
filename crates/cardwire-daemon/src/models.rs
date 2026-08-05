@@ -1,7 +1,7 @@
 //! where the struct and impl are declared
 use crate::{
     analyzer::CardwireAnalyzer, core::{
-        gpu::{self, GpuVendor, check_default_drm_class}, inode::exp_nvidia_inodes, pci::{self}
+        gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self}
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, ModeInterface, Modes, SwitcherooInterface
     }, tasks
@@ -51,7 +51,8 @@ impl DaemonManager {
 
         let pci_devices: BTreeMap<String, pci::PciDevice> = pci::read_pci_devices()?;
 
-        let gpu_list = gpu::read_gpu(&pci_devices)?;
+        let gpu_enumerator = GpuEnumerator::build();
+        let gpu_list = gpu_enumerator.enumerate(&pci_devices);
 
         let pci_list: Arc<RwLock<BTreeMap<String, pci::PciDevice>>> =
             Arc::new(RwLock::new(pci_devices));
@@ -121,9 +122,6 @@ impl DaemonManager {
         // Whitelist cardwire pid before starting
         self.whitelist_daemon_pid().await?;
 
-        // Find the default gpu
-        self.populate_default_gpu().await?;
-
         // Set nvidia setting
         self.set_nvidia_setting().await?;
         // Push nvidia inodes, if empty/error just ignore
@@ -146,11 +144,6 @@ impl DaemonManager {
         };
 
         Ok(())
-    }
-
-    async fn populate_default_gpu(&self) -> Result<()> {
-        let mut gpu_interface = self.inner.gpu_list.write().await;
-        check_default_drm_class(&mut gpu_interface).map_err(|err| err.into())
     }
 
     /// Whitelist the daemon pid inside the ebpf program
@@ -185,6 +178,7 @@ impl DaemonManager {
         // Only block if the device has a Nvidia gpu
         for (id, gpu) in gpus_list.iter() {
             if gpu.device.gpu_vendor() == GpuVendor::Nvidia
+                && !gpu.device.is_default()
                 && let Ok(inodes) = exp_nvidia_inodes()
                 && !inodes.is_empty()
             {

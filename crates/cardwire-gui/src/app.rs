@@ -95,7 +95,6 @@ impl AppState {
                     self.error = None;
                 }
                 Err(err) => {
-                    self.main_state.current_mode = None;
                     self.error = Some(format!("Error fetching Mode: {}", err));
                 }
             },

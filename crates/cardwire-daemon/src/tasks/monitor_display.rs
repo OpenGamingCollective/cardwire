@@ -45,12 +45,18 @@ pub(crate) async fn detect_external_display_target(
 
     let card = {
         let gpu_list = gpu_list.read().await;
-        if gpu_list.len() != 2 {
+        if gpu_list
+            .values()
+            .filter(|gpu| gpu.device.is_available())
+            .count()
+            != 2
+        {
             return Ok((requested, None));
         }
         gpu_list
             .values()
-            .find(|gpu| !gpu.device.is_default())
+            .filter(|gpu| gpu.device.is_available())
+            .find(|gpu| gpu.device.is_discrete() && !gpu.device.is_default())
             .map(|gpu| *gpu.device.card())
     };
 

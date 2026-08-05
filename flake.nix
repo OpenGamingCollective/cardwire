@@ -25,7 +25,7 @@
         let
           tc = (fenixpkgs system).toolchainOf {
             channel = "nightly";
-            sha256 = "sha256-sM1tAacgPuCH5jppuiSQi1DM/LDe228PX/4SBDmsfG0=";
+            sha256 = "sha256-w0X+EGECIpZs67m1KoS/4Ac+q1n/PGzhlOJ+0z/BkO8=";
           };
         in
         (fenixpkgs system).combine [
@@ -67,6 +67,11 @@
             (pkgs system).mdbook-mermaid
             (pkgs system).wayland
             (pkgs system).libxkbcommon
+            (pkgs system).vulkan-headers
+            (pkgs system).libxcb
+            (pkgs system).egl-wayland
+            (pkgs system).egl-x11
+            (pkgs system).libglvnd
           ]
           ++ self.checks.${system}.pre-commit-check.enabledPackages;
           LD_LIBRARY_PATH = (pkgs system).lib.makeLibraryPath [
@@ -75,6 +80,11 @@
             (pkgs system).vulkan-loader
             (pkgs system).libGL
             (pkgs system).udev
+            (pkgs system).vulkan-headers
+            (pkgs system).libxcb
+            (pkgs system).egl-wayland
+            (pkgs system).egl-x11
+            (pkgs system).libglvnd
           ];
           LIBCLANG_PATH = "${(pkgs system).llvmPackages.libclang.lib}/lib";
           RUST_SRC_PATH = "${toolchainFor system}/lib/rustlib/src/rust/library";

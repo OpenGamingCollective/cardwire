@@ -70,6 +70,17 @@ impl<T: AsRef<str>> From<T> for GpuVendor {
     }
 }
 
+impl Display for GpuVendor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GpuVendor::Amd => write!(f, "AMD"),
+            GpuVendor::Nvidia => write!(f, "Nvidia"),
+            GpuVendor::Intel => write!(f, "Intel"),
+            GpuVendor::Other => write!(f, "Unknown Vendor"),
+        }
+    }
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
 pub struct GpuDevice {
     name: String,
@@ -79,6 +90,10 @@ pub struct GpuDevice {
     default: Option<bool>,
     gpu_vendor: GpuVendor,
     nvidia_minor: Option<u32>,
+    discrete: bool,
+    vfio: bool,
+    available: bool,
+    virtual_gpu: bool,
 }
 impl GpuDevice {
     pub fn pci(&self) -> &PciDevice {
@@ -111,6 +126,28 @@ impl GpuDevice {
         &self.nvidia_minor
     }
 
+    pub fn is_discrete(&self) -> bool {
+        self.discrete
+    }
+
+    pub fn set_discrete(&mut self, discrete: bool) {
+        self.discrete = discrete;
+    }
+
+    pub fn is_available(&self) -> bool {
+        self.available
+    }
+
+    pub fn _vfio(&self) -> bool {
+        self.vfio
+    }
+
+    /// True for virtual GPUs (e.g. virtio-gpu in qemu) that expose no PCI display controller.
+    pub fn is_virtual(&self) -> bool {
+        self.virtual_gpu
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: String,
         pci: PciDevice,
@@ -119,6 +156,10 @@ impl GpuDevice {
         default: Option<bool>,
         gpu_vendor: GpuVendor,
         nvidia_minor: Option<u32>,
+        discrete: bool,
+        vfio: bool,
+        available: bool,
+        virtual_gpu: bool,
     ) -> GpuDevice {
         GpuDevice {
             name,
@@ -128,6 +169,10 @@ impl GpuDevice {
             default,
             gpu_vendor,
             nvidia_minor,
+            discrete,
+            vfio,
+            available,
+            virtual_gpu,
         }
     }
 
@@ -143,6 +188,11 @@ pub struct DbusGpuDevice {
     pub render: u32,
     pub card: u32,
     pub default: bool,
+    pub discrete: bool,
+    pub virtual_gpu: bool,
+    pub available: bool,
+    pub vendor: String,
+    pub driver: String,
     pub nvidia: bool,
     pub nvidia_minor: String,
 }
@@ -256,6 +306,10 @@ mod tests {
             Some(true),
             GpuVendor::Amd,
             None,
+            true,
+            false,
+            true,
+            false,
         );
         assert_eq!(gpu.name(), "RX 7900 XTX");
         assert_eq!(*gpu.render(), 128);
@@ -263,6 +317,7 @@ mod tests {
         assert_eq!(gpu.default(), Some(true));
         assert_eq!(gpu.gpu_vendor(), GpuVendor::Amd);
         assert_eq!(*gpu.nvidia_minor(), None);
+        assert!(gpu.is_discrete());
         assert_eq!(gpu.pci().pci_address(), "0000:01:00.0");
     }
 
@@ -276,6 +331,10 @@ mod tests {
             Some(true),
             GpuVendor::Amd,
             None,
+            true,
+            false,
+            true,
+            false,
         );
         assert!(gpu.is_default());
     }
@@ -290,6 +349,10 @@ mod tests {
             Some(false),
             GpuVendor::Amd,
             None,
+            true,
+            false,
+            true,
+            false,
         );
         assert!(!gpu.is_default());
     }
@@ -304,8 +367,13 @@ mod tests {
             None,
             GpuVendor::Amd,
             None,
+            false,
+            false,
+            true,
+            false,
         );
         assert!(!gpu.is_default());
+        assert!(!gpu.is_discrete());
     }
 
     #[test]
@@ -318,6 +386,10 @@ mod tests {
             None,
             GpuVendor::Amd,
             None,
+            true,
+            false,
+            true,
+            false,
         );
         assert!(!gpu.is_default());
         gpu.set_default(Some(true));
@@ -334,8 +406,13 @@ mod tests {
             Some(false),
             GpuVendor::Nvidia,
             Some(0),
+            true,
+            false,
+            true,
+            false,
         );
         assert_eq!(gpu.gpu_vendor(), GpuVendor::Nvidia);
         assert_eq!(*gpu.nvidia_minor(), Some(0));
+        assert!(gpu.is_discrete());
     }
 }

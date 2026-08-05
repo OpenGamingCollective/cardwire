@@ -236,39 +236,144 @@ impl ModeInterface {
         Ok(())
     }
 
+    /// Rebuild the applied state after a GPU hotplug
+    pub async fn reconcile_after_hotplug(&self) -> fdo::Result<()> {
+        let _transition = self.transition.lock().await;
+        let requested = self.requested_mode_value().await;
+
+        let (target, _card) = match self.detect_display_target(requested).await {
+            Ok(target) => target,
+            Err(err) => {
+                warn!("failed to resolve display target on hotplug, falling back to hybrid: {err}");
+                if let Err(fb) = self.apply_mode(Modes::Hybrid).await {
+                    warn!("failed to fall back to hybrid mode on hotplug: {fb}");
+                    return Err(fb);
+                }
+                *self.effective_mode.write().await = Modes::Hybrid;
+                return Err(err);
+            }
+        };
+
+        if let Err(err) = self.apply_mode(target).await {
+            warn!("failed to re-apply mode on hotplug, falling back to hybrid: {err}");
+            if let Err(fb) = self.apply_mode(Modes::Hybrid).await {
+                warn!("failed to fall back to hybrid mode on hotplug: {fb}");
+                return Err(fb);
+            }
+            *self.effective_mode.write().await = Modes::Hybrid;
+            return Ok(());
+        }
+
+        *self.effective_mode.write().await = target;
+        Ok(())
+    }
+
     /// Apply a mode to GPU blocking and the eBPF map without persisting it.
     ///
     /// Keeping persistence out of this helper lets display overrides restore the requested mode.
     pub(crate) async fn apply_mode(&self, mode: Modes) -> fdo::Result<()> {
         let mut gpu_list = self.gpu_list.write().await;
         match mode {
-            // Integrated/Hybrid/Smart only works on laptop with two gpus, will refuse if the
-            // computer has more than 2 gpus
-            Modes::Integrated | Modes::Hybrid | Modes::Smart => {
-                if gpu_list.len() != 2 {
+            // Integrated and Smart modes only work on hybrid setups with a offload discrete GPU
+            // (laptops)
+            Modes::Integrated | Modes::Smart => {
+                let available: Vec<(u32, bool, bool, u32)> = gpu_list
+                    .iter()
+                    .filter(|(_, gpu)| gpu.device.is_available())
+                    .map(|(id, gpu)| {
+                        (
+                            *id as u32,
+                            gpu.device.is_discrete(),
+                            gpu.device.is_default(),
+                            *gpu.device.card(),
+                        )
+                    })
+                    .collect();
+
+                if available.len() != 2 {
                     let error_message = format!(
-                        "Couldn't set mode to {}, the mode require exactly 2 GPUs",
+                        "Couldn't set mode to {}, the mode requires exactly 2 GPUs",
                         mode
                     );
                     error!("{}", error_message);
-                    return Err(fdo::Error::NotSupported(error_message.to_string()));
+                    return Err(fdo::Error::NotSupported(error_message));
                 }
-                // Loop to find the non default gpu and block it,
-                for (id, gpu) in gpu_list.iter_mut() {
-                    if !gpu.device.is_default() {
-                        if mode == Modes::Integrated || mode == Modes::Smart {
-                            // Here we block the dGPU
-                            gpu.block_gpu(*id as u32).await?;
-                        } else {
-                            gpu.unblock_gpu().await?;
-                        }
-                    } else if mode == Modes::Smart && gpu.device.is_default() {
+
+                // Check if there is an offload discrete GPU (discrete and not the default display)
+                let has_offload_dgpu = available
+                    .iter()
+                    .any(|(_, discrete, default, _)| *discrete && !*default)
+                    && available
+                        .iter()
+                        .any(|(_, discrete, default, _)| !*discrete && *default);
+
+                if !has_offload_dgpu {
+                    let error_message = format!(
+                        "Couldn't set mode to {}, Integrated and Smart modes require a offload discrete GPU (not supported on desktops where the discrete GPU is the primary display)",
+                        mode
+                    );
+                    error!("{}", error_message);
+                    return Err(fdo::Error::NotSupported(error_message));
+                }
+
+                // Never block a GPU that is currently driving a connected display, the display
+                // would go black.
+                let offload_card = match available
+                    .iter()
+                    .find(|(_, discrete, default, _)| *discrete && !*default)
+                {
+                    Some((_, _, _, card)) => *card,
+                    // has_offload_dgpu already guaranteed a matching GPU, fail gracefully anyway
+                    None => {
+                        return Err(fdo::Error::Failed(
+                            "offload GPU disappeared during mode switch".to_string(),
+                        ));
+                    }
+                };
+                let connected = tokio::task::spawn_blocking(move || {
+                    crate::core::gpu::external_display_connected(offload_card)
+                })
+                .await
+                .map_err(|err| fdo::Error::Failed(format!("DRM probe task failed: {err}")))?
+                .map_err(|err| {
+                    fdo::Error::Failed(format!("failed to read DRM connector state: {err}"))
+                })?;
+                if connected {
+                    let error_message = format!(
+                        "Couldn't set mode to {}, the offload GPU is driving a connected display",
+                        mode
+                    );
+                    error!("{}", error_message);
+                    return Err(fdo::Error::NotSupported(error_message));
+                }
+
+                for (id, gpu) in gpu_list
+                    .iter_mut()
+                    .filter(|(_, gpu)| gpu.device.is_available())
+                {
+                    if gpu.device.is_discrete() && !gpu.device.is_default() {
+                        // Here we block the offload dGPU
+                        gpu.block_gpu(*id as u32).await?;
+                    } else if mode == Modes::Smart
+                        && gpu.device.is_default()
+                        && !gpu.device.is_discrete()
+                    {
                         // push default gpu (iGPU) into the blocked inode map for tracking only
                         gpu.block_gpu(*id as u32).await?;
                     } else {
-                        // clear
+                        // unblock default GPU
                         gpu.unblock_gpu().await?;
                     }
+                }
+            }
+
+            // Hybrid mode unblocks all GPUs so all are available to the system
+            Modes::Hybrid => {
+                for gpu in gpu_list
+                    .values_mut()
+                    .filter(|gpu| gpu.device.is_available())
+                {
+                    gpu.unblock_gpu().await?;
                 }
             }
 
@@ -280,7 +385,10 @@ impl ModeInterface {
                     .auto_apply_gpu_state
                     .load(std::sync::atomic::Ordering::Relaxed);
                 let gpu_state = self.gpu_state.read().await;
-                for (id, gpu) in gpu_list.iter_mut() {
+                for (id, gpu) in gpu_list
+                    .iter_mut()
+                    .filter(|(_, gpu)| gpu.device.is_available())
+                {
                     if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && config {
                         if gpu.device.is_default() {
                             // For safety, warn and unblock if default

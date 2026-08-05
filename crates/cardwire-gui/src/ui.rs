@@ -179,12 +179,15 @@ fn gpu_cards(
 
             let gpu_id = *id;
             let is_blocked = gpu.blocked;
-            let is_default = gpu.default;
+
+            let is_offload_dgpu = !gpu.default && gpu.discrete;
+
+            let is_available = gpu.available;
 
             // Build dropdown menu items
             let mut dropdown_col = column![];
-            // Block/Unblock (only for non-default GPUs)
-            if !is_default {
+            // Block/Unblock (only for offload dGPU)
+            if is_offload_dgpu && is_available {
                 if is_blocked {
                     dropdown_col = dropdown_col.push(
                         button("Unblock")
@@ -239,44 +242,98 @@ fn gpu_cards(
                 .width(Fixed(120.0))
             ]
             .into();
-            let details = column![
-                row![
-                    text("Vendor: ")
-                        .color(Color::from_rgb(0.6, 0.6, 0.6))
-                        .width(80),
-                    text("AMD (Placeholder)")
-                ],
-                row![
-                    text("PCI: ")
-                        .color(Color::from_rgb(0.6, 0.6, 0.6))
-                        .width(80),
-                    text(&gpu.pci)
-                ],
-                row![
-                    text("Nodes: ")
-                        .color(Color::from_rgb(0.6, 0.6, 0.6))
-                        .width(80),
-                    text(format!("card{} / renderD{}", gpu.card, gpu.render))
-                ],
-                row![
-                    text("Blocked: ")
-                        .color(Color::from_rgb(0.6, 0.6, 0.6))
-                        .width(80),
-                    text(gpu.blocked),
-                    horizontal(),
-                    match &gpu.power_state {
-                        Some(power_state) => {
-                            match power_state.trim() {
-                                "D0" => text!("D0").color(Color::from_rgb(1.0, 0.0, 0.0)),
-                                "D3cold" => text!("D3Cold").color(Color::from_rgb(0.0, 1.0, 0.0)),
-                                _ => text!("{}", power_state),
+            let details = if is_available {
+                column![
+                    row![
+                        text("Discrete: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(80),
+                        text(gpu.discrete)
+                    ],
+                    row![
+                        text("Vendor: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(80),
+                        text(gpu.vendor.clone())
+                    ],
+                    row![
+                        text("Driver: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(80),
+                        text(gpu.driver.clone()),
+                    ],
+                    row![
+                        text("PCI: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(80),
+                        text(&gpu.pci)
+                    ],
+                    row![
+                        text("Nodes: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(80),
+                        text(format!("card{} / renderD{}", gpu.card, gpu.render))
+                    ],
+                    row![
+                        text("Virtual: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(80),
+                        text(gpu.virtual_gpu)
+                    ],
+                    row![
+                        text("Blocked: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(80),
+                        text(gpu.blocked),
+                        horizontal(),
+                        match &gpu.power_state {
+                            Some(power_state) => {
+                                match power_state.trim() {
+                                    "D0" => text!("D0").color(Color::from_rgb(1.0, 0.0, 0.0)),
+                                    "D3cold" => {
+                                        text!("D3Cold").color(Color::from_rgb(0.0, 1.0, 0.0))
+                                    }
+                                    _ => text!("{}", power_state),
+                                }
                             }
+                            None => text("err"),
                         }
-                        None => text("err"),
-                    }
+                    ]
                 ]
-            ]
-            .spacing(8);
+                .spacing(8)
+            } else {
+                column![
+                    row![
+                        text("Vendor: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(80),
+                        text(gpu.vendor.clone())
+                    ],
+                    row![
+                        text("Driver: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(80),
+                        text(gpu.driver.clone()),
+                    ],
+                    row![
+                        text("PCI: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(80),
+                        text(&gpu.pci)
+                    ],
+                    row![
+                        text("Available: ")
+                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .width(80),
+                        text(gpu.available).color(Color::from_rgb(
+                            239.0 / 255.0,
+                            68.0 / 255.0,
+                            68.0 / 255.0
+                        ))
+                    ]
+                ]
+                .spacing(8)
+            };
 
             let card = container(column![header, details].spacing(10))
                 .width(Fill)

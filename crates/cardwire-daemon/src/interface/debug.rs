@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        gpu::{self, check_default_drm_class}, pci::{self, DbusPciDevice, PciDevice}
+        gpu::GpuEnumerator, pci::{self, DbusPciDevice, PciDevice}
     }, tasks::watch_power_state
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
@@ -10,7 +10,7 @@ use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface, ModeInterface, Modes}
+    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface, ModeInterface}
 };
 
 #[derive(Clone)]
@@ -109,9 +109,11 @@ impl DebugInterface {
 
             // Empty the current gpu_interfaces
             gpu_interfaces.clear();
-            // Read the new list
-            let new_gpu_list =
-                gpu::read_gpu(&new_pci_list).map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            // Read the new list. The blocking enumeration is intentional: the gpu_list write lock
+            // serializes readers until the new list is complete, and the multi-threaded runtime
+            // absorbs the stall
+            let gpu_enumator = GpuEnumerator::build();
+            let new_gpu_list = gpu_enumator.enumerate(&new_pci_list);
             for (id, device) in new_gpu_list {
                 let gpu = GpuInterface::build(
                     id as u32,
@@ -125,57 +127,33 @@ impl DebugInterface {
 
                 gpu_interfaces.insert(id, gpu);
             }
-            if let Err(err) = check_default_drm_class(&mut gpu_interfaces) {
-                warn!("Failed to determine default GPU: {}", err);
-            }
 
-            // Rebuild hotplug state from the effective mode; an external display may have
-            // temporarily overridden the persisted request with Hybrid.
-            let mode = self.mode_interface.current_mode_value().await;
-            let config = self
-                .config
-                .auto_apply_gpu_state
-                .load(std::sync::atomic::Ordering::Relaxed);
-
-            for gpu in gpu_interfaces.values_mut() {
-                let should_block = match mode {
-                    Modes::Integrated | Modes::Smart => !gpu.device.is_default(),
-                    Modes::Hybrid => false,
-                    Modes::Manual => {
-                        let state = self.gpu_state.read().await;
-                        state.gpu_block_state(gpu.device.pci.pci_address()) && config
-                    }
-                };
-
-                if should_block {
-                    info!(
-                        "GPU {} should be blocked, re-applying block on hotplug",
-                        gpu.device.name()
-                    );
-                    if let Err(e) = gpu.block_gpu(gpu.id).await {
-                        warn!(
-                            "failed to automatically re-block {}: {}",
-                            gpu.device.name(),
-                            e
-                        );
-                    }
-                }
-            }
             // now re-populate the gpu api
             for (id, gpu_interface) in gpu_interfaces.iter() {
                 let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
                 object_server
                     .at(path.clone(), gpu_interface.clone())
                     .await?;
-                // spawn power state tasks
-                let handle = task::spawn(watch_power_state(
-                    gpu_interface.clone(),
-                    object_server
-                        .interface(path)
-                        .await
-                        .map_err(|err| fdo::Error::Failed(err.to_string()))?,
-                ));
-                power_tasks.insert(*id, handle);
+                // spawn power state tasks only for available GPUs
+                if gpu_interface.device.is_available() {
+                    let handle = task::spawn(watch_power_state(
+                        gpu_interface.clone(),
+                        object_server
+                            .interface(path)
+                            .await
+                            .map_err(|err| fdo::Error::Failed(err.to_string()))?,
+                    ));
+                    power_tasks.insert(*id, handle);
+                }
+            }
+
+            drop(power_tasks);
+            drop(gpu_interfaces);
+
+            // Rebuild hotplug state atomically with respect to concurrent mode changes.
+            if let Err(e) = self.mode_interface.reconcile_after_hotplug().await {
+                warn!("failed to re-apply mode on hotplug: {e}");
+                return Err(e);
             }
         }
 

@@ -242,7 +242,14 @@ pub async fn notify(message: String) {
 mod tests {
     use super::*;
 
-    fn gpu(name: &str, default: bool, blocked: bool, power_state: &str) -> GpuDevice {
+    #[allow(clippy::too_many_arguments)]
+    fn gpu(
+        name: &str,
+        default: bool,
+        blocked: bool,
+        discrete: bool,
+        power_state: &str,
+    ) -> GpuDevice {
         GpuDevice {
             id: 0,
             name: name.to_string(),
@@ -250,6 +257,11 @@ mod tests {
             render: 0,
             card: 0,
             default,
+            discrete,
+            virtual_gpu: false,
+            available: true,
+            vendor: String::new(),
+            driver: String::new(),
             blocked,
             nvidia: false,
             nvidia_minor: String::new(),
@@ -286,9 +298,9 @@ mod tests {
     fn manual_menu_only_lists_non_default_gpus() {
         let (mut tray, _) = tray(Some(Mode::Manual));
         tray.gpus
-            .insert(0, gpu("Integrated", true, false, "active"));
+            .insert(0, gpu("Integrated", true, false, false, "active"));
         tray.gpus
-            .insert(1, gpu("Discrete", false, true, "suspended"));
+            .insert(1, gpu("Discrete", false, true, true, "suspended"));
         let submenu = tray.menu().into_iter().find_map(|item| match item {
             MenuItem::SubMenu(item) => Some(item),
             _ => None,
@@ -300,7 +312,7 @@ mod tests {
     fn blocked_gpu_checkmark_requests_unblock() {
         let (mut tray, mut actions) = tray(Some(Mode::Manual));
         tray.gpus
-            .insert(1, gpu("Discrete", false, true, "suspended"));
+            .insert(1, gpu("Discrete", false, true, true, "suspended"));
         let checkmark = tray.menu().into_iter().find_map(|item| match item {
             MenuItem::SubMenu(submenu) => submenu.submenu.into_iter().find_map(|item| match item {
                 MenuItem::Checkmark(checkmark) => Some(checkmark),
@@ -323,7 +335,7 @@ mod tests {
     fn tooltip_reports_gpu_state() {
         let (mut tray, _) = tray(Some(Mode::Hybrid));
         tray.gpus
-            .insert(0, gpu("Integrated", true, false, "active\n"));
+            .insert(0, gpu("Integrated", true, false, false, "active\n"));
         assert!(
             tray.tool_tip()
                 .description
