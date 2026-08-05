@@ -326,16 +326,14 @@ async fn main() -> anyhow::Result<()> {
                         command.env(key, value);
                     }
                 }
-                match command.status() {
-                    Ok(status) => {
-                        if !status.success() {
-                            eprintln!("Process exited with status: {}", status);
-                        }
-                    }
-                    Err(e) => eprintln!("Failed to launch process '{}': {}", program[0], e),
+                let status = command.status().map_err(|e| {
+                    anyhow::anyhow!("Failed to launch process '{}': {}", program[0], e)
+                })?;
+                if !status.success() {
+                    return Err(anyhow::anyhow!("Process exited with status: {}", status));
+                } else {
+                    return Err(anyhow::anyhow!("No matching GPU found."));
                 }
-            } else {
-                eprintln!("No GPUs found. Ensure cardwire is running.");
             }
         }
         Commands::CompleteGpus => {
