@@ -192,6 +192,7 @@ pub struct DbusGpuDevice {
     pub virtual_gpu: bool,
     pub available: bool,
     pub vendor: String,
+    pub driver: String,
     pub nvidia: bool,
     pub nvidia_minor: String,
 }

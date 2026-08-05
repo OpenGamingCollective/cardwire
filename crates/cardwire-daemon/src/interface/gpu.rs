@@ -379,6 +379,7 @@ impl GpuInterface {
             virtual_gpu: gpu.is_virtual(),
             available: gpu.is_available(),
             vendor: gpu.gpu_vendor().to_string(),
+            driver: gpu.pci.driver().clone().unwrap_or("none".to_string()),
             nvidia: gpu.gpu_vendor() == GpuVendor::Nvidia,
             nvidia_minor: if let Some(minor) = gpu.nvidia_minor() {
                 minor.to_string()
