@@ -374,12 +374,16 @@ impl GpuInterface {
             render: *gpu.render(),
             name: gpu.name().to_string(),
             card: *gpu.card(),
-            default: gpu.default().unwrap_or(false),
+            default: gpu.is_default(),
+            discrete: gpu.is_discrete(),
+            virtual_gpu: gpu.is_virtual(),
+            available: gpu.is_available(),
+            vendor: gpu.gpu_vendor().to_string(),
             nvidia: gpu.gpu_vendor() == GpuVendor::Nvidia,
             nvidia_minor: if let Some(minor) = gpu.nvidia_minor() {
                 minor.to_string()
             } else {
-                "".to_string()
+                "none".to_string()
             },
         })
     }

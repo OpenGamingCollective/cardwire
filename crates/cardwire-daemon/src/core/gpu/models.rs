@@ -70,6 +70,17 @@ impl<T: AsRef<str>> From<T> for GpuVendor {
     }
 }
 
+impl Display for GpuVendor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GpuVendor::Amd => write!(f, "AMD"),
+            GpuVendor::Nvidia => write!(f, "Nvidia"),
+            GpuVendor::Intel => write!(f, "Intel"),
+            GpuVendor::Other => write!(f, "Unknown Vendor"),
+        }
+    }
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
 pub struct GpuDevice {
     name: String,
@@ -177,6 +188,10 @@ pub struct DbusGpuDevice {
     pub render: u32,
     pub card: u32,
     pub default: bool,
+    pub discrete: bool,
+    pub virtual_gpu: bool,
+    pub available: bool,
+    pub vendor: String,
     pub nvidia: bool,
     pub nvidia_minor: String,
 }
