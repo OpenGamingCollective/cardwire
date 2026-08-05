@@ -23,3 +23,6 @@ result
 
 # mdbook
 book
+
+# Machine-specific launcher wrapper
+cardwired
