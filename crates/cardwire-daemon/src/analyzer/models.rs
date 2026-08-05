@@ -95,14 +95,13 @@ impl CardwireAnalyzer {
         // Lock the buffers once
         let mut exec_ring = exec_arc.lock().await;
         let mut close_ring = close_arc.lock().await;
-        let mut report_ring = report_arc.lock().await;
 
         // Used to prevent duplicated logs burst
         let mut previous_reported_pid = 0;
 
         let shared_self = Arc::new(self);
 
-        // spawn the logger in it's own thread
+        // spawn the ebpf-logger in it's own thread
         task::spawn(async move {
             let mut ebpf_logger = logger_arc.lock().await;
             loop {
@@ -114,6 +113,47 @@ impl CardwireAnalyzer {
                     }
                 };
                 guard.get_inner_mut().flush();
+                guard.clear_ready();
+            }
+        });
+
+        // spawn the blocked event report in it's own thread
+        task::spawn(async move {
+            let mut report_ring = report_arc.lock().await;
+            loop {
+                let mut guard = match report_ring.ready_mut(Interest::READABLE).await {
+                    Ok(guard) => guard,
+                    Err(err) => {
+                        error!("failed to get report logger guard: {}", err);
+                        return;
+                    }
+                };
+                while let Some(item) = guard.get_inner_mut().next() {
+                    if item.len() < std::mem::size_of::<ReportEvent>() {
+                        debug!("Skipping malformed report event. Size: {}", item.len());
+                        continue;
+                    }
+                    let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
+                    // only log if we didn't see the pid before
+                    if event.pid != previous_reported_pid {
+                        previous_reported_pid = event.pid;
+                        // Spawn in another task to prevent blocking the report logger while
+                        // fetching informations about this process
+                        task::spawn(async move {
+                            if let Some(app_id) = get_app_id_wayland(event.pid).await {
+                                info!(
+                                    "{}[{}] tried to access the dGPU (blocked by cardwire)",
+                                    app_id, event.pid
+                                );
+                            } else if let Some(process_name) = get_real_process_name(event.pid) {
+                                info!(
+                                    "{}[{}] tried to access the dGPU (blocked by cardwire)",
+                                    process_name, event.pid
+                                );
+                            }
+                        });
+                    }
+                }
                 guard.clear_ready();
             }
         });
@@ -152,26 +192,6 @@ impl CardwireAnalyzer {
                         }
                         guard.clear_ready();
                     }
-                }
-                Ok(mut guard) = report_ring.ready_mut(Interest::READABLE) => {
-                        while let Some(item) = guard.get_inner_mut().next() {
-                            if item.len() < std::mem::size_of::<ReportEvent>() {
-                                debug!("Skipping malformed report event. Size: {}", item.len());
-                                continue;
-                            }
-                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
-                            // only log if we didn't see the pid before
-                            if event.pid != previous_reported_pid {
-                                previous_reported_pid = event.pid;
-                                task::spawn(async move {
-                                    if let Some(app_id) = get_app_id_wayland(event.pid).await {
-                                        // use dGPU term instead of GPU, smart mode is only avaible on hybrid setups
-                                        info!("{}[{}] tried to access the dGPU (blocked by cardwire)", app_id, event.pid);
-                                    }
-                                });
-                            }
-                        }
-                        guard.clear_ready();
                 }
             }
         }
