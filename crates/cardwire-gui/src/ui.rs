@@ -179,13 +179,15 @@ fn gpu_cards(
 
             let gpu_id = *id;
             let is_blocked = gpu.blocked;
-            let is_default = gpu.default;
+
+            let is_offload_dgpu = !gpu.default && gpu.discrete;
+
             let is_available = gpu.available;
 
             // Build dropdown menu items
             let mut dropdown_col = column![];
-            // Block/Unblock (only for non-default GPUs)
-            if !is_default && is_available {
+            // Block/Unblock (only for offload dGPU)
+            if is_offload_dgpu && is_available {
                 if is_blocked {
                     dropdown_col = dropdown_col.push(
                         button("Unblock")
