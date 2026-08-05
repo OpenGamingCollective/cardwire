@@ -180,11 +180,12 @@ fn gpu_cards(
             let gpu_id = *id;
             let is_blocked = gpu.blocked;
             let is_default = gpu.default;
+            let is_available = gpu.available;
 
             // Build dropdown menu items
             let mut dropdown_col = column![];
             // Block/Unblock (only for non-default GPUs)
-            if !is_default {
+            if !is_default && is_available {
                 if is_blocked {
                     dropdown_col = dropdown_col.push(
                         button("Unblock")
@@ -239,12 +240,24 @@ fn gpu_cards(
                 .width(Fixed(120.0))
             ]
             .into();
-            let details = column![
+            let mut details = column![
+                row![
+                    text("Discrete: ")
+                        .color(Color::from_rgb(0.6, 0.6, 0.6))
+                        .width(80),
+                    text(gpu.discrete)
+                ],
                 row![
                     text("Vendor: ")
                         .color(Color::from_rgb(0.6, 0.6, 0.6))
                         .width(80),
-                    text("AMD (Placeholder)")
+                    text(gpu.vendor.clone())
+                ],
+                row![
+                    text("Driver: ")
+                        .color(Color::from_rgb(0.6, 0.6, 0.6))
+                        .width(80),
+                    text(gpu.driver.clone()),
                 ],
                 row![
                     text("PCI: ")
@@ -277,6 +290,31 @@ fn gpu_cards(
                 ]
             ]
             .spacing(8);
+
+            if !is_available {
+                let row: Element<'_, Message> = row![
+                    text("Available: ")
+                        .color(Color::from_rgb(0.6, 0.6, 0.6))
+                        .width(80),
+                    text(gpu.available).color(Color::from_rgb(
+                        239.0 / 255.0,
+                        68.0 / 255.0,
+                        68.0 / 255.0
+                    ))
+                ]
+                .into();
+                details = details.push(row);
+            }
+            if gpu.virtual_gpu {
+                let row: Element<'_, Message> = row![
+                    text("Virtual GPU: ")
+                        .color(Color::from_rgb(0.6, 0.6, 0.6))
+                        .width(80),
+                    text(gpu.virtual_gpu)
+                ]
+                .into();
+                details = details.push(row);
+            }
 
             let card = container(column![header, details].spacing(10))
                 .width(Fill)
