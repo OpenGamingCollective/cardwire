@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
-use zbus::{Proxy, connection::Connection};
+use zbus::{Proxy, connection::Connection, zvariant::OwnedValue};
 
 use crate::display::PciDevice;
 
@@ -270,5 +270,15 @@ impl<'a> DaemonClient<'a> {
         )
         .await?;
         proxy.call("RefreshGpu", &()).await
+    }
+    pub async fn get_gpu_switcheroo(&self) -> zbus::Result<Vec<HashMap<String, OwnedValue>>> {
+        let proxy = zbus::Proxy::new(
+            self.proxy.connection(),
+            "net.hadess.SwitcherooControl",
+            "/net/hadess/SwitcherooControl",
+            "net.hadess.SwitcherooControl",
+        )
+        .await?;
+        proxy.get_property("GPUs").await
     }
 }
