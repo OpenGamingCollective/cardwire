@@ -17,7 +17,7 @@ pub struct CardwireModeState {
 impl Default for CardwireModeState {
     fn default() -> Self {
         CardwireModeState {
-            mode: Modes::Manual,
+            mode: Modes::Hybrid,
         }
     }
 }
@@ -153,9 +153,9 @@ mod tests {
     */
 
     #[test]
-    fn test_mode_state_default_is_manual() {
+    fn test_mode_state_default_is_hybrid() {
         let state = CardwireModeState::default();
-        assert_eq!(state.mode(), Modes::Manual);
+        assert_eq!(state.mode(), Modes::Hybrid);
     }
 
     #[test]
@@ -177,7 +177,7 @@ mod tests {
     fn test_mode_state_json_parse_empty_uses_defaults() {
         let json = "{}";
         let parsed: CardwireModeState = serde_json::from_str(json).unwrap();
-        assert_eq!(parsed.mode(), Modes::Manual);
+        assert_eq!(parsed.mode(), Modes::Hybrid);
     }
 
     /*
