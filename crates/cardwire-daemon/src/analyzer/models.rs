@@ -3,7 +3,7 @@ use aya_log::EbpfLogger;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{Log, debug, error, info, warn};
 use std::{
-    collections::{HashMap, HashSet, VecDeque}, fs, path::PathBuf, ptr, sync::Arc, time::SystemTime
+    collections::{HashMap, HashSet, VecDeque}, fs, path::{Path, PathBuf}, ptr, sync::Arc, time::SystemTime
 };
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore}, task, time::Instant
@@ -29,16 +29,18 @@ pub struct CloseEvent {
     pub pid: u32,
 }
 
-#[derive(Debug, Copy, Clone)]
-enum PidType {
-    Allowed,
-    Forced,
-}
-
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ReportEvent {
     pub pid: u32,
+    pub gpu_id: u32,
+    pub comm: [u8; 16],
+}
+
+#[derive(Debug, Copy, Clone)]
+enum PidType {
+    Allowed,
+    Forced,
 }
 
 #[derive(Clone)]
@@ -255,7 +257,7 @@ impl CardwireAnalyzer {
             };
             while let Some(item) = guard.get_inner_mut().next() {
                 if item.len() < std::mem::size_of::<ReportEvent>() {
-                    debug!("Skipping malformed report event. Size: {}", item.len());
+                    warn!("Skipping malformed report event. Size: {}", item.len());
                     continue;
                 }
                 let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
@@ -268,6 +270,7 @@ impl CardwireAnalyzer {
                         reported_pids.insert(event.pid);
                     }
                 }
+                let event_comm_str = comm_to_string(event.comm);
                 // Bound the number of concurrent report tasks, this prevent exausting the process
                 // FD limits
                 if let Ok(permit) = report_semaphore.clone().acquire_owned().await {
@@ -275,17 +278,37 @@ impl CardwireAnalyzer {
                     // fetching informations about this process
                     let report_vec = report_vec.clone();
                     let signal = self.signal.clone();
+                    let gpu_id = event.gpu_id;
                     task::spawn(async move {
                         let _permit = permit;
                         if let Some(app_id) = get_app_id_wayland_with_retry(event.pid).await {
-                            report_blocked(report_vec, signal, event.pid, app_id.clone(), app_id)
-                                .await;
+                            report_blocked(
+                                report_vec,
+                                signal,
+                                event.pid,
+                                gpu_id,
+                                event_comm_str,
+                                app_id,
+                            )
+                            .await;
                         } else if let Some(process_name) = get_real_process_name(event.pid) {
                             report_blocked(
                                 report_vec,
                                 signal,
                                 event.pid,
+                                gpu_id,
                                 process_name,
+                                String::new(),
+                            )
+                            .await;
+                            // we check if the proc is still here to not log noise caused by fish
+                        } else if is_proc_still_alive(event.pid) {
+                            report_blocked(
+                                report_vec,
+                                signal,
+                                event.pid,
+                                gpu_id,
+                                event_comm_str,
                                 String::new(),
                             )
                             .await;
@@ -349,6 +372,7 @@ async fn report_blocked(
     report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
     signal: Option<SignalEmitter<'static>>,
     pid: u32,
+    gpu_id: u32,
     name: String,
     wayland_app_id: String,
 ) {
@@ -356,8 +380,8 @@ async fn report_blocked(
         timestamp: SystemTime::now(),
         pid,
         comm: name.clone(),
-        gpu_id: 1,
-        wayland_app_id,
+        gpu_id,
+        wayland_app_id: wayland_app_id.clone(),
     };
     {
         let mut report_vec = report_vec.write().await;
@@ -366,10 +390,17 @@ async fn report_blocked(
             report_vec.pop_front();
         }
     }
-    info!(
-        "{}[{}] tried to access the dGPU (blocked by cardwire)",
-        name, pid
-    );
+    if wayland_app_id.is_empty() {
+        info!(
+            "{}[{}] tried to access GPU {} (blocked by cardwire)",
+            name, pid, gpu_id
+        );
+    } else {
+        info!(
+            "{}[{}] tried to access GPU {} (blocked by cardwire)",
+            wayland_app_id, pid, gpu_id
+        );
+    }
     if let Some(signal) = signal
         && let Err(e) = LoggerInterfaceSignals::process_blocked_changed(&signal, log_entry).await
     {
@@ -418,6 +449,18 @@ fn get_real_process_name(pid: u32) -> Option<String> {
     // Fallback, just use the binary name
     let base_name = binary.split('/').next_back().unwrap_or(binary);
     Some(base_name.to_string())
+}
+
+fn is_proc_still_alive(pid: u32) -> bool {
+    Path::new(&format!("/proc/{}", pid)).exists()
+}
+
+/// Decode the 16-byte kernel comm into a String, trimming trailing NULs
+fn comm_to_string(comm: [u8; 16]) -> String {
+    match String::from_utf8(comm.to_vec()) {
+        Ok(str) => str.trim_end_matches('\0').to_string(),
+        Err(_) => "no_comm_err".to_string(),
+    }
 }
 
 // TESTS
@@ -565,29 +608,75 @@ mod tests {
 
     #[test]
     fn test_report_event_deserialization_from_valid_bytes() {
-        // ReportEvent: pid (4 bytes)
-        let item: Vec<u8> = vec![
+        // ReportEvent: pid (4 bytes) + gpu_id (4 bytes) + comm (16 bytes)
+        let mut item: Vec<u8> = vec![
             0x39, 0x05, 0x00, 0x00, // pid = 1337
+            0x01, 0x00, 0x00, 0x00, // gpu_id = 1
         ];
-        assert_eq!(item.len(), 4);
+        item.extend_from_slice(b"test_comm\0\0\0\0\0\0\0");
         assert!(item.len() >= std::mem::size_of::<ReportEvent>());
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
         assert_eq!(event.pid, 1337);
+        assert_eq!(event.gpu_id, 1);
+        assert_eq!(&event.comm, b"test_comm\0\0\0\0\0\0\0");
+        assert_eq!(comm_to_string(event.comm), "test_comm");
     }
 
     #[test]
     fn test_report_event_deserialization_rejects_undersized_buffer() {
-        // ReportEvent needs 4 bytes, give only 3
+        // ReportEvent needs 24 bytes, give only 3
         let item: Vec<u8> = vec![0u8; 3];
         assert!(item.len() < std::mem::size_of::<ReportEvent>());
     }
 
     #[test]
-    fn test_report_event_deserialization_pid_extraction() {
+    fn test_report_event_rejects_old_4_byte_layout() {
+        // The old ReportEvent layout was only 4 bytes (pid), the ring reader
+        // must reject it now that the event carries gpu_id and comm
         let item: Vec<u8> = vec![
-            0x01, 0x00, 0x00, 0x00, // pid = 1
+            0x39, 0x05, 0x00, 0x00, // pid = 1337
         ];
+        assert!(item.len() < std::mem::size_of::<ReportEvent>());
+    }
+
+    #[test]
+    fn test_report_event_deserialization_pid_extraction() {
+        let mut item: Vec<u8> = vec![
+            0x01, 0x00, 0x00, 0x00, // pid = 1
+            0x02, 0x00, 0x00, 0x00, // gpu_id = 2
+        ];
+        item.extend_from_slice(&[0u8; 16]);
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
         assert_eq!(event.pid, 1);
+        assert_eq!(event.gpu_id, 2);
+        assert_eq!(&event.comm, &[0u8; 16]);
+    }
+
+    // ── comm_to_string ───────────────────────────────────────────────
+
+    #[test]
+    fn test_comm_to_string_trims_trailing_nuls() {
+        let comm = *b"bash\0\0\0\0\0\0\0\0\0\0\0\0";
+        assert_eq!(comm_to_string(comm), "bash");
+    }
+
+    #[test]
+    fn test_comm_to_string_full_length() {
+        let comm = *b"a-very-long-comm";
+        assert_eq!(comm_to_string(comm), "a-very-long-comm");
+    }
+
+    #[test]
+    fn test_comm_to_string_invalid_utf8() {
+        let comm = [0xFFu8; 16];
+        assert_eq!(comm_to_string(comm), "no_comm_err");
+    }
+
+    // ── is_proc_still_alive ──────────────────────────────────────────
+
+    #[test]
+    fn test_is_proc_still_alive() {
+        assert!(is_proc_still_alive(std::process::id()));
+        assert!(!is_proc_still_alive(0));
     }
 }
