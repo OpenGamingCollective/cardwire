@@ -266,8 +266,9 @@ impl DaemonManager {
     }
     pub fn monitor_udev_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let debug_int = self.debug_interface.clone();
+        let switcheroo = self.switcheroo_interface.clone();
         async move {
-            let res = tasks::monitor_pci_changes(debug_int).await;
+            let res = tasks::monitor_pci_changes(debug_int, switcheroo).await;
             if let Err(ref e) = res {
                 error!("monitor_udev task failed: {}", e);
             }

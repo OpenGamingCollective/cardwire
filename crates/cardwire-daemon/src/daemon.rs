@@ -64,6 +64,18 @@ async fn main() -> Result<()> {
         }
     };
 
+    // Give the shim its signal emitter so it can notify clients (e.g. gnome) when the GPU list
+    // changes
+    if let Some(switcheroo_conn) = _conn.as_ref()
+        && let Ok(switcheroo_ref) = switcheroo_conn
+            .object_server()
+            .interface::<_, crate::interface::SwitcherooInterface>("/net/hadess/SwitcherooControl")
+            .await
+    {
+        daemon.switcheroo_interface.signal_emitter =
+            Some(switcheroo_ref.signal_emitter().to_owned());
+    }
+
     let object_server: &zbus::ObjectServer = conn.object_server();
     spawn_dbus_api(object_server, &mut daemon).await?;
     // Spawn background tasks
