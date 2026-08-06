@@ -111,6 +111,8 @@ impl ConfigInterface {
     }
     #[zbus(property)]
     pub async fn set_battery_auto_switch_mode(&self, mode: u32) -> fdo::Result<()> {
+        // Validate before storing so an invalid value can't poison the in-memory state
+        Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
         self.config
             .battery_auto_switch_mode
             .store(mode, Ordering::Relaxed);
