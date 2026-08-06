@@ -8,15 +8,6 @@ use log::warn;
 
 use crate::core::pci::PciDevice;
 
-// shouldn't be necessary anymore
-const _BLOCKED_PCI_FILES: &[&str] = &[
-    "config",
-    "current_link_speed",
-    "max_link_speed",
-    "max_link_width",
-    "current_link_width",
-];
-
 pub fn render_to_inode(render: u32) -> Result<u64> {
     let render_path = format!("/dev/dri/renderD{}", render);
     let metadata = fs::metadata(&render_path).map_err(|e| {
