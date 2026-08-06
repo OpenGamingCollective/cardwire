@@ -58,39 +58,72 @@ impl GpuInterface {
 impl GpuInterface {
     /// block the gpu, value = gpu key
     pub async fn block_gpu(&mut self, value: u32) -> fdo::Result<()> {
-        let mut blocker = self.blocker.write().await;
-        let pci_list = self.pci_list.read().await;
-        // Read the inodes required to block the GPU, return if err but wont block
-        let inodes = get_inodes(
-            *self.device.render(),
-            *self.device.card(),
-            self.device.pci().pci_address(),
-            self.device.pci().parent_pci(),
-            &pci_list,
-            *self.device.nvidia_minor(),
-        )
+        let (render, card, pci_address, pci_parent, nvidia_minor, pci_list) = {
+            let pci_list_guard = self.pci_list.read().await;
+
+            (
+                *self.device.render(),
+                *self.device.card(),
+                self.device.pci().pci_address().to_owned(),
+                self.device.pci().parent_pci().to_owned(),
+                *self.device.nvidia_minor(),
+                pci_list_guard.clone(),
+            )
+        };
+
+        let inodes = tokio::task::spawn_blocking(move || {
+            get_inodes(
+                render,
+                card,
+                &pci_address,
+                &pci_parent,
+                &pci_list,
+                nvidia_minor,
+            )
+        })
+        .await
+        .into_fdo()?
         .into_fdo()?;
 
-        for inode in inodes.iter() {
-            blocker.block_inode(*inode, value).into_fdo()?;
+        let mut blocker = self.blocker.write().await;
+
+        for inode in inodes {
+            blocker.block_inode(inode, value).into_fdo()?;
         }
 
         Ok(())
     }
+
     /// unblock the gpu
     pub async fn unblock_gpu(&mut self) -> fdo::Result<()> {
-        let mut blocker = self.blocker.write().await;
-        let pci_list = self.pci_list.read().await;
         // Read the inodes required to unblock the GPU, return if err
-        let inodes = get_inodes(
-            *self.device.render(),
-            *self.device.card(),
-            self.device.pci().pci_address(),
-            self.device.pci().parent_pci(),
-            &pci_list,
-            *self.device.nvidia_minor(),
-        )
+        let (render, card, pci_address, pci_parent, nvidia_minor, pci_list) = {
+            let pci_list_guard = self.pci_list.read().await;
+
+            (
+                *self.device.render(),
+                *self.device.card(),
+                self.device.pci().pci_address().to_owned(),
+                self.device.pci().parent_pci().to_owned(),
+                *self.device.nvidia_minor(),
+                pci_list_guard.clone(),
+            )
+        };
+
+        let inodes = tokio::task::spawn_blocking(move || {
+            get_inodes(
+                render,
+                card,
+                &pci_address,
+                &pci_parent,
+                &pci_list,
+                nvidia_minor,
+            )
+        })
+        .await
+        .into_fdo()?
         .into_fdo()?;
+        let mut blocker = self.blocker.write().await;
 
         for inode in inodes.iter() {
             blocker.unblock_inode(*inode).into_fdo()?;

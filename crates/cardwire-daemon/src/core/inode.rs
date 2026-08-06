@@ -52,7 +52,7 @@ pub fn get_inodes(
         }
     };
     // Block files in /sys/class/hwmon and pci sysfs
-    match sys_hwmon(&pci) {
+    match sys_hwmon(pci) {
         Ok(mut inodes_res) => {
             total_inodes.append(&mut inodes_res);
         }
