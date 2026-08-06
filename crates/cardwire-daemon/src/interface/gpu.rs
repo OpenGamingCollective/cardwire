@@ -64,7 +64,7 @@ impl GpuInterface {
         let inodes = get_inodes(
             *self.device.render(),
             *self.device.card(),
-            self.device.pci().pci_address().to_string(),
+            self.device.pci().pci_address(),
             self.device.pci().parent_pci(),
             &pci_list,
             *self.device.nvidia_minor(),
@@ -85,7 +85,7 @@ impl GpuInterface {
         let inodes = get_inodes(
             *self.device.render(),
             *self.device.card(),
-            self.device.pci().pci_address().to_string(),
+            self.device.pci().pci_address(),
             self.device.pci().parent_pci(),
             &pci_list,
             *self.device.nvidia_minor(),

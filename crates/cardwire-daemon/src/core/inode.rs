@@ -11,7 +11,7 @@ use crate::core::pci::PciDevice;
 pub fn get_inodes(
     render: u32,
     card: u32,
-    pci: String,
+    pci: &str,
     parent_pci: &Option<String>,
     pci_list: &BTreeMap<String, PciDevice>,
     nvidia_minor: Option<u32>,
@@ -37,7 +37,7 @@ pub fn get_inodes(
             total_inodes.append(&mut inodes_res);
         }
         Err(err) => {
-            error!("failed to block pci {}: {}", pci, err);
+            error!("failed to get inode for pci {}: {}", pci, err);
             return Err(err);
         }
     };
@@ -47,7 +47,7 @@ pub fn get_inodes(
             total_inodes.append(&mut inodes_res);
         }
         Err(err) => {
-            error!("failed to block drm {}: {}", pci, err);
+            error!("failed to get inode for drm {}: {}", pci, err);
             return Err(err);
         }
     };
@@ -58,7 +58,7 @@ pub fn get_inodes(
         }
         Err(err) => {
             // ignored because VMs gpu do not have hwmon
-            error!("(ignoring) failed to block hwmon {}: {}", pci, err);
+            error!("(ignoring) failed to get inode for hwmon {}: {}", pci, err);
         }
     };
 
@@ -66,7 +66,7 @@ pub fn get_inodes(
         match nvidia_to_inode(minor) {
             Ok(inode) => total_inodes.push(inode),
             Err(err) => {
-                error!("failed to block nvidia{}: {}", render, err);
+                error!("failed to get inode for nvidia{}: {}", render, err);
                 return Err(err);
             }
         };
@@ -74,7 +74,7 @@ pub fn get_inodes(
             Ok(inode) => total_inodes.push(inode),
             Err(err) => {
                 error!(
-                    "(ignoring) failed to block backlight nvidia_{}: {}",
+                    "(ignoring) failed to get inode for backlight nvidia_{}: {}",
                     minor, err
                 );
             }
