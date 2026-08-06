@@ -8,7 +8,9 @@ use log::warn;
 use tokio::io::AsyncWriteExt;
 
 use serde::{Deserialize, Serialize};
-use std::{fs, io};
+use std::{
+    fs, io, time::{SystemTime, UNIX_EPOCH}
+};
 const CONFIG_PATH: &str = "/etc/cardwire";
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -55,10 +57,25 @@ impl CardwireConfig {
         if !(fs::exists(&config_file)?) {
             Self::create_default_config().context("Could not create default dir for config")?;
         }
+        // remove leftover temp files from a save interrupted by a crash
+        Self::cleanup_stale_tmp_files();
         // read the config into a string and parse it
         let config_content =
             fs::read_to_string(&config_file).context("Could not read cardwire.toml")?;
         Ok(Self::parse_or_default(&config_content))
+    }
+    /// Remove leftover cardwire.toml.*.tmp files from a save interrupted by a crash
+    fn cleanup_stale_tmp_files() {
+        let Ok(entries) = fs::read_dir(CONFIG_PATH) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("cardwire.toml.") && name.ends_with(".tmp") {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
     }
     /// Parse the .toml content into a CardwireConfig, on parse failure fall back to
     /// defaults instead of taking the daemon down, leaving the broken file untouched
@@ -78,17 +95,26 @@ impl CardwireConfig {
         create_default_file(FileKind::Config)?;
         Ok(())
     }
-    /// Save the config into cardwire.toml, atomically: write to a temp file in the same
-    /// directory, fsync, then rename over the target so a crash can't truncate the config
+    /// Save the config into cardwire.toml, atomically: write to a unique temp file in the same
+    /// directory (exclusive create so concurrent saves never share a file), fsync, then rename
+    /// over the target so a crash can't truncate the config
     pub async fn save_config(&self) -> io::Result<()> {
         let path = format!("{}/cardwire.toml", CONFIG_PATH);
-        let tmp_path = format!("{}/cardwire.toml.tmp", CONFIG_PATH);
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(io::Error::other)?
+            .as_nanos();
+        let tmp_path = format!("{}/cardwire.toml.{}.tmp", CONFIG_PATH, unique);
         let config_toml = match toml::to_string_pretty(&self) {
             Ok(config_toml) => config_toml,
             Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidData, e)),
         };
         let result = async {
-            let mut tmp_file = tokio::fs::File::create(&tmp_path).await?;
+            let mut tmp_file = tokio::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&tmp_path)
+                .await?;
             tmp_file.write_all(config_toml.as_bytes()).await?;
             tmp_file.sync_all().await?;
             drop(tmp_file);

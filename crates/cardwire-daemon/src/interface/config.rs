@@ -17,6 +17,7 @@ pub struct ConfigMemory {
     pub battery_auto_switch: Arc<AtomicBool>,
     pub battery_auto_switch_mode: Arc<AtomicU32>,
     pub external_display_auto_switch: Arc<AtomicBool>,
+    save_lock: Arc<tokio::sync::Mutex<()>>,
 }
 impl ConfigMemory {
     /// build a ConfigMemory from CardwireConfig
@@ -36,6 +37,7 @@ impl ConfigMemory {
             battery_auto_switch,
             battery_auto_switch_mode,
             external_display_auto_switch,
+            save_lock: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 }
@@ -121,6 +123,9 @@ impl ConfigInterface {
     }
     /// Save the daemon's configuration to cardwire.toml
     pub async fn save_to_file(&self) -> fdo::Result<()> {
+        // Serialize saves so concurrent setters can't interleave writes and the final file
+        // always reflects the last stored state
+        let _save_guard = self.config.save_lock.lock().await;
         // Include monitor-owned settings whenever any D-Bus property rewrites the whole file.
         let config = CardwireConfig::new(
             self.config.auto_apply_gpu_state.load(Ordering::Relaxed),
