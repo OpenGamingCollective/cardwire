@@ -91,6 +91,8 @@ impl DaemonManager {
 
         let logger_interface = LoggerInterface::build();
 
+        let switcheroo_interface = SwitcherooInterface::build(Arc::clone(&gpu_interfaces));
+
         Ok(Self {
             mode_interface: mode_interface.clone(),
             gpu_interfaces: Arc::clone(&gpu_interfaces),
@@ -108,8 +110,9 @@ impl DaemonManager {
                 Arc::clone(&pci_list),
                 None,
                 Arc::clone(&power_tasks),
+                switcheroo_interface.clone(),
             )?,
-            switcheroo_interface: SwitcherooInterface::build(Arc::clone(&gpu_interfaces)),
+            switcheroo_interface,
             logger_interface,
             logger_signal: None,
             inner: DaemonInner {
@@ -266,9 +269,8 @@ impl DaemonManager {
     }
     pub fn monitor_udev_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let debug_int = self.debug_interface.clone();
-        let switcheroo = self.switcheroo_interface.clone();
         async move {
-            let res = tasks::monitor_pci_changes(debug_int, switcheroo).await;
+            let res = tasks::monitor_pci_changes(debug_int).await;
             if let Err(ref e) = res {
                 error!("monitor_udev task failed: {}", e);
             }

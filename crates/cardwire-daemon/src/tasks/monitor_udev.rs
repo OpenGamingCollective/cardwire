@@ -3,12 +3,9 @@
 use log::{error, info};
 use tokio::io::{Interest, unix::AsyncFd};
 
-use crate::interface::{DebugInterface, SwitcherooInterface};
+use crate::interface::DebugInterface;
 
-pub async fn monitor_pci_changes(
-    debug_int: DebugInterface,
-    switcheroo: SwitcherooInterface,
-) -> zbus::Result<()> {
+pub async fn monitor_pci_changes(debug_int: DebugInterface) -> zbus::Result<()> {
     let udev_monitor = udev::MonitorBuilder::new()?.match_subsystem("pci")?;
     let udev_fd = AsyncFd::new(udev_monitor.listen()?)?;
     loop {
@@ -20,7 +17,7 @@ pub async fn monitor_pci_changes(
                 {
                     info!("detected pci event, refreshing GPU interfaces");
                     match debug_int.refresh_gpu().await {
-                        Ok(()) => switcheroo.emit_gpu_list_changed().await,
+                        Ok(()) => {}
                         Err(e) => {
                             error!("failed to reresh gpu interface: {}", e);
                         }
