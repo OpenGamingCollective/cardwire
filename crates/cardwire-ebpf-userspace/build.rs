@@ -23,5 +23,9 @@ fn main() -> anyhow::Result<()> {
             .as_str(),
         ..Default::default()
     };
-    aya_build::build_ebpf([ebpf_package], Toolchain::default())
+    // The prebuilt bpf-linker v0.10.4 release bundles LLVM 22 and cannot link LLVM-23 bitcode
+    // emitted by nightlies from 2026-08-05 onward (`ERROR llvm: Invalid record`). Pin the eBPF
+    // build to the last compatible nightly. bump this once bpf-linker supports LLVM 23.
+    const EBPF_NIGHTLY: &str = "nightly-2026-08-04";
+    aya_build::build_ebpf([ebpf_package], Toolchain::Custom(EBPF_NIGHTLY))
 }
