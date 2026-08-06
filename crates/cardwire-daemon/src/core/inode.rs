@@ -171,3 +171,34 @@ pub fn sys_drm_inodes(render: u32, card: u32) -> Result<Vec<u64>> {
 
     Ok(inodes)
 }
+
+pub fn sys_hwmon(pci: &str) -> Result<Vec<u64>> {
+    let mut inodes = Vec::new();
+    let sysfs_pci_path = format!("/sys/bus/pci/devices/{}/hwmon", pci);
+    let sysfs_pci_path = Path::new(&sysfs_pci_path);
+
+    for entry in fs::read_dir(sysfs_pci_path)? {
+        let entry = entry?;
+        // First add hwmon from the sysfs pci folder
+        if let Ok(meta) = fs::metadata(entry.path()) {
+            inodes.push(meta.ino());
+        }
+        // Then add from /sys/class/hwmon
+        if let Ok(hwmon_entry) = entry.file_name().into_string() {
+            let hwmon_path = format!("/sys/class/hwmon/{}", hwmon_entry);
+            let hwmon_path = Path::new(&hwmon_path);
+            // skip if folder doesnt exist
+            if !hwmon_path.exists() {
+                continue;
+            }
+            if let Ok(meta) = fs::metadata(hwmon_path) {
+                inodes.push(meta.ino());
+            }
+            if let Ok(meta) = fs::symlink_metadata(hwmon_path) {
+                inodes.push(meta.ino());
+            }
+        }
+    }
+
+    Ok(inodes)
+}

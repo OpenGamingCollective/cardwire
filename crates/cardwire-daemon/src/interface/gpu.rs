@@ -7,7 +7,7 @@ use std::{
 use crate::{
     core::{
         gpu::{DbusGpuDevice, GpuDevice, GpuVendor, external_display_connected}, inode::{
-            backlight_to_inode, card_to_inode, nvidia_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode, sys_drm_inodes
+            backlight_to_inode, card_to_inode, nvidia_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode, sys_drm_inodes, sys_hwmon
         }, pci::PciDevice
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
@@ -112,6 +112,25 @@ impl GpuInterface {
             Err(err) => {
                 error!(
                     "failed to block drm {}: {}",
+                    self.device.pci.pci_address(),
+                    err
+                );
+                return Err(err).into_fdo();
+            }
+        };
+        // Block files in /sys/class/hwmon and pci sysfs
+        match sys_hwmon(self.device.pci().pci_address()) {
+            Ok(inodes) => {
+                for inode in inodes {
+                    if let Err(err) = blocker.block_inode(inode, value) {
+                        error!("failed to block inode(hwmon) {}: {}", inode, err);
+                        return Err(err).into_fdo();
+                    }
+                }
+            }
+            Err(err) => {
+                error!(
+                    "failed to block hwmon {}: {}",
                     self.device.pci.pci_address(),
                     err
                 );
