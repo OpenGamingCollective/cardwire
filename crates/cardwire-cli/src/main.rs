@@ -3,6 +3,8 @@ mod completion;
 mod dbus;
 mod display;
 
+use std::process::Stdio;
+
 use args::{Args, CliMode, Commands, ConfigAction, DebugAction, ManagerAction};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
@@ -331,14 +333,27 @@ async fn main() -> anyhow::Result<()> {
                         command.env(key, value);
                     }
                 }
-                let status = command.status().map_err(|e| {
-                    anyhow::anyhow!("Failed to launch process '{}': {}", program[0], e)
-                })?;
-                if !status.success() {
-                    return Err(anyhow::anyhow!("Process exited with status: {}", status));
-                } else {
-                    return Err(anyhow::anyhow!("No matching GPU found."));
-                }
+                let status = command
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .status()
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "Failed to launch process '{}': {}",
+                            program.first().map(String::as_str).unwrap_or("<unknown>"),
+                            e
+                        )
+                    })?;
+
+                match status.code() {
+                    Some(code) => std::process::exit(code),
+                    None => {
+                        return Err(anyhow::anyhow!(
+                            "Process was terminated by a signal: {}",
+                            status
+                        ));
+                    }
+                };
             }
         }
         Commands::CompleteGpus => {
