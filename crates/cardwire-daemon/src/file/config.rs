@@ -4,6 +4,8 @@ use crate::{
     file::common::{FileKind, create_default_file}, interface::Modes
 };
 use anyhow::Context;
+use log::warn;
+use tokio::io::AsyncWriteExt;
 
 use serde::{Deserialize, Serialize};
 use std::{fs, io};
@@ -49,31 +51,54 @@ impl CardwireConfig {
     /// Read TOML config file and return it's settings as a struct
     pub fn build() -> anyhow::Result<CardwireConfig> {
         let config_file = format!("{}/cardwire.toml", CONFIG_PATH);
-        Self::parse_config(&config_file)
-    }
-    /// Parse the .toml file into a CardwireConfig
-    fn parse_config(config_file: &str) -> anyhow::Result<CardwireConfig> {
         // create the config if it doesnt exist
-        if !(fs::exists(config_file)?) {
+        if !(fs::exists(&config_file)?) {
             Self::create_default_config().context("Could not create default dir for config")?;
         }
         // read the config into a string and parse it
         let config_content =
-            fs::read_to_string(config_file).context("Could not read cardwire.toml")?;
-        toml::from_str(&config_content).context("Failed to parse the toml config")
+            fs::read_to_string(&config_file).context("Could not read cardwire.toml")?;
+        Ok(Self::parse_or_default(&config_content))
+    }
+    /// Parse the .toml content into a CardwireConfig, on parse failure fall back to
+    /// defaults instead of taking the daemon down, leaving the broken file untouched
+    fn parse_or_default(config_content: &str) -> CardwireConfig {
+        match toml::from_str(config_content) {
+            Ok(config) => config,
+            Err(e) => {
+                warn!(
+                    "Failed to parse cardwire.toml ({e}); running with default settings, fix the file and restart the daemon"
+                );
+                CardwireConfig::default()
+            }
+        }
     }
     /// Create a default cardwire.toml if not present
     fn create_default_config() -> anyhow::Result<()> {
         create_default_file(FileKind::Config)?;
         Ok(())
     }
-    /// Save the config into cardwire.toml
+    /// Save the config into cardwire.toml, atomically: write to a temp file in the same
+    /// directory, fsync, then rename over the target so a crash can't truncate the config
     pub async fn save_config(&self) -> io::Result<()> {
         let path = format!("{}/cardwire.toml", CONFIG_PATH);
-        match toml::to_string_pretty(&self) {
-            Ok(config_toml) => tokio::fs::write(path, config_toml).await,
-            Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
+        let tmp_path = format!("{}/cardwire.toml.tmp", CONFIG_PATH);
+        let config_toml = match toml::to_string_pretty(&self) {
+            Ok(config_toml) => config_toml,
+            Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidData, e)),
+        };
+        let result = async {
+            let mut tmp_file = tokio::fs::File::create(&tmp_path).await?;
+            tmp_file.write_all(config_toml.as_bytes()).await?;
+            tmp_file.sync_all().await?;
+            drop(tmp_file);
+            tokio::fs::rename(&tmp_path, &path).await
         }
+        .await;
+        if result.is_err() {
+            let _ = tokio::fs::remove_file(&tmp_path).await;
+        }
+        result
     }
     pub fn experimental_nvidia_block(&self) -> bool {
         self.experimental_nvidia_block
@@ -173,5 +198,26 @@ external_display_auto_switch = true
         assert!(parsed.battery_auto_switch());
         assert_eq!(parsed.battery_auto_switch_mode(), Modes::Smart);
         assert!(parsed.external_display_auto_switch());
+    }
+
+    #[test]
+    fn test_cardwire_config_parse_or_default_on_valid_toml() {
+        let config = CardwireConfig::parse_or_default(
+            "auto_apply_gpu_state = false\nbattery_auto_switch_mode = \"smart\"\n",
+        );
+        assert!(!config.auto_apply_gpu_state());
+        assert_eq!(config.battery_auto_switch_mode(), Modes::Smart);
+        assert!(!config.experimental_nvidia_block());
+        assert!(!config.external_display_auto_switch());
+    }
+
+    #[test]
+    fn test_cardwire_config_parse_or_default_on_invalid_toml_uses_defaults() {
+        let config = CardwireConfig::parse_or_default("this is not [[[ valid toml");
+        assert!(config.auto_apply_gpu_state());
+        assert!(!config.experimental_nvidia_block());
+        assert!(!config.battery_auto_switch());
+        assert_eq!(config.battery_auto_switch_mode(), Modes::Hybrid);
+        assert!(!config.external_display_auto_switch());
     }
 }
