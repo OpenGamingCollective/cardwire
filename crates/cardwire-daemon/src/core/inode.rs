@@ -66,7 +66,7 @@ pub fn get_inodes(
         match nvidia_to_inode(minor) {
             Ok(inode) => total_inodes.push(inode),
             Err(err) => {
-                error!("failed to get inode for nvidia{}: {}", render, err);
+                error!("failed to get inode for nvidia{}: {}", minor, err);
                 return Err(err);
             }
         };
