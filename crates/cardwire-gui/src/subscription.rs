@@ -163,6 +163,60 @@ fn config_sub() -> Subscription<Message> {
             let mut config_switch_battery = proxy.receive_battery_auto_switch_changed().await;
             let mut config_switch_battery_mode =
                 proxy.receive_battery_auto_switch_mode_changed().await;
+
+            // Fetch the initial values once so the toggles render the real daemon state on
+            // startup, before any change signal arrives
+            match proxy.experimental_nvidia_block().await {
+                Ok(state) => {
+                    let _ = output
+                        .send(Message::FetchedSetting(Ok((
+                            DaemonSettings::ExpNvidiaBlock,
+                            Some(state),
+                            None,
+                        ))))
+                        .await;
+                }
+                Err(e) => warn!("Failed to fetch experimental_nvidia_block: {}", e),
+            }
+            match proxy.auto_apply_gpu_state().await {
+                Ok(state) => {
+                    let _ = output
+                        .send(Message::FetchedSetting(Ok((
+                            DaemonSettings::AutoApplyGpuState,
+                            Some(state),
+                            None,
+                        ))))
+                        .await;
+                }
+                Err(e) => warn!("Failed to fetch auto_apply_gpu_state: {}", e),
+            }
+            match proxy.battery_auto_switch().await {
+                Ok(state) => {
+                    let _ = output
+                        .send(Message::FetchedSetting(Ok((
+                            DaemonSettings::BattAutoSwitch,
+                            Some(state),
+                            None,
+                        ))))
+                        .await;
+                }
+                Err(e) => warn!("Failed to fetch battery_auto_switch: {}", e),
+            }
+            match proxy.battery_auto_switch_mode().await {
+                Ok(mode) => {
+                    if let Some(mode) = Mode::from_repr(mode) {
+                        let _ = output
+                            .send(Message::FetchedSetting(Ok((
+                                DaemonSettings::BattAutoSwitchMode,
+                                None,
+                                Some(mode),
+                            ))))
+                            .await;
+                    }
+                }
+                Err(e) => warn!("Failed to fetch battery_auto_switch_mode: {}", e),
+            }
+
             loop {
                 select! {
                     // Exp nvidia block
