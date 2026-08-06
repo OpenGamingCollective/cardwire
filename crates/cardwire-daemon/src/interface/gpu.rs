@@ -6,13 +6,11 @@ use std::{
 
 use crate::{
     core::{
-        gpu::{DbusGpuDevice, GpuDevice, GpuVendor, external_display_connected}, inode::{
-            backlight_to_inode, card_to_inode, nvidia_to_inode, pci_to_inode, render_to_inode, single_pci_to_inode, sys_drm_inodes
-        }, pci::PciDevice
+        gpu::{DbusGpuDevice, GpuDevice, GpuVendor, external_display_connected}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
-use log::{error, info, warn};
+use log::{info, warn};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface, object_server::SignalEmitter};
 
@@ -60,132 +58,75 @@ impl GpuInterface {
 impl GpuInterface {
     /// block the gpu, value = gpu key
     pub async fn block_gpu(&mut self, value: u32) -> fdo::Result<()> {
+        let (render, card, pci_address, pci_parent, nvidia_minor, pci_list) = {
+            let pci_list_guard = self.pci_list.read().await;
+
+            (
+                *self.device.render(),
+                *self.device.card(),
+                self.device.pci().pci_address().to_owned(),
+                self.device.pci().parent_pci().to_owned(),
+                *self.device.nvidia_minor(),
+                pci_list_guard.clone(),
+            )
+        };
+
+        let inodes = tokio::task::spawn_blocking(move || {
+            get_inodes(
+                render,
+                card,
+                &pci_address,
+                &pci_parent,
+                &pci_list,
+                nvidia_minor,
+            )
+        })
+        .await
+        .into_fdo()?
+        .into_fdo()?;
+
         let mut blocker = self.blocker.write().await;
-        let pci_list = self.pci_list.read().await;
-        // First block the card id
-        match card_to_inode(*self.device.card()) {
-            Ok(inode) => blocker.block_inode(inode, value).into_fdo()?,
-            Err(err) => {
-                error!("failed to block card{}: {}", *self.device.card(), err);
-                return Err(err).into_fdo();
-            }
-        };
-        match render_to_inode(*self.device.render()) {
-            Ok(inode) => blocker.block_inode(inode, value).into_fdo()?,
-            Err(err) => {
-                error!("failed to block render{}: {}", *self.device.render(), err);
-                return Err(err).into_fdo();
-            }
-        };
-        match pci_to_inode(
-            self.device.pci.pci_address().to_string(),
-            self.device.pci.parent_pci(),
-            &pci_list,
-        ) {
-            Ok(inodes) => {
-                for inode in inodes {
-                    if let Err(err) = blocker.block_inode(inode, value) {
-                        error!("failed to block inode(pci) {}: {}", inode, err);
-                        return Err(err).into_fdo();
-                    }
-                }
-            }
-            Err(err) => {
-                error!(
-                    "failed to block pci {}: {}",
-                    self.device.pci.pci_address(),
-                    err
-                );
-                return Err(err).into_fdo();
-            }
-        };
-        // Block files in /sys/class/drm
-        match sys_drm_inodes(*self.device.render(), *self.device.card()) {
-            Ok(inodes) => {
-                for inode in inodes {
-                    if let Err(err) = blocker.block_inode(inode, value) {
-                        error!("failed to block inode(drm) {}: {}", inode, err);
-                        return Err(err).into_fdo();
-                    }
-                }
-            }
-            Err(err) => {
-                error!(
-                    "failed to block drm {}: {}",
-                    self.device.pci.pci_address(),
-                    err
-                );
-                return Err(err).into_fdo();
-            }
-        };
-        // the last one, block nvidia
-        if self.device.gpu_vendor() == GpuVendor::Nvidia
-            && let Some(minor) = self.device.nvidia_minor()
-        {
-            match nvidia_to_inode(*minor) {
-                Ok(inode) => blocker.block_inode(inode, value).into_fdo()?,
-                Err(err) => {
-                    error!("failed to block nvidia{}: {}", *self.device.render(), err);
-                    return Err(err).into_fdo();
-                }
-            };
-            match backlight_to_inode(*minor) {
-                Ok(inode) => blocker.block_inode(inode, value).into_fdo()?,
-                Err(err) => {
-                    error!(
-                        "(ignoring) failed to block backlight nvidia_{}: {}",
-                        minor, err
-                    );
-                }
-            };
+
+        for inode in inodes {
+            blocker.block_inode(inode, value).into_fdo()?;
         }
+
         Ok(())
     }
+
     /// unblock the gpu
     pub async fn unblock_gpu(&mut self) -> fdo::Result<()> {
+        let (render, card, pci_address, pci_parent, nvidia_minor, pci_list) = {
+            let pci_list_guard = self.pci_list.read().await;
+
+            (
+                *self.device.render(),
+                *self.device.card(),
+                self.device.pci().pci_address().to_owned(),
+                self.device.pci().parent_pci().to_owned(),
+                *self.device.nvidia_minor(),
+                pci_list_guard.clone(),
+            )
+        };
+
+        // Read the inodes required to unblock the GPU, return if err
+        let inodes = tokio::task::spawn_blocking(move || {
+            get_inodes(
+                render,
+                card,
+                &pci_address,
+                &pci_parent,
+                &pci_list,
+                nvidia_minor,
+            )
+        })
+        .await
+        .into_fdo()?
+        .into_fdo()?;
         let mut blocker = self.blocker.write().await;
-        let pci_list = self.pci_list.read().await;
-        // First unblock the card id
-        match card_to_inode(*self.device.card()) {
-            Ok(inode) => blocker.unblock_inode(inode).into_fdo()?,
-            Err(err) => return Err(err).into_fdo(),
-        };
-        match render_to_inode(*self.device.render()) {
-            Ok(inode) => blocker.unblock_inode(inode).into_fdo()?,
-            Err(err) => return Err(err).into_fdo(),
-        };
-        match pci_to_inode(
-            self.device.pci.pci_address().to_string(),
-            self.device.pci.parent_pci(),
-            &pci_list,
-        ) {
-            Ok(inodes) => {
-                for inode in inodes {
-                    blocker.unblock_inode(inode).into_fdo()?
-                }
-            }
-            Err(err) => return Err(err).into_fdo(),
-        };
-        // the last one, unblock nvidia
-        if self.device.gpu_vendor() == GpuVendor::Nvidia
-            && let Some(minor) = self.device.nvidia_minor()
-        {
-            match nvidia_to_inode(*minor) {
-                Ok(inode) => blocker.unblock_inode(inode).into_fdo()?,
-                Err(err) => {
-                    error!("failed to block nvidia{}: {}", *self.device.render(), err);
-                    return Err(err).into_fdo();
-                }
-            };
-            match backlight_to_inode(*minor) {
-                Ok(inode) => blocker.unblock_inode(inode).into_fdo()?,
-                Err(err) => {
-                    warn!(
-                        "(ignoring) failed to unblock backlight nvidia_{}: {}",
-                        minor, err
-                    );
-                }
-            };
+
+        for inode in inodes.iter() {
+            blocker.unblock_inode(*inode).into_fdo()?;
         }
         Ok(())
     }

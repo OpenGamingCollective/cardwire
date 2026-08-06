@@ -4,18 +4,85 @@ use std::{
 };
 
 use anyhow::Result;
-use log::warn;
+use log::{error, warn};
 
 use crate::core::pci::PciDevice;
 
-// shouldn't be necessary anymore
-const _BLOCKED_PCI_FILES: &[&str] = &[
-    "config",
-    "current_link_speed",
-    "max_link_speed",
-    "max_link_width",
-    "current_link_width",
-];
+pub fn get_inodes(
+    render: u32,
+    card: u32,
+    pci: &str,
+    parent_pci: &Option<String>,
+    pci_list: &BTreeMap<String, PciDevice>,
+    nvidia_minor: Option<u32>,
+) -> Result<Vec<u64>> {
+    let mut total_inodes: Vec<u64> = Vec::new();
+
+    match card_to_inode(card) {
+        Ok(inode_res) => total_inodes.push(inode_res),
+        Err(err) => {
+            error!("failed to get inode for card{}: {}", card, err);
+            return Err(err);
+        }
+    };
+    match render_to_inode(render) {
+        Ok(inode_res) => total_inodes.push(inode_res),
+        Err(err) => {
+            error!("failed to get inode for renderD{}: {}", render, err);
+            return Err(err);
+        }
+    };
+    match pci_to_inode(pci.to_string(), parent_pci, pci_list) {
+        Ok(mut inodes_res) => {
+            total_inodes.append(&mut inodes_res);
+        }
+        Err(err) => {
+            error!("failed to get inode for pci {}: {}", pci, err);
+            return Err(err);
+        }
+    };
+    // Block files in /sys/class/drm
+    match sys_drm_inodes(render, card) {
+        Ok(mut inodes_res) => {
+            total_inodes.append(&mut inodes_res);
+        }
+        Err(err) => {
+            error!("failed to get inode for drm {}: {}", pci, err);
+            return Err(err);
+        }
+    };
+    // Block files in /sys/class/hwmon and pci sysfs
+    match sys_hwmon(pci) {
+        Ok(mut inodes_res) => {
+            total_inodes.append(&mut inodes_res);
+        }
+        Err(err) => {
+            // ignored because VMs gpu do not have hwmon
+            error!("(ignoring) failed to get inode for hwmon {}: {}", pci, err);
+        }
+    };
+
+    if let Some(minor) = nvidia_minor {
+        match nvidia_to_inode(minor) {
+            Ok(inode) => total_inodes.push(inode),
+            Err(err) => {
+                error!("failed to get inode for nvidia{}: {}", minor, err);
+                return Err(err);
+            }
+        };
+        match backlight_to_inode(minor) {
+            Ok(inode) => total_inodes.push(inode),
+            Err(err) => {
+                error!(
+                    "(ignoring) failed to get inode for backlight nvidia_{}: {}",
+                    minor, err
+                );
+            }
+        };
+    }
+
+    Ok(total_inodes)
+}
 
 pub fn render_to_inode(render: u32) -> Result<u64> {
     let render_path = format!("/dev/dri/renderD{}", render);
@@ -173,6 +240,37 @@ pub fn sys_drm_inodes(render: u32, card: u32) -> Result<Vec<u64>> {
             // we matched with the blocked device, get the inodes without following the link
             let inode_res = fs::symlink_metadata(entry.path());
             if let Ok(meta) = inode_res {
+                inodes.push(meta.ino());
+            }
+        }
+    }
+
+    Ok(inodes)
+}
+
+pub fn sys_hwmon(pci: &str) -> Result<Vec<u64>> {
+    let mut inodes = Vec::new();
+    let sysfs_pci_path = format!("/sys/bus/pci/devices/{}/hwmon", pci);
+    let sysfs_pci_path = Path::new(&sysfs_pci_path);
+
+    for entry in fs::read_dir(sysfs_pci_path)? {
+        let entry = entry?;
+        // First add hwmon from the sysfs pci folder
+        if let Ok(meta) = fs::metadata(entry.path()) {
+            inodes.push(meta.ino());
+        }
+        // Then add from /sys/class/hwmon
+        if let Ok(hwmon_entry) = entry.file_name().into_string() {
+            let hwmon_path = format!("/sys/class/hwmon/{}", hwmon_entry);
+            let hwmon_path = Path::new(&hwmon_path);
+            // skip if folder doesnt exist
+            if !hwmon_path.exists() {
+                continue;
+            }
+            if let Ok(meta) = fs::metadata(hwmon_path) {
+                inodes.push(meta.ino());
+            }
+            if let Ok(meta) = fs::symlink_metadata(hwmon_path) {
                 inodes.push(meta.ino());
             }
         }
