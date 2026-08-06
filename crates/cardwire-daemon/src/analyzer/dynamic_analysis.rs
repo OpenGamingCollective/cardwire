@@ -2,7 +2,7 @@
 //! - gamemoderun analysis
 //! - library analysis
 use std::{
-    collections::HashMap, env, fs, path::{Path, PathBuf}, time::Duration
+    collections::HashMap, env, fs, path::{Path, PathBuf}, time::{Duration, Instant}
 };
 
 use tokio::{
@@ -116,6 +116,10 @@ pub fn check_gpu_env(environ: &[u8]) -> bool {
     false
 }
 
+/// How long a reported pid keeps getting retried before falling back to the
+/// process name
+pub const APP_ID_LOOKUP_TIMEOUT: Duration = Duration::from_millis(2000);
+
 /// pid to wayland app id, needs to be async to wait
 pub async fn get_app_id_wayland(pid: u32) -> Option<String> {
     let desktop_str: String = match env::var("XDG_CURRENT_DESKTOP") {
@@ -129,21 +133,39 @@ pub async fn get_app_id_wayland(pid: u32) -> Option<String> {
         // We use the niri ipc to get the window real name
         Desktop::Niri => {
             if let Some(socket_path) = find_niri_socket() {
-                let max_retries = 40;
-                let delay = Duration::from_millis(50);
-                for _ in 0..max_retries {
-                    let app_id = query_niri_window(&socket_path, pid).await;
-                    if app_id.is_some() {
-                        return app_id;
-                    }
-                    tokio::time::sleep(delay).await;
-                }
+                return query_niri_window(&socket_path, pid).await;
             }
         }
         _ => {}
     }
 
     None
+}
+
+/// Retry `get_app_id_wayland` until the lookup timeout expires, the window
+/// of a freshly launched process can take a moment to be mapped by the
+/// compositor. Breaks early if the process exits.
+pub async fn get_app_id_wayland_with_retry(pid: u32) -> Option<String> {
+    let deadline = Instant::now() + APP_ID_LOOKUP_TIMEOUT;
+    let delay = Duration::from_millis(50);
+    loop {
+        // The process is gone, we will never find a window for it
+        if !Path::new(&format!("/proc/{}", pid)).exists() {
+            return None;
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return None;
+        }
+        if let Ok(Some(app_id)) = tokio::time::timeout(remaining, get_app_id_wayland(pid)).await {
+            return Some(app_id);
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return None;
+        }
+        tokio::time::sleep(delay.min(remaining)).await;
+    }
 }
 
 /// Query niri IPC for a window's app_id by pid

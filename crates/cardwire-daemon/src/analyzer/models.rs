@@ -2,15 +2,20 @@ use aya::maps::{HashMap as AyaHashMap, RingBuf};
 use aya_log::EbpfLogger;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{Log, debug, error, info, warn};
-use std::{collections::HashMap, fs, path::PathBuf, ptr, sync::Arc};
-use tokio::{
-    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock}, task, time::Instant
+use std::{
+    collections::{HashMap, HashSet, VecDeque}, fs, path::PathBuf, ptr, sync::Arc, time::SystemTime
 };
+use tokio::{
+    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore}, task, time::Instant
+};
+use zbus::object_server::SignalEmitter;
 
-use crate::analyzer::{
-    dynamic_analysis::{
-        check_env, check_fdo_app_id, check_for_flatpak_run, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland
-    }, static_analysis
+use crate::{
+    analyzer::{
+        dynamic_analysis::{
+            check_env, check_fdo_app_id, check_for_flatpak_run, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland_with_retry
+        }, static_analysis
+    }, interface::{LogEntry, LoggerInterfaceSignals}
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -45,12 +50,25 @@ pub struct CardwireAnalyzer {
     forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
+    report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
+    reported_pids: Arc<RwLock<HashSet<u32>>>,
+    report_semaphore: Arc<Semaphore>,
+    signal: Option<SignalEmitter<'static>>,
     #[allow(dead_code)]
     xdg_folders: Vec<PathBuf>,
 }
 
+// Bound the number of concurrent report tasks
+const REPORT_SEMAPHORE_PERMITS: usize = 32;
+// Max entries kept in the report history
+const MAX_REPORT_ENTRIES: usize = 4096;
+
 impl CardwireAnalyzer {
-    pub async fn build(blocker: Arc<RwLock<EbpfBlocker>>) -> anyhow::Result<CardwireAnalyzer> {
+    pub async fn build(
+        blocker: Arc<RwLock<EbpfBlocker>>,
+        report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
+        signal: Option<SignalEmitter<'static>>,
+    ) -> anyhow::Result<CardwireAnalyzer> {
         let mut blocker = blocker.write().await;
         let exec_ring = blocker.get_exec_ring()?;
         let close_ring = blocker.get_close_ring()?;
@@ -83,6 +101,10 @@ impl CardwireAnalyzer {
             forced_map,
             ebpf_logger,
             xdg_list,
+            report_vec,
+            reported_pids: Arc::new(RwLock::new(HashSet::new())),
+            report_semaphore: Arc::new(Semaphore::new(REPORT_SEMAPHORE_PERMITS)),
+            signal,
             xdg_folders,
         })
     }
@@ -90,19 +112,15 @@ impl CardwireAnalyzer {
         // Clone the Arcs and Sender to move into the background task
         let exec_arc = self.exec_ring.clone();
         let close_arc = self.close_ring.clone();
-        let report_arc = self.report_ring.clone();
         let logger_arc = self.ebpf_logger.clone();
+
         // Lock the buffers once
         let mut exec_ring = exec_arc.lock().await;
         let mut close_ring = close_arc.lock().await;
-        let mut report_ring = report_arc.lock().await;
-
-        // Used to prevent duplicated logs burst
-        let mut previous_reported_pid = 0;
 
         let shared_self = Arc::new(self);
 
-        // spawn the logger in it's own thread
+        // spawn the ebpf-logger in it's own thread
         task::spawn(async move {
             let mut ebpf_logger = logger_arc.lock().await;
             loop {
@@ -117,6 +135,10 @@ impl CardwireAnalyzer {
                 guard.clear_ready();
             }
         });
+
+        // spawn the blocked event report in it's own thread
+        let shared_self_report = Arc::clone(&shared_self);
+        task::spawn(async move { shared_self_report.report_logger().await });
 
         loop {
             tokio::select! {
@@ -152,26 +174,6 @@ impl CardwireAnalyzer {
                         }
                         guard.clear_ready();
                     }
-                }
-                Ok(mut guard) = report_ring.ready_mut(Interest::READABLE) => {
-                        while let Some(item) = guard.get_inner_mut().next() {
-                            if item.len() < std::mem::size_of::<ReportEvent>() {
-                                debug!("Skipping malformed report event. Size: {}", item.len());
-                                continue;
-                            }
-                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
-                            // only log if we didn't see the pid before
-                            if event.pid != previous_reported_pid {
-                                previous_reported_pid = event.pid;
-                                task::spawn(async move {
-                                    if let Some(app_id) = get_app_id_wayland(event.pid).await {
-                                        // use dGPU term instead of GPU, smart mode is only avaible on hybrid setups
-                                        info!("{}[{}] tried to access the dGPU (blocked by cardwire)", app_id, event.pid);
-                                    }
-                                });
-                            }
-                        }
-                        guard.clear_ready();
                 }
             }
         }
@@ -215,13 +217,83 @@ impl CardwireAnalyzer {
         }
     }
     async fn spawn_remove_analyzer(&self, event: CloseEvent) -> () {
-        let mut pid_map = self.pid_map.write().await;
-        if pid_map.remove(&event.pid).is_ok() {
-            debug!("REMOVE: pid: {}", event.pid);
+        {
+            let mut pid_map = self.pid_map.write().await;
+            if pid_map.remove(&event.pid).is_ok() {
+                debug!("REMOVE: pid: {}", event.pid);
+            }
         }
-        let mut forced_map = self.forced_map.write().await;
-        if forced_map.remove(&event.pid).is_ok() {
-            debug!("REMOVE FORCED: pid: {}", event.pid);
+        {
+            let mut forced_map = self.forced_map.write().await;
+            if forced_map.remove(&event.pid).is_ok() {
+                debug!("REMOVE FORCED: pid: {}", event.pid);
+            }
+        }
+        {
+            let mut reported_pid_map = self.reported_pids.write().await;
+            if reported_pid_map.remove(&event.pid) {
+                debug!("REMOVE REPORTED: pid: {}", event.pid);
+            }
+        }
+    }
+
+    async fn report_logger(&self) -> () {
+        let report_arc = self.report_ring.clone();
+        let mut report_ring = report_arc.lock().await;
+        let report_vec = self.report_vec.clone();
+
+        // Used to prevent duplicated logs burst
+        let reported_pids_arc = self.reported_pids.clone();
+        let report_semaphore = self.report_semaphore.clone();
+        loop {
+            let mut guard = match report_ring.ready_mut(Interest::READABLE).await {
+                Ok(guard) => guard,
+                Err(err) => {
+                    error!("failed to get report logger guard: {}", err);
+                    return;
+                }
+            };
+            while let Some(item) = guard.get_inner_mut().next() {
+                if item.len() < std::mem::size_of::<ReportEvent>() {
+                    debug!("Skipping malformed report event. Size: {}", item.len());
+                    continue;
+                }
+                let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
+                // only log if we didn't see the pid recently
+                {
+                    let mut reported_pids = reported_pids_arc.write().await;
+                    if reported_pids.contains(&event.pid) {
+                        continue;
+                    } else {
+                        reported_pids.insert(event.pid);
+                    }
+                }
+                // Bound the number of concurrent report tasks, this prevent exausting the process
+                // FD limits
+                if let Ok(permit) = report_semaphore.clone().acquire_owned().await {
+                    // Spawn in another task to prevent blocking the report logger while
+                    // fetching informations about this process
+                    let report_vec = report_vec.clone();
+                    let signal = self.signal.clone();
+                    task::spawn(async move {
+                        let _permit = permit;
+                        if let Some(app_id) = get_app_id_wayland_with_retry(event.pid).await {
+                            report_blocked(report_vec, signal, event.pid, app_id.clone(), app_id)
+                                .await;
+                        } else if let Some(process_name) = get_real_process_name(event.pid) {
+                            report_blocked(
+                                report_vec,
+                                signal,
+                                event.pid,
+                                process_name,
+                                String::new(),
+                            )
+                            .await;
+                        }
+                    });
+                }
+            }
+            guard.clear_ready();
         }
     }
 
@@ -269,6 +341,39 @@ impl CardwireAnalyzer {
     #[allow(dead_code)]
     pub fn xdg_folders(&self) -> &Vec<PathBuf> {
         &self.xdg_folders
+    }
+}
+
+/// Record a blocked process in the report history and notify listeners
+async fn report_blocked(
+    report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
+    signal: Option<SignalEmitter<'static>>,
+    pid: u32,
+    name: String,
+    wayland_app_id: String,
+) {
+    let log_entry = LogEntry {
+        timestamp: SystemTime::now(),
+        pid,
+        comm: name.clone(),
+        gpu_id: 1,
+        wayland_app_id,
+    };
+    {
+        let mut report_vec = report_vec.write().await;
+        report_vec.push_back(log_entry.clone());
+        while report_vec.len() > MAX_REPORT_ENTRIES {
+            report_vec.pop_front();
+        }
+    }
+    info!(
+        "{}[{}] tried to access the dGPU (blocked by cardwire)",
+        name, pid
+    );
+    if let Some(signal) = signal
+        && let Err(e) = LoggerInterfaceSignals::process_blocked_changed(&signal, log_entry).await
+    {
+        error!("failed to emit process_blocked_changed: {}", e);
     }
 }
 
