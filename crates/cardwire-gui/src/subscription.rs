@@ -4,7 +4,7 @@ use iced::{
     Subscription, futures::{SinkExt, StreamExt, channel::mpsc::Sender}, stream
 };
 
-use log::{error, warn};
+use log::{info, warn};
 use tokio::select;
 use tokio_stream::StreamMap;
 
@@ -253,75 +253,55 @@ fn gpu_sub() -> Subscription<Message> {
                 }
             }
 
-            let proxy = match CardwireGpuIntProxy::new(&connection).await {
+            // Listen to the daemon's ObjectManager so GPU hotplug or a daemon-side refresh is
+            // picked up
+            let om_proxy = match Proxy::new(
+                &connection,
+                "org.opengamingcollective.cardwire",
+                "/org/opengamingcollective/cardwire",
+                "org.freedesktop.DBus.ObjectManager",
+            )
+            .await
+            {
                 Ok(p) => p,
                 Err(e) => {
-                    warn!("Failed to create D-Bus proxy: {}", e);
+                    warn!("Failed to create ObjectManager proxy: {}", e);
                     return;
                 }
             };
-            // mutable so it can be update later if list refresh
-            #[allow(unused_mut)]
-            let mut gpu_objects = match proxy.get_managed_objects().await {
-                Ok(list) => list,
+            let mut om_added = match om_proxy.receive_signal("InterfacesAdded").await {
+                Ok(s) => s,
                 Err(e) => {
-                    warn!("Failed to retrieve dbus managed objects (gpu_list): {}", e);
+                    warn!("Failed to subscribe to InterfacesAdded: {}", e);
+                    return;
+                }
+            };
+            let mut om_removed = match om_proxy.receive_signal("InterfacesRemoved").await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("Failed to subscribe to InterfacesRemoved: {}", e);
                     return;
                 }
             };
 
-            // Count the number of gpus, if the daemon didn't mess the BTree, having count = 2 means
-            // there is a gpu at 0 and at 1
-            let mut dbus_streams = StreamMap::new();
-            let mut dbus_properties = StreamMap::new();
-            for (path, _) in gpu_objects {
-                let path_str = path.as_str();
-                if let Some(id_str) =
-                    path_str.strip_prefix("/org/opengamingcollective/cardwire/Gpu/")
-                    && let Ok(id) = id_str.parse::<u32>()
-                {
-                    let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
-                    let gpu_proxy = match Proxy::new(
-                        &connection,
-                        "org.opengamingcollective.cardwire",
-                        path,
-                        "org.opengamingcollective.cardwire.Gpu",
-                    )
-                    .await
-                    {
-                        Ok(p) => p,
-                        Err(e) => {
-                            error!("Couldn't create gpu {} proxy: {}", id, e);
-                            return;
-                        }
-                    };
-                    // First time we need to populate the gpu power_state
-                    if let Ok(power_state) =
-                        gpu_proxy.call::<&str, (), String>("PowerState", &()).await
-                    {
-                        let _ = output
-                            .send(Message::UpdateGpuPowerState(id as usize, power_state))
-                            .await;
-                    }
-
-                    let power_signal = match gpu_proxy.receive_signal("PowerStateChanged").await {
-                        Ok(s) => s,
-                        Err(e) => {
-                            error!("Couldn't receive gpu {} power signal: {}", id, e);
-                            return;
-                        }
-                    };
-                    let stream_name = format!("gpu_power_{}", id);
-                    dbus_streams.insert(stream_name, power_signal);
-
-                    let block_signal: proxy::PropertyStream<'_, bool> =
-                        gpu_proxy.receive_property_changed("Block").await;
-
-                    let stream_name = format!("gpu_block_{}", id);
-                    dbus_properties.insert(stream_name, block_signal);
-                }
+            let mut dbus_streams: StreamMap<String, proxy::SignalStream<'static>> =
+                StreamMap::new();
+            let mut dbus_properties: StreamMap<String, proxy::PropertyStream<'static, bool>> =
+                StreamMap::new();
+            if let Err(e) = build_gpu_streams(
+                &connection,
+                &mut output,
+                &mut dbus_streams,
+                &mut dbus_properties,
+            )
+            .await
+            {
+                warn!("Failed to retrieve dbus managed objects (gpu_list): {}", e);
+                return;
             }
+
             loop {
+                let mut needs_refresh = false;
                 select! {
                     Some(msg) = dbus_streams.next() => {
                         let msg_id = msg.0;
@@ -357,10 +337,101 @@ fn gpu_sub() -> Subscription<Message> {
                             _ => {}
                         }
                     },
+                    Some(msg) = om_added.next() => {
+                        if let Ok((path, _)) = msg.body().deserialize::<(
+                            OwnedObjectPath,
+                            HashMap<OwnedInterfaceName, HashMap<String, OwnedValue>>,
+                        )>()
+                            && path.as_str().starts_with("/org/opengamingcollective/cardwire/Gpu/")
+                        {
+                            needs_refresh = true;
+                        }
+                    },
+                    Some(msg) = om_removed.next() => {
+                        if let Ok((path, _)) = msg.body().deserialize::<(
+                            OwnedObjectPath,
+                            Vec<OwnedInterfaceName>,
+                        )>()
+                            && path.as_str().starts_with("/org/opengamingcollective/cardwire/Gpu/")
+                        {
+                            needs_refresh = true;
+                        }
+                    },
+                }
+                if needs_refresh {
+                    info!("GPU list changed on the daemon, refreshing");
+                    // Refetch the gpu list and rebuild the signal streams from the new GPU set
+                    match CardwireDbus::new().get_devices_list().await {
+                        Ok(gpu_list) => {
+                            let _ = output.send(Message::AllDevicesFetched(Ok(gpu_list))).await;
+                        }
+                        Err(error) => {
+                            let _ = output
+                                .send(Message::AllDevicesFetched(Err(error.to_string())))
+                                .await;
+                        }
+                    }
+                    dbus_streams.clear();
+                    dbus_properties.clear();
+                    if let Err(e) = build_gpu_streams(
+                        &connection,
+                        &mut output,
+                        &mut dbus_streams,
+                        &mut dbus_properties,
+                    )
+                    .await
+                    {
+                        warn!("Failed to rebuild GPU signal streams: {}", e);
+                    }
                 }
             }
         })
     })
+}
+
+/// Fetch the current GPU set from the daemon and (re)build the per-GPU signal streams
+/// (PowerStateChanged and Block property changes)
+async fn build_gpu_streams(
+    connection: &Connection,
+    output: &mut Sender<Message>,
+    dbus_streams: &mut StreamMap<String, proxy::SignalStream<'static>>,
+    dbus_properties: &mut StreamMap<String, proxy::PropertyStream<'static, bool>>,
+) -> zbus::Result<()> {
+    let proxy = CardwireGpuIntProxy::new(connection).await?;
+    let gpu_objects = proxy.get_managed_objects().await?;
+
+    for (path, _) in gpu_objects {
+        let path_str = path.as_str();
+        if let Some(id_str) = path_str.strip_prefix("/org/opengamingcollective/cardwire/Gpu/")
+            && let Ok(id) = id_str.parse::<u32>()
+        {
+            let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
+            let gpu_proxy = Proxy::new(
+                connection,
+                "org.opengamingcollective.cardwire",
+                path,
+                "org.opengamingcollective.cardwire.Gpu",
+            )
+            .await?;
+            // First time we need to populate the gpu power_state
+            if let Ok(power_state) = gpu_proxy.call::<&str, (), String>("PowerState", &()).await {
+                let _ = output
+                    .send(Message::UpdateGpuPowerState(id as usize, power_state))
+                    .await;
+            }
+
+            let power_signal = gpu_proxy.receive_signal("PowerStateChanged").await?;
+            let stream_name = format!("gpu_power_{}", id);
+            dbus_streams.insert(stream_name, power_signal);
+
+            let block_signal: proxy::PropertyStream<'_, bool> =
+                gpu_proxy.receive_property_changed("Block").await;
+
+            let stream_name = format!("gpu_block_{}", id);
+            dbus_properties.insert(stream_name, block_signal);
+        }
+    }
+    Ok(())
 }
 
 #[proxy(
