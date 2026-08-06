@@ -96,7 +96,6 @@ impl GpuInterface {
 
     /// unblock the gpu
     pub async fn unblock_gpu(&mut self) -> fdo::Result<()> {
-        // Read the inodes required to unblock the GPU, return if err
         let (render, card, pci_address, pci_parent, nvidia_minor, pci_list) = {
             let pci_list_guard = self.pci_list.read().await;
 
@@ -110,6 +109,7 @@ impl GpuInterface {
             )
         };
 
+        // Read the inodes required to unblock the GPU, return if err
         let inodes = tokio::task::spawn_blocking(move || {
             get_inodes(
                 render,
