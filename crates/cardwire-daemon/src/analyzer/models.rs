@@ -3,7 +3,7 @@ use aya_log::EbpfLogger;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{Log, debug, error, info, warn};
 use std::{
-    collections::{HashMap, VecDeque}, fs, path::PathBuf, ptr, sync::Arc, time::SystemTime
+    collections::{HashMap, HashSet, VecDeque}, fs, path::PathBuf, ptr, sync::Arc, time::SystemTime
 };
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore}, task, time::Instant
@@ -51,6 +51,7 @@ pub struct CardwireAnalyzer {
     ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>>,
     xdg_list: Arc<RwLock<HashMap<String, bool>>>,
     report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
+    reported_pids: Arc<RwLock<HashSet<u32>>>,
     report_semaphore: Arc<Semaphore>,
     signal: Option<SignalEmitter<'static>>,
     #[allow(dead_code)]
@@ -59,8 +60,6 @@ pub struct CardwireAnalyzer {
 
 // Bound the number of concurrent report tasks
 const REPORT_SEMAPHORE_PERMITS: usize = 32;
-// A pid already in the report history is considered a duplicate and is skipped
-const REPORT_DEDUP_MAX_PIDS: usize = 4096;
 // Max entries kept in the report history
 const MAX_REPORT_ENTRIES: usize = 4096;
 
@@ -103,6 +102,7 @@ impl CardwireAnalyzer {
             ebpf_logger,
             xdg_list,
             report_vec,
+            reported_pids: Arc::new(RwLock::new(HashSet::new())),
             report_semaphore: Arc::new(Semaphore::new(REPORT_SEMAPHORE_PERMITS)),
             signal,
             xdg_folders,
@@ -217,13 +217,23 @@ impl CardwireAnalyzer {
         }
     }
     async fn spawn_remove_analyzer(&self, event: CloseEvent) -> () {
-        let mut pid_map = self.pid_map.write().await;
-        if pid_map.remove(&event.pid).is_ok() {
-            debug!("REMOVE: pid: {}", event.pid);
+        {
+            let mut pid_map = self.pid_map.write().await;
+            if pid_map.remove(&event.pid).is_ok() {
+                debug!("REMOVE: pid: {}", event.pid);
+            }
         }
-        let mut forced_map = self.forced_map.write().await;
-        if forced_map.remove(&event.pid).is_ok() {
-            debug!("REMOVE FORCED: pid: {}", event.pid);
+        {
+            let mut forced_map = self.forced_map.write().await;
+            if forced_map.remove(&event.pid).is_ok() {
+                debug!("REMOVE FORCED: pid: {}", event.pid);
+            }
+        }
+        {
+            let mut reported_pid_map = self.reported_pids.write().await;
+            if reported_pid_map.remove(&event.pid) {
+                debug!("REMOVE REPORTED: pid: {}", event.pid);
+            }
         }
     }
 
@@ -232,9 +242,8 @@ impl CardwireAnalyzer {
         let mut report_ring = report_arc.lock().await;
         let report_vec = self.report_vec.clone();
 
-        // Used to prevent duplicated logs burst, a pid is only reported once
-        // until it is evicted from the history by newer entries
-        let mut reported_pids: VecDeque<u32> = VecDeque::new();
+        // Used to prevent duplicated logs burst
+        let reported_pids_arc = self.reported_pids.clone();
         let report_semaphore = self.report_semaphore.clone();
         loop {
             let mut guard = match report_ring.ready_mut(Interest::READABLE).await {
@@ -251,14 +260,16 @@ impl CardwireAnalyzer {
                 }
                 let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
                 // only log if we didn't see the pid recently
-                if reported_pids.contains(&event.pid) {
-                    continue;
+                {
+                    let mut reported_pids = reported_pids_arc.write().await;
+                    if reported_pids.contains(&event.pid) {
+                        continue;
+                    } else {
+                        reported_pids.insert(event.pid);
+                    }
                 }
-                reported_pids.push_back(event.pid);
-                if reported_pids.len() > REPORT_DEDUP_MAX_PIDS {
-                    reported_pids.pop_front();
-                }
-                // Bound the number of concurrent report tasks
+                // Bound the number of concurrent report tasks, this prevent exausting the process
+                // FD limits
                 if let Ok(permit) = report_semaphore.clone().acquire_owned().await {
                     // Spawn in another task to prevent blocking the report logger while
                     // fetching informations about this process
