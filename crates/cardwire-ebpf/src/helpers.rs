@@ -18,14 +18,14 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
 
     'inode_check: {
         // Check if the inode is in the blocked list
-        if let Some(v) = unsafe { CW_BLOCKED_INO.get(&inode) } {
+        if let Some(v) = unsafe { CW_BLOCKED_INO.get(inode) } {
             blocked = true;
             ino_gpu_id = *v;
             break 'inode_check;
         }
         // We didn't match any inode, try with nvidia inodes
         if unsafe { is_nvidia_setting_enabled() }
-            && let Some(v) = unsafe { CW_EXP_BLK_INO.get(&inode) }
+            && let Some(v) = unsafe { CW_EXP_BLK_INO.get(inode) }
         {
             blocked = true;
             ino_gpu_id = *v;
@@ -49,27 +49,26 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
         // If everything ok, read the pid
         let pid: u32 = (bpf_get_current_pid_tgid() >> 32) as u32;
 
+        let comm = bpf_get_current_comm().unwrap_or([0u8; 16]);
+
         if *mode == INTEGRATED || *mode == MANUAL {
             // if integrated/manual, just report the event and block
-            report_event(pid);
+            report_event(pid, ino_gpu_id, comm);
             return true;
         }
 
         // 0 = iGPU
         // 1 = dGPU
         if *mode == SMART {
-            let ppid = match get_task_ppid() {
-                Some(ppid) => ppid,
-                None => u32::MAX,
-            };
+            let ppid = get_task_ppid().unwrap_or(u32::MAX);
 
             // We need to check if the map contains the pid
             // In smart mode, we do not check if the ino_gpu_id matches, it was only made for dual
             // gpu(hybrid) laptops
 
             // First we try with the pid
-            if unsafe { CW_ALLOWED_PID.get(&pid).is_some() }
-                || unsafe { CW_ALLOWED_PID.get(&ppid).is_some() }
+            if unsafe { CW_ALLOWED_PID.get(pid).is_some() }
+                || unsafe { CW_ALLOWED_PID.get(ppid).is_some() }
             {
                 // We got a match, pid is allowed !
                 break 'end;
@@ -77,7 +76,7 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
 
             // If we are here, the pid AND the ppid are not in the allowed map, check the FORCED map
             let forced_gpu_id =
-                unsafe { CW_FORCED_PID.get(&pid).or_else(|| CW_FORCED_PID.get(&ppid)) };
+                unsafe { CW_FORCED_PID.get(pid).or_else(|| CW_FORCED_PID.get(ppid)) };
 
             if let Some(pid_gpu_id) = forced_gpu_id {
                 // We match the ino_gpu_id with the pid_gpu_id
@@ -89,7 +88,7 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
                     // Process should only be allowed to see the said GPU id
                     false => {
                         // Report the event to the daemon
-                        report_event(pid);
+                        report_event(pid, ino_gpu_id, comm);
                         return true;
                     }
                 }
@@ -103,7 +102,7 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
             }
 
             // Report the event to the daemon
-            report_event(pid);
+            report_event(pid, ino_gpu_id, comm);
 
             // End of smart mode check, block if it didnt get allowed earlier
             return true;
@@ -114,9 +113,9 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
 }
 
 #[inline(always)]
-fn report_event(pid: u32) {
+fn report_event(pid: u32, gpu_id: u32, comm: [u8; 16]) {
     if let Some(mut ring_buf) = CW_REPORT_EVENTS.reserve(0) {
-        let event: ReportEvent = ReportEvent { pid };
+        let event: ReportEvent = ReportEvent { pid, gpu_id, comm };
         // write to the map
         ring_buf.write(event);
         // submit
@@ -153,7 +152,7 @@ fn get_task_ppid() -> Option<u32> {
 #[inline(always)]
 pub fn is_comm_whitelisted() -> bool {
     if let Ok(comm) = bpf_get_current_comm()
-        && unsafe { CW_ALLOWED_COMM.get(&comm).is_some() }
+        && unsafe { CW_ALLOWED_COMM.get(comm).is_some() }
     {
         return true;
     }
@@ -164,33 +163,24 @@ pub fn is_comm_whitelisted() -> bool {
 #[inline(always)]
 pub fn is_cardwired() -> Option<bool> {
     let proc_pid = (bpf_get_current_pid_tgid() >> 32) as u32;
-    match CW_DAEMON_PID.get(DAEMON_INDEX) {
-        Some(pid) => Some(proc_pid == *pid),
-        None => None,
-    }
+    CW_DAEMON_PID.get(DAEMON_INDEX).map(|pid| proc_pid == *pid)
 }
 
 /// Verify if the current device mode is hybrid, returns None if the map fails
 #[inline(always)]
 pub unsafe fn is_hybrid() -> Option<bool> {
-    match CW_MODE.get(MODE_INDEX) {
-        Some(mode) => Some(*mode == HYBRID),
-        None => None,
-    }
+    CW_MODE.get(MODE_INDEX).map(|mode| *mode == HYBRID)
 }
 
 /// Verify if the current device mode is smart, returns None if the map fails
 #[inline(always)]
 pub unsafe fn is_smart() -> Option<bool> {
-    match CW_MODE.get(MODE_INDEX) {
-        Some(mode) => Some(*mode == SMART),
-        None => None,
-    }
+    CW_MODE.get(MODE_INDEX).map(|mode| *mode == SMART)
 }
 
 #[inline(always)]
 pub unsafe fn is_nvidia_setting_enabled() -> bool {
-    match unsafe { CW_SETTINGS.get(&CardwiredSetting::EXP_NVIDIA) } {
+    match unsafe { CW_SETTINGS.get(CardwiredSetting::EXP_NVIDIA) } {
         Some(setting) => *setting,
         None => false,
     }

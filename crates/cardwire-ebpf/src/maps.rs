@@ -89,10 +89,13 @@ pub struct CloseEvent {
 #[btf_map]
 pub static CW_CLOSE_EVENTS: RingBuf<CloseEvent, 262144> = RingBuf::new();
 
+#[repr(C)]
 #[repr(align(8))]
 #[allow(dead_code)]
 pub struct ReportEvent {
     pub pid: u32,
+    pub gpu_id: u32,
+    pub comm: [u8; 16],
 }
 
 #[btf_map]
