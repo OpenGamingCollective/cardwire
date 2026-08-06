@@ -4,9 +4,85 @@ use std::{
 };
 
 use anyhow::Result;
-use log::warn;
+use log::{error, warn};
 
 use crate::core::pci::PciDevice;
+
+pub fn get_inodes(
+    render: u32,
+    card: u32,
+    pci: String,
+    parent_pci: &Option<String>,
+    pci_list: &BTreeMap<String, PciDevice>,
+    nvidia_minor: Option<u32>,
+) -> Result<Vec<u64>> {
+    let mut total_inodes: Vec<u64> = Vec::new();
+
+    match card_to_inode(card) {
+        Ok(inode_res) => total_inodes.push(inode_res),
+        Err(err) => {
+            error!("failed to get inode for card{}: {}", card, err);
+            return Err(err);
+        }
+    };
+    match render_to_inode(render) {
+        Ok(inode_res) => total_inodes.push(inode_res),
+        Err(err) => {
+            error!("failed to get inode for renderD{}: {}", render, err);
+            return Err(err);
+        }
+    };
+    match pci_to_inode(pci.to_string(), parent_pci, pci_list) {
+        Ok(mut inodes_res) => {
+            total_inodes.append(&mut inodes_res);
+        }
+        Err(err) => {
+            error!("failed to block pci {}: {}", pci, err);
+            return Err(err);
+        }
+    };
+    // Block files in /sys/class/drm
+    match sys_drm_inodes(render, card) {
+        Ok(mut inodes_res) => {
+            total_inodes.append(&mut inodes_res);
+        }
+        Err(err) => {
+            error!("failed to block drm {}: {}", pci, err);
+            return Err(err);
+        }
+    };
+    // Block files in /sys/class/hwmon and pci sysfs
+    match sys_hwmon(&pci) {
+        Ok(mut inodes_res) => {
+            total_inodes.append(&mut inodes_res);
+        }
+        Err(err) => {
+            // ignored because VMs gpu do not have hwmon
+            error!("(ignoring) failed to block hwmon {}: {}", pci, err);
+        }
+    };
+
+    if let Some(minor) = nvidia_minor {
+        match nvidia_to_inode(minor) {
+            Ok(inode) => total_inodes.push(inode),
+            Err(err) => {
+                error!("failed to block nvidia{}: {}", render, err);
+                return Err(err);
+            }
+        };
+        match backlight_to_inode(minor) {
+            Ok(inode) => total_inodes.push(inode),
+            Err(err) => {
+                error!(
+                    "(ignoring) failed to block backlight nvidia_{}: {}",
+                    minor, err
+                );
+            }
+        };
+    }
+
+    Ok(total_inodes)
+}
 
 pub fn render_to_inode(render: u32) -> Result<u64> {
     let render_path = format!("/dev/dri/renderD{}", render);
