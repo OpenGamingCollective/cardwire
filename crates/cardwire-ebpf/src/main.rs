@@ -424,6 +424,10 @@ pub fn tracepoint_sched_process_exec(ctx: TracePointContext) -> u32 {
 }
 
 unsafe fn try_tracepoint_sched_process_exec(ctx: TracePointContext) -> Result<i32, i32> {
+    // First we clean the MAP
+    let pid = (bpf_get_current_pid_tgid() >> 32) as u32;
+    let _ = CW_ALLOWED_PID.remove(&pid);
+    let _ = CW_FORCED_PID.remove(&pid);
     // If it's the daemon, we must exit
     match is_cardwired() {
         Some(res) => {
@@ -459,9 +463,6 @@ unsafe fn try_tracepoint_sched_process_exec(ctx: TracePointContext) -> Result<i3
                 return ReturnCode::SUCCESS;
             }
         };
-        let pid = (bpf_get_current_pid_tgid() >> 32) as u32;
-        let _ = CW_ALLOWED_PID.remove(&pid);
-        let _ = CW_FORCED_PID.remove(&pid);
 
         // We just send the event to userspace
         let event: ExecEvent = ExecEvent { pid };
@@ -483,23 +484,17 @@ pub fn tracepoint_sched_process_exit(ctx: TracePointContext) -> u32 {
 }
 
 unsafe fn try_tracepoint_sched_process_exit(_ctx: TracePointContext) -> Result<i32, i32> {
-    // Only proceed if we are in smart mode, events are not used when not in smart mode and it would
-    // slow down the system for no reason
-    if let Some(res) = unsafe { is_smart() }
-        && res
-    {
-        let pid_tgid: u64 = bpf_get_current_pid_tgid();
-        let tgid = pid_tgid as u32;
-        let pid = (pid_tgid >> 32) as u32;
+    let pid_tgid: u64 = bpf_get_current_pid_tgid();
+    let tgid = pid_tgid as u32;
+    let pid = (pid_tgid >> 32) as u32;
 
-        // Only send close event if the main thread is exiting
-        if pid != tgid {
-            return ReturnCode::SUCCESS;
-        }
-        // Remove PID from the maps
-        let _ = CW_ALLOWED_PID.remove(&pid);
-        let _ = CW_FORCED_PID.remove(&pid);
+    // Only process the exit if the main thread is exiting
+    if pid != tgid {
+        return ReturnCode::SUCCESS;
     }
+    // Remove PID from the maps
+    let _ = CW_ALLOWED_PID.remove(&pid);
+    let _ = CW_FORCED_PID.remove(&pid);
 
     ReturnCode::SUCCESS
 }
