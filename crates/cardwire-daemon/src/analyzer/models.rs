@@ -12,9 +12,7 @@ use zbus::object_server::SignalEmitter;
 
 use crate::{
     analyzer::{
-        dynamic_analysis::{
-            check_env, check_gpu_env, get_app_id_wayland_with_retry, get_steam_app_id
-        }, helpers::{comm_to_string, get_real_process_name, is_proc_still_alive}, static_analysis::{self, AppMetadata}
+        dynamic_analysis::{check_env, get_app_id_wayland_with_retry, get_steam_app_id}, helpers::{comm_to_string, get_real_process_name, is_proc_still_alive}, static_analysis::{self, AppMetadata}
     }, file::GpuPolicy, interface::{LogEntry, LoggerInterfaceSignals}
 };
 #[repr(C)]
@@ -283,10 +281,6 @@ impl CardwireAnalyzer {
         }
         if let Some(value) = check_env("CARDWIRE_FORCE_GPU", &environ) {
             return Some((true, PidType::Forced, value));
-        }
-
-        if check_gpu_env(&environ) {
-            return Some((true, PidType::Allowed, 0));
         }
 
         // Check the database now, we can take our time since if we reached it, the app would've

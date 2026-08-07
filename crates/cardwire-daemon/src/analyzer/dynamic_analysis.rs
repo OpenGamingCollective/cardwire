@@ -58,16 +58,6 @@ pub fn check_env(env_var: &str, environ: &[u8]) -> Option<u32> {
     None
 }
 
-pub fn check_gpu_env(environ: &[u8]) -> bool {
-    if let Some(val) = check_env("DRI_PRIME", environ) {
-        return val == 1;
-    } else if let Some(val) = check_env("__NV_PRIME_RENDER_OFFLOAD", environ) {
-        return val == 1;
-    }
-    // Not present
-    false
-}
-
 /// How long a reported pid keeps getting retried before falling back to the
 /// process name
 pub const APP_ID_LOOKUP_TIMEOUT: Duration = Duration::from_millis(2000);
@@ -197,45 +187,6 @@ mod tests {
         // "CARDWIRE_ALLOW=x" — value at index 15 is 'x', not '1'
         let environ = b"CARDWIRE_ALLOW=x";
         assert_eq!(check_env("CARDWIRE_ALLOW", environ), None);
-    }
-
-    /*
-        check_gpu_env
-    */
-
-    #[test]
-    fn test_check_gpu_env_detects_dri_prime_1() {
-        let environ = b"HOME=/home\0DRI_PRIME=1\0DISPLAY=:0";
-        assert!(check_gpu_env(environ));
-    }
-
-    #[test]
-    fn test_check_gpu_env_rejects_dri_prime_0() {
-        let environ = b"HOME=/home\0DRI_PRIME=0\0DISPLAY=:0";
-        assert!(!check_gpu_env(environ));
-    }
-
-    #[test]
-    fn test_check_gpu_env_detects_nv_prime_render_offload_1() {
-        let environ = b"__NV_PRIME_RENDER_OFFLOAD=1";
-        assert!(check_gpu_env(environ));
-    }
-
-    #[test]
-    fn test_check_gpu_env_rejects_nv_prime_render_offload_0() {
-        let environ = b"__NV_PRIME_RENDER_OFFLOAD=0";
-        assert!(!check_gpu_env(environ));
-    }
-
-    #[test]
-    fn test_check_gpu_env_returns_false_when_neither_present() {
-        let environ = b"HOME=/home\0DISPLAY=:0\0TERM=xterm";
-        assert!(!check_gpu_env(environ));
-    }
-
-    #[test]
-    fn test_check_gpu_env_returns_false_for_empty_input() {
-        assert!(!check_gpu_env(b""));
     }
 
     #[test]
