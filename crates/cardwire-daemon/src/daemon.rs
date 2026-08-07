@@ -3,11 +3,11 @@ mod analyzer;
 mod core;
 mod file;
 mod interface;
-mod models;
+mod manager;
 mod tasks;
 pub mod types;
 
-use crate::{models::DaemonManager, tasks::watch_power_state};
+use crate::{manager::DaemonManager, tasks::watch_power_state};
 use anyhow::Result;
 use env_logger::Env;
 use log::info;
@@ -118,7 +118,7 @@ async fn spawn_dbus_api(
 ) -> anyhow::Result<()> {
     let path = "/org/opengamingcollective/cardwire";
 
-    let gpu_interfaces = daemon.gpu_interfaces.read().await;
+    let gpu_interfaces = daemon.inner.gpu_list.read().await;
     // cardwire.Mode
     object_server
         .at(path, daemon.mode_interface.clone())

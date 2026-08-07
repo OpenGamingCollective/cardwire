@@ -4,7 +4,9 @@ use std::{
     }
 };
 
-use crate::{file::CardwireConfig, interface::Modes};
+use crate::{
+    file::CardwireConfig, interface::{DaemonContext, Modes}
+};
 use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
 use log::warn;
 use tokio::sync::RwLock;
@@ -48,11 +50,11 @@ pub struct ConfigInterface {
     blocker: Arc<RwLock<EbpfBlocker>>,
 }
 impl ConfigInterface {
-    pub fn build(
-        config: Arc<ConfigMemory>,
-        blocker: Arc<RwLock<EbpfBlocker>>,
-    ) -> anyhow::Result<ConfigInterface> {
-        Ok(Self { config, blocker })
+    pub fn build(context: &DaemonContext) -> anyhow::Result<ConfigInterface> {
+        Ok(Self {
+            config: context.config.clone(),
+            blocker: context.blocker.clone(),
+        })
     }
 }
 

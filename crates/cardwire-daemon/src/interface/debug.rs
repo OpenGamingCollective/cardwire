@@ -10,7 +10,7 @@ use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface, ModeInterface}
+    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, DaemonContext, GpuInterface, ModeInterface}
 };
 
 #[derive(Clone)]
@@ -27,29 +27,22 @@ pub struct DebugInterface {
     pub switcheroo: SwitcherooInterface,
 }
 impl DebugInterface {
-    #[allow(clippy::too_many_arguments)]
     pub fn build(
-        mode_state: Arc<RwLock<CardwireModeState>>,
+        context: &DaemonContext,
         mode_interface: ModeInterface,
-        gpu_state: Arc<RwLock<CardwireGpuState>>,
-        gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
-        config: Arc<ConfigMemory>,
-        blocker: Arc<RwLock<EbpfBlocker>>,
-        pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
         object_server: Option<zbus::ObjectServer>,
-        power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<anyhow::Result<()>>>>>,
         switcheroo: SwitcherooInterface,
     ) -> anyhow::Result<DebugInterface> {
         Ok(DebugInterface {
-            mode_state,
+            mode_state: context.mode_state.clone(),
             mode_interface,
-            gpu_state,
-            gpu_list,
-            config,
-            blocker,
-            pci_list,
+            gpu_state: context.gpu_state.clone(),
+            gpu_list: context.gpu_list.clone(),
+            config: context.config.clone(),
+            blocker: context.blocker.clone(),
+            pci_list: context.pci_list.clone(),
             object_server,
-            power_tasks,
+            power_tasks: context.power_tasks.clone(),
             switcheroo,
         })
     }

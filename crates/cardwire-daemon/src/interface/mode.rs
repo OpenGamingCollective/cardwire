@@ -1,10 +1,9 @@
 //! Define the mode dbus
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{GpuInterface, config::ConfigMemory}
+    file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, config::ConfigMemory}
 };
 use anyhow::Result;
 use aya::maps::Array as AyaArray;
-use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{error, info, warn};
 use std::{
     collections::BTreeMap, process::Stdio, sync::{Arc, OnceLock}
@@ -33,22 +32,16 @@ pub struct ModeInterface {
 }
 
 impl ModeInterface {
-    pub async fn build(
-        mode_state: Arc<RwLock<CardwireModeState>>,
-        gpu_state: Arc<RwLock<CardwireGpuState>>,
-        gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
-        config: Arc<ConfigMemory>,
-        blocker: Arc<RwLock<EbpfBlocker>>,
-    ) -> Result<ModeInterface> {
-        let mut blocker = blocker.write().await;
+    pub async fn build(context: &DaemonContext) -> Result<ModeInterface> {
+        let mut blocker = context.blocker.write().await;
         let mode_map: aya::maps::Array<aya::maps::MapData, u8> = blocker.get_mode_map()?;
         let mode_map = Arc::new(Mutex::new(mode_map));
-        let initial_mode = mode_state.read().await.mode();
+        let initial_mode = context.mode_state.read().await.mode();
         Ok(ModeInterface {
-            mode_state,
-            gpu_state,
-            gpu_list,
-            config,
+            mode_state: context.mode_state.clone(),
+            gpu_state: context.gpu_state.clone(),
+            gpu_list: context.gpu_list.clone(),
+            config: context.config.clone(),
             mode_map,
             effective_mode: Arc::new(RwLock::new(initial_mode)),
             transition: Arc::new(Mutex::new(())),

@@ -1,39 +1,28 @@
-//! where the struct and impl are declared
+//! Daemon composition root: builds the shared [`DaemonContext`] and every D-Bus interface, owns
+//! startup tasks and background-task futures.
 use crate::{
     analyzer::CardwireAnalyzer, core::{
         gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self}
     }, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
-        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
+        ConfigInterface, ConfigMemory, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
     }, tasks
 };
 use anyhow::{Context, Result};
 use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
 use log::error;
 use std::{collections::BTreeMap, sync::Arc};
-use tokio::{sync::RwLock, task};
+use tokio::sync::RwLock;
 use zbus::{fdo, interface};
-
-/// Contain the variable used by the daemon in daemon.rs
-#[derive(Clone)]
-pub struct DaemonInner {
-    pub mode_state: Arc<RwLock<CardwireModeState>>,
-    pub gpu_state: Arc<RwLock<CardwireGpuState>>,
-    pub gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
-    pub config: Arc<ConfigMemory>,
-    pub blocker: Arc<RwLock<EbpfBlocker>>,
-    pub power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<anyhow::Result<()>>>>>,
-}
 
 #[derive(Clone)]
 pub struct DaemonManager {
     pub mode_interface: ModeInterface,
-    pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
     pub config_interface: ConfigInterface,
     pub debug_interface: DebugInterface,
     pub switcheroo_interface: SwitcherooInterface,
     pub logger_interface: LoggerInterface,
     pub smart_policy_interface: SmartPolicyInterface,
-    pub inner: DaemonInner,
+    pub inner: DaemonContext,
 }
 
 impl DaemonManager {
@@ -50,25 +39,17 @@ impl DaemonManager {
         let gpu_state: Arc<RwLock<CardwireGpuState>> = Arc::new(RwLock::new(gpu_state));
 
         let pci_devices: BTreeMap<String, pci::PciDevice> = pci::read_pci_devices()?;
-
         let gpu_enumerator = GpuEnumerator::build();
         let gpu_list = gpu_enumerator.enumerate(&pci_devices);
-
         let pci_list: Arc<RwLock<BTreeMap<String, pci::PciDevice>>> =
             Arc::new(RwLock::new(pci_devices));
 
         let mut blocker = EbpfBlocker::new()?;
-
         let database = CardwireDatabase::build()?;
-
         let smart_policy_interface = SmartPolicyInterface::build(&mut blocker, database);
-
         let blocker = Arc::new(RwLock::new(blocker));
 
-        let power_tasks = Arc::new(RwLock::new(BTreeMap::new()));
-
         let mut gpu_interfaces_map: BTreeMap<usize, Arc<GpuInterface>> = BTreeMap::new();
-
         for (id, device) in gpu_list {
             let gpu = GpuInterface::build(
                 id as u32,
@@ -80,53 +61,36 @@ impl DaemonManager {
             )?;
             gpu_interfaces_map.insert(id, Arc::new(gpu));
         }
-
         let gpu_interfaces: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>> =
             Arc::new(RwLock::new(gpu_interfaces_map));
 
-        let mode_interface = ModeInterface::build(
-            Arc::clone(&mode_state),
-            Arc::clone(&gpu_state),
-            Arc::clone(&gpu_interfaces),
-            Arc::clone(&user_config),
-            Arc::clone(&blocker),
-        )
-        .await?;
+        let context = DaemonContext {
+            mode_state,
+            gpu_state,
+            gpu_list: gpu_interfaces,
+            config: user_config,
+            blocker,
+            power_tasks: Arc::new(RwLock::new(BTreeMap::new())),
+            pci_list,
+        };
 
+        let mode_interface = ModeInterface::build(&context).await?;
         let logger_interface = LoggerInterface::build();
-
-        let switcheroo_interface = SwitcherooInterface::build(Arc::clone(&gpu_interfaces));
+        let switcheroo_interface = SwitcherooInterface::build(Arc::clone(&context.gpu_list));
 
         Ok(Self {
             mode_interface: mode_interface.clone(),
-            gpu_interfaces: Arc::clone(&gpu_interfaces),
-            config_interface: ConfigInterface::build(
-                Arc::clone(&user_config),
-                Arc::clone(&blocker),
-            )?,
+            config_interface: ConfigInterface::build(&context)?,
             debug_interface: DebugInterface::build(
-                Arc::clone(&mode_state),
+                &context,
                 mode_interface.clone(),
-                Arc::clone(&gpu_state),
-                Arc::clone(&gpu_interfaces),
-                Arc::clone(&user_config),
-                Arc::clone(&blocker),
-                Arc::clone(&pci_list),
                 None,
-                Arc::clone(&power_tasks),
                 switcheroo_interface.clone(),
             )?,
             switcheroo_interface,
             logger_interface,
             smart_policy_interface,
-            inner: DaemonInner {
-                mode_state: Arc::clone(&mode_state),
-                gpu_state: Arc::clone(&gpu_state),
-                gpu_list: Arc::clone(&gpu_interfaces),
-                config: Arc::clone(&user_config),
-                blocker: Arc::clone(&blocker),
-                power_tasks: Arc::clone(&power_tasks),
-            },
+            inner: context,
         })
     }
 
