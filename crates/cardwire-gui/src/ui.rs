@@ -141,7 +141,7 @@ pub fn main_page<'a>(
 ) -> Element<'a, Message> {
     column![
         mode_element(main_state.current_mode),
-        gpu_cards(gpu_list, main_state.open_gpu_menu)
+        gpu_cards(gpu_list, main_state.open_gpu_menu, main_state.current_mode)
     ]
     .spacing(20)
     .into()
@@ -161,6 +161,7 @@ fn mode_element(current_mode: Option<Mode>) -> Element<'static, Message> {
 fn gpu_cards(
     gpu_list: &BTreeMap<usize, GpuDevice>,
     open_dropdown: Option<usize>,
+    current_mode: Option<Mode>,
 ) -> Element<'_, Message> {
     let cards = gpu_list
         .iter()
@@ -181,14 +182,13 @@ fn gpu_cards(
             let gpu_id = *id;
             let is_blocked = gpu.blocked;
 
-            let is_offload_dgpu = !gpu.default && gpu.discrete;
-
             let is_available = gpu.available;
 
             // Build dropdown menu items
             let mut dropdown_col = column![];
-            // Block/Unblock (only for offload dGPU)
-            if is_offload_dgpu && is_available {
+            // Block/Unblock (only in manual mode and if not default)
+            if current_mode.is_some_and(|mode| mode == Mode::Manual) && !gpu.default && is_available
+            {
                 if is_blocked {
                     dropdown_col = dropdown_col.push(
                         button("Unblock")
