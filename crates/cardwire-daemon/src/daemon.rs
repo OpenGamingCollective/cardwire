@@ -100,14 +100,21 @@ async fn main() -> Result<()> {
     // Spawn background tasks
     // Give the Mode interface its signal emitter so automatic transitions (which bypass the
     // D-Bus property setter) can notify clients.
-    if let Ok(mode_ref) = object_server
+    match object_server
         .interface::<_, crate::interface::ModeInterface>("/org/opengamingcollective/cardwire")
         .await
     {
-        daemon
-            .mode_interface
-            .signal_emitter
-            .get_or_init(|| mode_ref.signal_emitter().to_owned());
+        Ok(mode_ref) => {
+            daemon
+                .mode_interface
+                .signal_emitter
+                .get_or_init(|| mode_ref.signal_emitter().to_owned());
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to get the Mode interface ({e}); mode change notifications will not be emitted"
+            );
+        }
     }
     task::spawn(daemon.battery_switch_future());
     task::spawn(daemon.monitor_udev_future());
@@ -153,14 +160,21 @@ async fn spawn_dbus_api(
     object_server
         .at(path, daemon.logger_interface.clone())
         .await?;
-    if let Ok(logger_ref) = object_server
+    match object_server
         .interface::<_, crate::interface::LoggerInterface>(path)
         .await
     {
-        daemon
-            .logger_interface
-            .signal_emitter
-            .get_or_init(|| logger_ref.signal_emitter().to_owned());
+        Ok(logger_ref) => {
+            daemon
+                .logger_interface
+                .signal_emitter
+                .get_or_init(|| logger_ref.signal_emitter().to_owned());
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to get the Logger interface ({e}); logger notifications will not be emitted"
+            );
+        }
     }
 
     // Cardwire Smart Policy
