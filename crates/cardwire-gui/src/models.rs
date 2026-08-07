@@ -95,6 +95,10 @@ pub struct LogState {
 
 impl LogState {
     pub fn replace(&mut self, logs: VecDeque<LogEntry>) {
+        let mut logs = logs;
+        while logs.len() > MAX_GUI_LOG_ENTRIES {
+            logs.pop_front();
+        }
         self.logs = logs;
     }
 
