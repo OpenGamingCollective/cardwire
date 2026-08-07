@@ -420,8 +420,37 @@ fn get_real_process_name(pid: u32) -> Option<String> {
             }
         }
     }
+
     // Fallback, just use the binary name
     let base_name = binary.split('/').next_back().unwrap_or(binary);
+
+    // Flatpak/Brwap
+    if base_name == "flatpak" || base_name == ".flatpak-wrapped" || base_name == "bwrap" {
+        for arg in args.iter().skip(1) {
+            if let Some(exec) = arg.strip_prefix("--command=") {
+                return Some(exec.to_string());
+            }
+            // Extract the flatpak ID
+            if !arg.starts_with('-') && *arg != "run" && arg.contains('.') {
+                return Some(arg.to_string());
+            }
+        }
+    }
+
+    if base_name == "steam" {
+        for arg in args.iter().skip(1) {
+            if arg.starts_with("steam://rungameid/") {
+                return Some(arg.to_string());
+            }
+        }
+    }
+
+    // Fix for discord or other apps:
+    if base_name.contains("--") {
+        let base_name = base_name.split_whitespace().next().map(|s| s.to_string());
+        return base_name;
+    }
+
     Some(base_name.to_string())
 }
 
