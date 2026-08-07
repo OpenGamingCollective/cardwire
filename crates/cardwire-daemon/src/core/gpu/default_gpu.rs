@@ -17,8 +17,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
     if class_path.exists() {
         match fs::read_dir(class_path) {
             Ok(entries) => {
-                for entry in entries {
-                    let entry = entry?;
+                for entry in entries.flatten() {
                     drm_entries.push(entry.file_name().to_string_lossy().into_owned());
                 }
             }
