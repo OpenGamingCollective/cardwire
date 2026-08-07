@@ -112,6 +112,9 @@ pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, AppMetadata>> {
                             }
 
                             let binary = part.split('/').next_back().unwrap_or(part);
+                            if ["flatpak", "steam", "sh", "bash", "bwrap"].contains(&binary) {
+                                break;
+                            }
                             if !binary.is_empty() {
                                 app_list.insert(binary.to_lowercase(), meta.clone());
                             }
