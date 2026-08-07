@@ -300,6 +300,8 @@ impl CardwireAnalyzer {
                 match policy {
                     GpuPolicy::Allowed => return Some((true, PidType::Allowed, 0)),
                     GpuPolicy::Blocked => return None,
+                    // TODO: hardcoded gpu id 1, the schema has no gpu_id column so this can't be
+                    // correct for systems where the dGPU isn't enumerated as id 1
                     GpuPolicy::Forced => return Some((true, PidType::Forced, 1)),
                 }
             }
@@ -312,10 +314,17 @@ impl CardwireAnalyzer {
                 drop(xdg_list);
                 let res = self.db_tx.send((lookup_name.clone(), meta)).await;
                 match res {
-                    Ok(_) => info!(
-                        "Discovered a new app: {}, adding to the database",
-                        lookup_name
-                    ),
+                    Ok(_) => {
+                        // Mirror in the cache
+                        self.db_cache
+                            .write()
+                            .await
+                            .insert(lookup_name.clone(), GpuPolicy::Allowed);
+                        info!(
+                            "Discovered a new app: {}, adding to the database",
+                            lookup_name
+                        );
+                    }
                     Err(err) => {
                         error!("Couln't send new app to DB rw: {}", err)
                     }
