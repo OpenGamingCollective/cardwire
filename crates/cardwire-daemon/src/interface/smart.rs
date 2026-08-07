@@ -2,7 +2,7 @@ use aya::maps::{HashMap as AyaHashMap, MapError as AyaMapError};
 use cardwire_ebpf_userspace::EbpfBlocker;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use zbus::{
     fdo::{self, Error::Failed}, interface
 };
@@ -14,6 +14,7 @@ pub struct SmartPolicyInterface {
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     pub database: CardwireDatabase,
+    policy_lock: Arc<Mutex<()>>,
 }
 
 impl SmartPolicyInterface {
@@ -25,6 +26,7 @@ impl SmartPolicyInterface {
             pid_map,
             forced_map,
             database: db,
+            policy_lock: Arc::new(Mutex::new(())),
         }
     }
 }
@@ -164,6 +166,7 @@ impl SmartPolicyInterface {
         let db_clone = self.database.clone();
         let app_id_clone = app_id.clone();
 
+        let _policy_guard = self.policy_lock.lock().await;
         tokio::task::spawn_blocking(move || db_clone.update_policy(&app_id_clone, policy))
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?
