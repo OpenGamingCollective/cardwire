@@ -106,27 +106,33 @@ pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, AppMetadata>> {
                         app_list.insert(flatpak_id.to_ascii_lowercase(), meta.clone());
                     }
                     if let Some(exec_str) = app_fdo.exec() {
-                        for part in exec_str.split_whitespace() {
-                            if part == "env" || part.contains('=') {
-                                continue;
-                            }
+                        let exec_parts: Vec<&str> = exec_str.split_whitespace().collect();
 
-                            // Get the steam ID
-                            if part.starts_with("steam://rungameid/") {
-                                let app_id = part
-                                    .trim_start_matches("steam://rungameid/")
-                                    .trim_matches('/');
-                                app_list.insert(format!("steam_app_{}", app_id), meta.clone());
+                        // Scan all parts for a steam URI before applying the wrapper-binary
+                        // stop condition, so `Exec=steam steam://rungameid/<id>` still maps
+                        // to the steam app metadata
+                        if let Some(uri_part) = exec_parts
+                            .iter()
+                            .find(|part| part.starts_with("steam://rungameid/"))
+                        {
+                            let app_id = uri_part
+                                .trim_start_matches("steam://rungameid/")
+                                .trim_matches('/');
+                            app_list.insert(format!("steam_app_{}", app_id), meta.clone());
+                        } else {
+                            for part in exec_parts {
+                                if part == "env" || part.contains('=') {
+                                    continue;
+                                }
+                                let binary = part.split('/').next_back().unwrap_or(part);
+                                if ["flatpak", "steam", "sh", "bash", "bwrap"].contains(&binary) {
+                                    break;
+                                }
+                                if !binary.is_empty() {
+                                    app_list.insert(binary.to_lowercase(), meta.clone());
+                                }
                                 break;
                             }
-                            let binary = part.split('/').next_back().unwrap_or(part);
-                            if ["flatpak", "steam", "sh", "bash", "bwrap"].contains(&binary) {
-                                break;
-                            }
-                            if !binary.is_empty() {
-                                app_list.insert(binary.to_lowercase(), meta.clone());
-                            }
-                            break;
                         }
                     }
                 }
