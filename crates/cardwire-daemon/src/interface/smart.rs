@@ -1,26 +1,32 @@
 use aya::maps::{HashMap as AyaHashMap, MapError as AyaMapError};
 use cardwire_ebpf_userspace::EbpfBlocker;
-use std::{path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use zbus::{
     fdo::{self, Error::Failed}, interface
 };
+
+use crate::file::{CardwireDatabase, DbusAppMetadata, GpuPolicy};
 
 #[derive(Clone, Debug)]
 pub struct SmartPolicyInterface {
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
+    pub database: CardwireDatabase,
+    policy_lock: Arc<Mutex<()>>,
 }
 
 impl SmartPolicyInterface {
-    pub fn build(blocker: &mut EbpfBlocker) -> Self {
+    pub fn build(blocker: &mut EbpfBlocker, db: CardwireDatabase) -> Self {
         let pid_map = Arc::clone(&blocker.pid_map);
         let forced_map = Arc::clone(&blocker.forced_map);
 
         Self {
             pid_map,
             forced_map,
+            database: db,
+            policy_lock: Arc::new(Mutex::new(())),
         }
     }
 }
@@ -132,5 +138,42 @@ impl SmartPolicyInterface {
         }
 
         Ok((status, gpu_id))
+    }
+
+    pub async fn get_app_policies(&self) -> fdo::Result<HashMap<String, DbusAppMetadata>> {
+        let db_clone = self.database.clone();
+
+        tokio::task::spawn_blocking(move || {
+            db_clone
+                .read_db()
+                .map_err(|err| fdo::Error::Failed(err.to_string()))
+        })
+        .await
+        .map_err(|err| fdo::Error::Failed(err.to_string()))?
+    }
+
+    pub async fn set_app_policies(&self, app_id: String, policy: i32) -> Result<(), fdo::Error> {
+        let gpu_policy = GpuPolicy::try_from_i32(policy)
+            .ok_or_else(|| fdo::Error::InvalidArgs(format!("invalid policy: {}", policy)))?;
+
+        if !self.database.cache.read().await.contains_key(&app_id) {
+            return Err(fdo::Error::UnknownObject(format!(
+                "app not found: {}",
+                app_id
+            )));
+        }
+
+        let db_clone = self.database.clone();
+        let app_id_clone = app_id.clone();
+
+        let _policy_guard = self.policy_lock.lock().await;
+        tokio::task::spawn_blocking(move || db_clone.update_policy(&app_id_clone, policy))
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+
+        self.database.cache.write().await.insert(app_id, gpu_policy);
+
+        Ok(())
     }
 }

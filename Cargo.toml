@@ -36,6 +36,7 @@ env_logger = "0.11"
 toml = "1.0.3"
 vulkano = "0.35.2"
 khronos-egl = { version=  "6.0.0", features = ["dynamic", "1_5"] }
+rusqlite = { version = "0.40.1", features = ["bundled"] }
 
 # EBPF
 aya = "0.14.0"

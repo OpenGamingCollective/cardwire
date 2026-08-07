@@ -2,7 +2,7 @@
 use crate::{
     analyzer::CardwireAnalyzer, core::{
         gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self}
-    }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
+    }, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
     }, tasks
 };
@@ -62,7 +62,9 @@ impl DaemonManager {
 
         let mut blocker = EbpfBlocker::new()?;
 
-        let smart_policy_interface = SmartPolicyInterface::build(&mut blocker);
+        let database = CardwireDatabase::build()?;
+
+        let smart_policy_interface = SmartPolicyInterface::build(&mut blocker, database);
 
         let blocker = Arc::new(RwLock::new(blocker));
 
@@ -301,8 +303,11 @@ impl DaemonManager {
         let blocker = Arc::clone(&self.inner.blocker);
         let logger = Arc::clone(&self.logger_interface.report_logs);
         let signal = self.logger_signal.clone();
+        let db_cache = self.smart_policy_interface.database.cache.clone();
+        let tx = self.smart_policy_interface.database.tx.clone();
+
         async move {
-            let cardwire_analyzer = CardwireAnalyzer::build(blocker, logger, signal)
+            let cardwire_analyzer = CardwireAnalyzer::build(blocker, logger, signal, db_cache, tx)
                 .await
                 .map_err(|err| {
                     error!("Failed to build CardwireAnalyzer: {}", err);
