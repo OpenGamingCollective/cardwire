@@ -91,12 +91,8 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
         stats.insert(*id, stat);
     }
 
-    // On equal display counts (e.g. one monitor connected per
-    // GPU on a desktop), prefer the GPU with the lowest PCI address instead of relying on the
-    // arbitrary iteration order of a HashMap.
-    let mut gpu_ids: Vec<usize> = stats.keys().copied().collect();
-    gpu_ids.sort_unstable();
-    let default_id = gpu_ids.into_iter().max_by(|&a, &b| {
+    // The PCI-address tie-break below is total, so the winner does not depend on iteration order
+    let default_id = stats.keys().copied().max_by(|&a, &b| {
         let sa = &stats[&a];
         let sb = &stats[&b];
         (
@@ -113,6 +109,7 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
                 sb.desktop_displays,
                 sb.total_displays,
             ))
+            // Operands are reversed on purpose: the lowest PCI address must win `max_by`
             .then_with(|| {
                 gpu_list[&b]
                     .pci
