@@ -128,8 +128,14 @@ impl DebugInterface {
             drop(power_tasks);
             drop(gpu_interfaces);
 
-            // Re-apply the persisted mode against the new GPU list.
-            let requested = self.mode_state.read().await.mode();
+            // Re-apply the persisted mode against the new GPU list
+            let requested = match CardwireModeState::build() {
+                Ok(state) => state.mode(),
+                Err(e) => {
+                    warn!("failed to read persisted mode on hotplug, using hybrid: {e}");
+                    Modes::Hybrid
+                }
+            };
             if let Err(e) = self
                 .mode_interface
                 .internal_set_mode(requested, Some(false))
