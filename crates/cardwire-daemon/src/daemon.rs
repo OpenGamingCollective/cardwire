@@ -120,6 +120,12 @@ async fn spawn_dbus_api(
         .interface::<_, crate::interface::LoggerInterface>(path)
         .await?;
     daemon.logger_signal = Some(logger_ref.signal_emitter().clone());
+
+    // Cardwire Smart Policy
+    object_server
+        .at(path, daemon.smart_policy_interface.clone())
+        .await?;
+
     drop(power_tasks);
     // drop gpu list to prevent deadlock
     drop(gpu_interfaces);

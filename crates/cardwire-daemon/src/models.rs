@@ -3,7 +3,7 @@ use crate::{
     analyzer::CardwireAnalyzer, core::{
         gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self}
     }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{
-        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SwitcherooInterface
+        ConfigInterface, ConfigMemory, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
     }, tasks
 };
 use anyhow::{Context, Result};
@@ -35,6 +35,7 @@ pub struct DaemonManager {
     pub switcheroo_interface: SwitcherooInterface,
     pub logger_interface: LoggerInterface,
     pub logger_signal: Option<SignalEmitter<'static>>,
+    pub smart_policy_interface: SmartPolicyInterface,
     pub inner: DaemonInner,
 }
 
@@ -59,7 +60,11 @@ impl DaemonManager {
         let pci_list: Arc<RwLock<BTreeMap<String, pci::PciDevice>>> =
             Arc::new(RwLock::new(pci_devices));
 
-        let blocker = Arc::new(RwLock::new(EbpfBlocker::new()?));
+        let mut blocker = EbpfBlocker::new()?;
+
+        let smart_policy_interface = SmartPolicyInterface::build(&mut blocker);
+
+        let blocker = Arc::new(RwLock::new(blocker));
 
         let power_tasks = Arc::new(RwLock::new(BTreeMap::new()));
 
@@ -112,6 +117,7 @@ impl DaemonManager {
             switcheroo_interface: SwitcherooInterface::build(Arc::clone(&gpu_interfaces)),
             logger_interface,
             logger_signal: None,
+            smart_policy_interface,
             inner: DaemonInner {
                 mode_state: Arc::clone(&mode_state),
                 gpu_state: Arc::clone(&gpu_state),

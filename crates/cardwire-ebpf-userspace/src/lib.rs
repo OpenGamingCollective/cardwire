@@ -1,7 +1,7 @@
 //! main lib code of cardwire-ebpf
 mod errors;
 
-use std::{fs, path::Path};
+use std::{fs, path::Path, sync::Arc};
 
 pub use crate::errors::{CardwireEbpfError, CardwireEbpfResult};
 use aya::{
@@ -9,7 +9,9 @@ use aya::{
 };
 use aya_log::EbpfLogger;
 use log::{Log, error, info, warn};
-use tokio::io::{Interest, unix::AsyncFd};
+use tokio::{
+    io::{Interest, unix::AsyncFd}, sync::RwLock
+};
 
 pub enum EbpfSettings {
     ExperimentalNvidia,
@@ -17,6 +19,8 @@ pub enum EbpfSettings {
 
 pub struct EbpfBlocker {
     ebpf: Ebpf,
+    pub pid_map: Arc<RwLock<HashMap<aya::maps::MapData, u32, u32>>>,
+    pub forced_map: Arc<RwLock<HashMap<aya::maps::MapData, u32, u32>>>,
 }
 
 impl EbpfBlocker {
@@ -131,7 +135,18 @@ impl EbpfBlocker {
                 }
             };
         }
-        Ok(Self { ebpf })
+
+        let pid_map = Self::get_pid_map(&mut ebpf)?;
+        let forced_map = Self::get_forced_pid_map(&mut ebpf)?;
+
+        let pid_map = Arc::new(RwLock::new(pid_map));
+        let forced_map = Arc::new(RwLock::new(forced_map));
+
+        Ok(Self {
+            ebpf,
+            pid_map,
+            forced_map,
+        })
     }
 
     /// whitelist cardwire's pid to prevent self-locking in ebpf
@@ -322,9 +337,11 @@ impl EbpfBlocker {
     }
 
     /// take the CW_ALLOWED_PID HashMap map from the blocker
-    pub fn get_pid_map(&mut self) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u32>> {
+    pub fn get_pid_map(
+        ebpf: &mut Ebpf,
+    ) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u32>> {
         let map_str = "CW_ALLOWED_PID";
-        let map = match self.ebpf.take_map(map_str) {
+        let map = match ebpf.take_map(map_str) {
             Some(map) => map,
             None => {
                 error!("error while trying to take map {}", map_str);
@@ -345,10 +362,10 @@ impl EbpfBlocker {
 
     /// take the CW_FORCED_PID HashMap map from the blocker
     pub fn get_forced_pid_map(
-        &mut self,
+        ebpf: &mut Ebpf,
     ) -> CardwireEbpfResult<HashMap<aya::maps::MapData, u32, u32>> {
         let map_str = "CW_FORCED_PID";
-        let map = match self.ebpf.take_map(map_str) {
+        let map = match ebpf.take_map(map_str) {
             Some(map) => map,
             None => {
                 error!("error while trying to take map {}", map_str);
