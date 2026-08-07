@@ -69,7 +69,6 @@ pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, bool>, Vec<PathBu
                 if let Some(ext) = path.extension()
                     && ext == "desktop"
                     && let Ok(app_fdo) = DesktopEntry::from_path(path, Some(&locales))
-                    && app_fdo.prefers_non_default_gpu()
                     && let Some(name) = app_fdo.name(&locales)
                 {
                     // Push both lowercase and normal name to the hashmap

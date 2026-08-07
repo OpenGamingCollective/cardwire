@@ -30,39 +30,14 @@ impl Desktop {
     }
 }
 
-pub fn desktop_supports_switcheroo(environ: &[u8]) -> bool {
-    let env_var = b"XDG_CURRENT_DESKTOP=";
-
-    for var in environ.split(|&b| b == 0) {
-        if var.starts_with(env_var) {
-            let value_bytes = &var[env_var.len()..];
-
-            let desktop = String::from_utf8_lossy(value_bytes).to_lowercase();
-
-            return desktop.contains("gnome")
-                || desktop.contains("kde")
-                || desktop.contains("plasma")
-                || desktop.contains("cinnamon")
-                || desktop.contains("xfce")
-                || desktop.contains("mate");
-        }
-    }
-
-    // Not found, or it's a WM like Sway/Hyprland
-    false
-}
-
 /// Read the proc `environ` file to find the `SteamAppId=` string
 /// used to identify both native and proton games
 pub fn check_steam_environ(environ: &[u8]) -> bool {
     environ.windows(11).any(|window| window == b"SteamAppId=")
 }
 
-/// Check if the comm is in the xdg list
-pub fn check_fdo_app_id(comm: &str, xdg_list: &HashMap<String, bool>) -> bool {
-    xdg_list.contains_key(comm)
-}
-
+/// Find the process name inside the flatpak cmdline, and match if it's inside our xdg_list
+#[allow(dead_code)]
 pub fn check_for_flatpak_run(cmdline: &str, xdg_list: &HashMap<String, bool>) -> bool {
     let mut args = cmdline.split('\0').filter(|s| !s.is_empty());
 
@@ -233,39 +208,6 @@ mod tests {
     fn test_check_steam_environ_detects_at_start_of_environ() {
         let environ = b"SteamAppId=999";
         assert!(check_steam_environ(environ));
-    }
-
-    /*
-        check_fdo_app_id
-    */
-
-    #[test]
-    fn test_check_fdo_app_id_found_in_list() {
-        let mut xdg_list = HashMap::new();
-        xdg_list.insert("steam".to_string(), true);
-        xdg_list.insert("lutris".to_string(), true);
-        assert!(check_fdo_app_id("steam", &xdg_list));
-    }
-
-    #[test]
-    fn test_check_fdo_app_id_not_found_in_list() {
-        let mut xdg_list = HashMap::new();
-        xdg_list.insert("steam".to_string(), true);
-        assert!(!check_fdo_app_id("firefox", &xdg_list));
-    }
-
-    #[test]
-    fn test_check_fdo_app_id_empty_map_returns_false() {
-        let xdg_list = HashMap::new();
-        assert!(!check_fdo_app_id("anything", &xdg_list));
-    }
-
-    #[test]
-    fn test_check_fdo_app_id_is_case_sensitive() {
-        let mut xdg_list = HashMap::new();
-        xdg_list.insert("Steam".to_string(), true);
-        assert!(!check_fdo_app_id("steam", &xdg_list));
-        assert!(check_fdo_app_id("Steam", &xdg_list));
     }
 
     /*
