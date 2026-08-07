@@ -25,12 +25,6 @@ pub struct ExecEvent {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct CloseEvent {
-    pub pid: u32,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
 pub struct ReportEvent {
     pub pid: u32,
     pub gpu_id: u32,
@@ -46,7 +40,6 @@ enum PidType {
 #[derive(Clone)]
 pub struct CardwireAnalyzer {
     exec_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
-    close_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     report_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
@@ -73,19 +66,16 @@ impl CardwireAnalyzer {
     ) -> anyhow::Result<CardwireAnalyzer> {
         let mut blocker = blocker.write().await;
         let exec_ring = blocker.get_exec_ring()?;
-        let close_ring = blocker.get_close_ring()?;
         let report_ring = blocker.get_report_ring()?;
         let pid_map = Arc::clone(&blocker.pid_map);
         let forced_map = Arc::clone(&blocker.forced_map);
         let ebpf_logger = blocker.get_ebpf_logger()?;
 
         let exec_ring = AsyncFd::new(exec_ring)?;
-        let close_ring = AsyncFd::new(close_ring)?;
         let report_ring = AsyncFd::new(report_ring)?;
 
         // Now Rwlock -> Arc
         let exec_ring = Arc::new(Mutex::new(exec_ring));
-        let close_ring = Arc::new(Mutex::new(close_ring));
         let report_ring = Arc::new(Mutex::new(report_ring));
         let ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>> =
             Arc::new(Mutex::new(ebpf_logger));
@@ -95,7 +85,6 @@ impl CardwireAnalyzer {
         let xdg_folders: Vec<PathBuf> = xdg_result.1;
         Ok(CardwireAnalyzer {
             exec_ring,
-            close_ring,
             report_ring,
             pid_map,
             forced_map,
@@ -111,12 +100,10 @@ impl CardwireAnalyzer {
     pub async fn run(self) -> anyhow::Result<()> {
         // Clone the Arcs and Sender to move into the background task
         let exec_arc = self.exec_ring.clone();
-        let close_arc = self.close_ring.clone();
         let logger_arc = self.ebpf_logger.clone();
 
         // Lock the buffers once
         let mut exec_ring = exec_arc.lock().await;
-        let mut close_ring = close_arc.lock().await;
 
         let shared_self = Arc::new(self);
 
@@ -141,40 +128,19 @@ impl CardwireAnalyzer {
         task::spawn(async move { shared_self_report.report_logger().await });
 
         loop {
-            tokio::select! {
-                Ok(mut guard) = exec_ring.ready_mut(Interest::READABLE) => {
-                    if guard.ready().is_readable() {
-                        while let Some(item) = guard.get_inner_mut().next() {
-                            if item.len() < std::mem::size_of::<ExecEvent>() {
-                                debug!("Skipping malformed exec event. Size: {}", item.len());
-                                continue;
-                            }
-                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
-                            let this = Arc::clone(&shared_self);
-                            task::spawn(async move {
-                                this.spawn_exec_analyzer(event).await
-                            });
-                        }
-                        guard.clear_ready();
+            if let Ok(mut guard) = exec_ring.ready_mut(Interest::READABLE).await
+                && guard.ready().is_readable()
+            {
+                while let Some(item) = guard.get_inner_mut().next() {
+                    if item.len() < std::mem::size_of::<ExecEvent>() {
+                        debug!("Skipping malformed exec event. Size: {}", item.len());
+                        continue;
                     }
+                    let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
+                    let this = Arc::clone(&shared_self);
+                    task::spawn(async move { this.spawn_exec_analyzer(event).await });
                 }
-
-                Ok(mut guard) = close_ring.ready_mut(Interest::READABLE) => {
-                    if guard.ready().is_readable() {
-                        while let Some(item) = guard.get_inner_mut().next() {
-                            if item.len() < std::mem::size_of::<CloseEvent>() {
-                                debug!("Skipping malformed close event. Size: {}", item.len());
-                                continue;
-                            }
-                            let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const CloseEvent) };
-                            let this = Arc::clone(&shared_self);
-                            task::spawn(async move {
-                                this.spawn_remove_analyzer(event).await
-                            });
-                        }
-                        guard.clear_ready();
-                    }
-                }
+                guard.clear_ready();
             }
         }
     }
@@ -213,26 +179,6 @@ impl CardwireAnalyzer {
                         warn!("Failed to insert into eBPF map: {}", e);
                     }
                 }
-            }
-        }
-    }
-    async fn spawn_remove_analyzer(&self, event: CloseEvent) -> () {
-        {
-            let mut pid_map = self.pid_map.write().await;
-            if pid_map.remove(&event.pid).is_ok() {
-                debug!("REMOVE: pid: {}", event.pid);
-            }
-        }
-        {
-            let mut forced_map = self.forced_map.write().await;
-            if forced_map.remove(&event.pid).is_ok() {
-                debug!("REMOVE FORCED: pid: {}", event.pid);
-            }
-        }
-        {
-            let mut reported_pid_map = self.reported_pids.write().await;
-            if reported_pid_map.remove(&event.pid) {
-                debug!("REMOVE REPORTED: pid: {}", event.pid);
             }
         }
     }
@@ -490,16 +436,6 @@ mod tests {
         let item: Vec<u8> = vec![0xFF, 0xFF, 0xFF, 0xFF];
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
         assert_eq!(event.pid, u32::MAX);
-    }
-
-    #[test]
-    fn test_close_event_deserialization() {
-        let item: Vec<u8> = vec![
-            0x2A, 0x00, 0x00, 0x00, // pid = 42
-        ];
-        assert!(item.len() >= std::mem::size_of::<CloseEvent>());
-        let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const CloseEvent) };
-        assert_eq!(event.pid, 42);
     }
 
     #[test]

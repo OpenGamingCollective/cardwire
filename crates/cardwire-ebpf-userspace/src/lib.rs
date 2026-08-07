@@ -292,28 +292,6 @@ impl EbpfBlocker {
         Ok(ring_buf)
     }
 
-    /// take the CW_CLOSE_EVENTS RingBuf map from the blocker
-    pub fn get_close_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
-        let map_str = "CW_CLOSE_EVENTS";
-        let map = match self.ebpf.take_map(map_str) {
-            Some(map) => map,
-            None => {
-                error!("error while trying to take map {}", map_str);
-                return Err(CardwireEbpfError::MissingMap {
-                    name: map_str.to_string(),
-                });
-            }
-        };
-        let ring_buf: RingBuf<aya::maps::MapData> = match RingBuf::try_from(map) {
-            Ok(ringbuf) => ringbuf,
-            Err(err) => {
-                error!("error while trying to get the close ring_buf");
-                return Err(CardwireEbpfError::aya(err));
-            }
-        };
-        Ok(ring_buf)
-    }
-
     /// take the CW_REPORT_EVENTS RingBuf map from the blocker
     pub fn get_report_ring(&mut self) -> CardwireEbpfResult<RingBuf<aya::maps::MapData>> {
         let map_str = "CW_REPORT_EVENTS";
