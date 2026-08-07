@@ -589,7 +589,7 @@ fn logger_sub() -> Subscription<Message> {
                 }
             }
             let _ = output
-                .send(Message::FetchedMode(Err(
+                .send(Message::FetchedLogs(Err(
                     "Cardwire daemon disconnected".to_string()
                 )))
                 .await;
