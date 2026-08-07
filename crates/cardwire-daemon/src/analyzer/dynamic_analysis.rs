@@ -1,8 +1,8 @@
 //! Functions for dynamic analysis, contains:
-//! - gamemoderun analysis
-//! - library analysis
+//! - environment analysis
+//! - wayland app id lookup
 use std::{
-    collections::HashMap, env, fs, path::{Path, PathBuf}, time::{Duration, Instant}
+    env, fs, path::{Path, PathBuf}, time::{Duration, Instant}
 };
 
 use tokio::{
@@ -42,37 +42,6 @@ pub fn get_steam_app_id(environ: &[u8]) -> Option<String> {
         }
     }
     None
-}
-
-/// Find the process name inside the flatpak cmdline, and match if it's inside our xdg_list
-#[allow(dead_code)]
-pub fn check_for_flatpak_run(cmdline: &str, xdg_list: &HashMap<String, bool>) -> bool {
-    let mut args = cmdline.split('\0').filter(|s| !s.is_empty());
-
-    if let Some(arg0) = args.next() {
-        // Ensure the actual executable is flatpak or bwrap, not a wrapper like 'niri msg'
-        if !arg0.ends_with("flatpak")
-            && !arg0.ends_with(".flatpak-wrapped")
-            && !arg0.ends_with("bwrap")
-        {
-            return false;
-        }
-    } else {
-        return false;
-    }
-
-    // Now check if any of the arguments match our allowed app
-    for arg in args {
-        if let Some(exec) = arg.strip_prefix("--command=") {
-            if xdg_list.contains_key(exec) {
-                return true;
-            }
-        } else if xdg_list.contains_key(arg) {
-            return true;
-        }
-    }
-
-    false
 }
 
 pub fn check_env(env_var: &str, environ: &[u8]) -> Option<u32> {
@@ -190,63 +159,6 @@ fn find_niri_socket() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
-    /*
-        check_for_flatpak_run
-    */
-    #[test]
-    fn test_check_for_flatpak_run_detects_flatpak_binary() {
-        let mut xdg_list = HashMap::new();
-        xdg_list.insert("com.valvesoftware.Steam".to_string(), true);
-        let cmdline = "/usr/bin/flatpak\0run\0com.valvesoftware.Steam";
-        assert!(check_for_flatpak_run(cmdline, &xdg_list));
-    }
-
-    #[test]
-    fn test_check_for_flatpak_run_detects_bwrap_binary() {
-        let mut xdg_list = HashMap::new();
-        xdg_list.insert("com.valvesoftware.Steam".to_string(), true);
-        let cmdline = "/usr/bin/bwrap\0--arg\0com.valvesoftware.Steam";
-        assert!(check_for_flatpak_run(cmdline, &xdg_list));
-    }
-
-    #[test]
-    fn test_check_for_flatpak_run_detects_command_flag() {
-        let mut xdg_list = HashMap::new();
-        xdg_list.insert("steam".to_string(), true);
-        let cmdline = "/usr/bin/flatpak\0run\0--command=steam\0com.example.App";
-        assert!(check_for_flatpak_run(cmdline, &xdg_list));
-    }
-
-    #[test]
-    fn test_check_for_flatpak_run_rejects_non_flatpak_binary() {
-        let mut xdg_list = HashMap::new();
-        xdg_list.insert("steam".to_string(), true);
-        let cmdline = "/usr/bin/niri\0msg\0steam";
-        assert!(!check_for_flatpak_run(cmdline, &xdg_list));
-    }
-
-    #[test]
-    fn test_check_for_flatpak_run_rejects_empty_cmdline() {
-        let xdg_list = HashMap::new();
-        assert!(!check_for_flatpak_run("", &xdg_list));
-    }
-
-    #[test]
-    fn test_check_for_flatpak_run_returns_false_for_unknown_app() {
-        let xdg_list = HashMap::new();
-        let cmdline = "/usr/bin/flatpak\0run\0com.unknown.App";
-        assert!(!check_for_flatpak_run(cmdline, &xdg_list));
-    }
-
-    #[test]
-    fn test_check_for_flatpak_run_detects_flatpak_wrapped() {
-        let mut xdg_list = HashMap::new();
-        xdg_list.insert("com.valvesoftware.Steam".to_string(), true);
-        let cmdline = "/app/bin/.flatpak-wrapped\0com.valvesoftware.Steam";
-        assert!(check_for_flatpak_run(cmdline, &xdg_list));
-    }
-
     /*
         check_env
     */

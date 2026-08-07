@@ -3,7 +3,7 @@ use aya_log::EbpfLogger;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{Log, debug, error, info, warn};
 use std::{
-    collections::{HashMap, HashSet, VecDeque}, fs, path::Path, ptr, sync::Arc, time::SystemTime
+    collections::{HashMap, HashSet, VecDeque}, fs, ptr, sync::Arc, time::SystemTime
 };
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore, mpsc}, task, time::Instant
@@ -12,7 +12,9 @@ use zbus::object_server::SignalEmitter;
 
 use crate::{
     analyzer::{
-        dynamic_analysis::{check_env, check_gpu_env, get_app_id_wayland_with_retry}, static_analysis::{self, AppMetadata}
+        dynamic_analysis::{
+            check_env, check_gpu_env, get_app_id_wayland_with_retry, get_steam_app_id
+        }, helpers::{comm_to_string, get_real_process_name, is_proc_still_alive}, static_analysis::{self, AppMetadata}
     }, file::GpuPolicy, interface::{LogEntry, LoggerInterfaceSignals}
 };
 #[repr(C)]
@@ -245,8 +247,8 @@ impl CardwireAnalyzer {
                                 String::new(),
                             )
                             .await;
-                            // we check if the proc is still here to not log noise caused by fish
                         } else if is_proc_still_alive(event.pid) {
+                            // we check if the proc is still here to not log noise caused by fish
                             report_blocked(
                                 report_vec,
                                 signal,
@@ -290,7 +292,7 @@ impl CardwireAnalyzer {
         // Check the database now, we can take our time since if we reached it, the app would've
         // been blocked
         let mut lookup_name = comm.to_lowercase();
-        if let Some(steam_app) = crate::analyzer::dynamic_analysis::get_steam_app_id(&environ) {
+        if let Some(steam_app) = get_steam_app_id(&environ) {
             lookup_name = steam_app;
         }
         {
@@ -313,49 +315,43 @@ impl CardwireAnalyzer {
             if let Some(meta) = xdg_list.get(&lookup_name) {
                 let meta = meta.clone();
                 drop(xdg_list);
-                let res = self.db_tx.send((lookup_name.clone(), meta)).await;
-                match res {
-                    Ok(_) => {
-                        // Mirror in the cache
-                        self.db_cache
-                            .write()
-                            .await
-                            .insert(lookup_name.clone(), GpuPolicy::Blocked);
-                        info!(
-                            "Discovered a new app: {}, adding to the database",
-                            lookup_name
-                        );
-                    }
-                    Err(err) => {
-                        error!("Couln't send new app to DB rw: {}", err)
-                    }
-                }
+                self.discover_app(&lookup_name, meta).await;
             }
         }
         // Fallback for steam games
-        if lookup_name.starts_with("steam_app_") {
-            let app_id = lookup_name.replace("steam_app_", "");
+        if let Some(app_id) = lookup_name.strip_prefix("steam_app_") {
             let meta = AppMetadata {
                 display_name: format!("Steam Game {}", app_id),
                 desktop_file_id: None,
                 icon_name: Some(format!("steam_icon_{}", app_id)),
             };
 
-            let _ = self.db_tx.send((lookup_name.clone(), meta)).await;
-            self.db_cache
-                .write()
-                .await
-                .insert(lookup_name.clone(), GpuPolicy::Blocked);
-
+            self.discover_app(&lookup_name, meta).await;
             info!("Discovered Steam Game {}, blocked by default.", app_id);
             return Some((false, PidType::Allowed, 0));
         }
         None
     }
 
-    #[allow(dead_code)]
-    pub fn xdg_list(&self) -> Arc<RwLock<HashMap<String, AppMetadata>>> {
-        Arc::clone(&self.xdg_list)
+    /// Persist a newly discovered app in the database and mirror it in the cache
+    async fn discover_app(&self, lookup_name: &str, meta: AppMetadata) {
+        let res = self.db_tx.send((lookup_name.to_string(), meta)).await;
+        match res {
+            Ok(_) => {
+                // Mirror in the cache
+                self.db_cache
+                    .write()
+                    .await
+                    .insert(lookup_name.to_string(), GpuPolicy::Blocked);
+                info!(
+                    "Discovered a new app: {}, adding to the database",
+                    lookup_name
+                );
+            }
+            Err(err) => {
+                error!("Couldn't send new app to DB rw: {}", err)
+            }
+        }
     }
 }
 
@@ -400,95 +396,12 @@ async fn report_blocked(
     }
 }
 
-fn get_real_process_name(pid: u32) -> Option<String> {
-    let cmdline_path = format!("/proc/{}/cmdline", pid);
-    let cmdline_bytes = match fs::read(&cmdline_path) {
-        Ok(b) => b,
-        Err(_) => return None, // process died
-    };
-    if cmdline_bytes.is_empty() {
-        return None;
-    }
-    let args: Vec<&str> = cmdline_bytes
-        .split(|&b| b == 0)
-        .filter_map(|b| std::str::from_utf8(b).ok())
-        .filter(|s| !s.is_empty())
-        .collect();
-    if args.is_empty() {
-        return None;
-    }
-    let binary = args[0];
-
-    // Check Wine/Proton
-    if binary.contains("wine") || binary.contains("proton") {
-        for arg in args.iter().skip(1) {
-            if arg.to_lowercase().ends_with(".exe") {
-                let file_name = arg.split(&['/', '\\'][..]).next_back().unwrap_or(arg);
-                return Some(file_name.to_string());
-            }
-        }
-    }
-
-    // Minecraft/Java games, return java instead of the real name to allow Close event bypass
-    if binary.ends_with(".java") {
-        for arg in args.iter().skip(1) {
-            if arg.ends_with(".jar") {
-                let file_name = arg.split('/').next_back().unwrap_or(arg);
-                return Some(file_name.to_string());
-            }
-        }
-    }
-
-    // Fallback, just use the binary name
-    let base_name = binary.split('/').next_back().unwrap_or(binary);
-
-    // Flatpak/Brwap
-    if base_name == "flatpak" || base_name == ".flatpak-wrapped" || base_name == "bwrap" {
-        for arg in args.iter().skip(1) {
-            if let Some(exec) = arg.strip_prefix("--command=") {
-                return Some(exec.to_string());
-            }
-            // Extract the flatpak ID
-            if !arg.starts_with('-') && *arg != "run" && arg.contains('.') {
-                return Some(arg.to_string());
-            }
-        }
-    }
-
-    if base_name == "steam" {
-        for arg in args.iter().skip(1) {
-            if arg.starts_with("steam://rungameid/") {
-                return Some(arg.to_string());
-            }
-        }
-    }
-
-    // Fix for discord or other apps:
-    if base_name.contains("--") {
-        let base_name = base_name.split_whitespace().next().map(|s| s.to_string());
-        return base_name;
-    }
-
-    Some(base_name.to_string())
-}
-
-fn is_proc_still_alive(pid: u32) -> bool {
-    Path::new(&format!("/proc/{}", pid)).exists()
-}
-
-/// Decode the 16-byte kernel comm into a String, trimming trailing NULs
-fn comm_to_string(comm: [u8; 16]) -> String {
-    match String::from_utf8(comm.to_vec()) {
-        Ok(str) => str.trim_end_matches('\0').to_string(),
-        Err(_) => "no_comm_err".to_string(),
-    }
-}
-
 // TESTS
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer::helpers::comm_to_string;
     use std::ptr;
 
     #[test]
@@ -513,106 +426,6 @@ mod tests {
         let item: Vec<u8> = vec![0xFF, 0xFF, 0xFF, 0xFF];
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
         assert_eq!(event.pid, u32::MAX);
-    }
-
-    #[test]
-    fn test_get_real_process_name_returns_exe_for_wine_proton_cmdline() {
-        let cmdline_bytes =
-            r"S:\common\NieR·Replicant·ver.1.22474487139\NieR·Replicant·ver.1.22474487139.exe"
-                .as_bytes();
-
-        assert!(!cmdline_bytes.is_empty());
-        let args: Vec<&str> = cmdline_bytes
-            .split(|&b| b == 0)
-            .filter_map(|b| std::str::from_utf8(b).ok())
-            .filter(|s| !s.is_empty())
-            .collect();
-        assert!(!args.is_empty());
-        {
-            let binary = args[0];
-
-            // Check Wine/Proton
-            if binary.contains("wine") || binary.contains("proton") {
-                for arg in args.iter().skip(1) {
-                    if arg.to_lowercase().ends_with(".exe") {
-                        let file_name = arg.split(&['/', '\\'][..]).next_back().unwrap_or(arg);
-                        assert_eq!(file_name, "NieR·Replicant·ver.1.22474487139.exe");
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_get_real_process_name_returns_jar_for_java_cmdline() {
-        let cmdline_bytes = "minecraft.jar".as_bytes();
-
-        assert!(!cmdline_bytes.is_empty());
-        let args: Vec<&str> = cmdline_bytes
-            .split(|&b| b == 0)
-            .filter_map(|b| std::str::from_utf8(b).ok())
-            .filter(|s| !s.is_empty())
-            .collect();
-        assert!(!args.is_empty());
-        {
-            let binary = args[0];
-
-            // Check Wine/Proton
-            if binary.ends_with(".java") {
-                for arg in args.iter().skip(1) {
-                    if arg.ends_with(".jar") {
-                        let file_name = arg.split('/').next_back().unwrap_or(arg);
-                        assert_eq!(file_name, "minecraft");
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_get_real_process_name_returns_basename_for_regular_binary() {
-        // Simulate a regular binary like "/usr/bin/steam"
-        let cmdline_bytes = b"/usr/bin/steam\0--no-browser\0";
-        let args: Vec<&str> = cmdline_bytes
-            .split(|&b| b == 0)
-            .filter_map(|b| std::str::from_utf8(b).ok())
-            .filter(|s| !s.is_empty())
-            .collect();
-        assert!(!args.is_empty());
-        let binary = args[0];
-        let base_name = binary.split('/').next_back().unwrap_or(binary);
-        assert_eq!(base_name, "steam");
-    }
-
-    #[test]
-    fn test_get_real_process_name_returns_none_for_empty_cmdline() {
-        let cmdline_bytes = b"";
-        assert!(cmdline_bytes.is_empty());
-    }
-
-    #[test]
-    fn test_get_real_process_name_extracts_wine_exe_from_multiarg_cmdline() {
-        // Simulates: wine64-preloader\0C:\game\app.exe\0--fullscreen
-        let cmdline_bytes = b"wine64-preloader\0C:\\game\\app.exe\0--fullscreen";
-        let args: Vec<&str> = cmdline_bytes
-            .split(|&b| b == 0)
-            .filter_map(|b| std::str::from_utf8(b).ok())
-            .filter(|s| !s.is_empty())
-            .collect();
-        let binary = args[0];
-        assert!(binary.contains("wine"));
-        // Find the .exe argument
-        let exe_arg = args
-            .iter()
-            .skip(1)
-            .find(|a| a.to_lowercase().ends_with(".exe"));
-        assert!(exe_arg.is_some());
-        let file_name = exe_arg
-            .unwrap()
-            .split(&['/', '\\'][..])
-            .next_back()
-            .unwrap();
-        assert_eq!(file_name, "app.exe");
     }
 
     // ── ReportEvent ──────────────────────────────────────────────────
@@ -661,33 +474,5 @@ mod tests {
         assert_eq!(event.pid, 1);
         assert_eq!(event.gpu_id, 2);
         assert_eq!(&event.comm, &[0u8; 16]);
-    }
-
-    // ── comm_to_string ───────────────────────────────────────────────
-
-    #[test]
-    fn test_comm_to_string_trims_trailing_nuls() {
-        let comm = *b"bash\0\0\0\0\0\0\0\0\0\0\0\0";
-        assert_eq!(comm_to_string(comm), "bash");
-    }
-
-    #[test]
-    fn test_comm_to_string_full_length() {
-        let comm = *b"a-very-long-comm";
-        assert_eq!(comm_to_string(comm), "a-very-long-comm");
-    }
-
-    #[test]
-    fn test_comm_to_string_invalid_utf8() {
-        let comm = [0xFFu8; 16];
-        assert_eq!(comm_to_string(comm), "no_comm_err");
-    }
-
-    // ── is_proc_still_alive ──────────────────────────────────────────
-
-    #[test]
-    fn test_is_proc_still_alive() {
-        assert!(is_proc_still_alive(std::process::id()));
-        assert!(!is_proc_still_alive(0));
     }
 }

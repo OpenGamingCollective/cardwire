@@ -85,9 +85,9 @@ impl CardwireDatabase {
         let (tx, mut rx) = mpsc::channel::<(String, AppMetadata)>(100);
 
         tokio::task::spawn_blocking(move || {
-            let mut _conn = conn;
+            let conn = conn;
             while let Some((binary_name, meta)) = rx.blocking_recv() {
-                let res = _conn.execute(
+                let res = conn.execute(
                     "INSERT INTO app_policies (binary_name, display_name, desktop_file_id, icon_name, policy)
                      VALUES (?1, ?2, ?3, ?4, 0)
                      ON CONFLICT(binary_name) DO NOTHING",
@@ -131,7 +131,7 @@ impl CardwireDatabase {
 
         Ok(apps)
     }
-    pub fn update_cache(&self, binary_name: &str, gpu_policy: i32) -> Result<()> {
+    pub fn update_policy(&self, binary_name: &str, gpu_policy: i32) -> Result<()> {
         let conn = open_db()?;
 
         let affected = conn.execute(

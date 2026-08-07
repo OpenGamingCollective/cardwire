@@ -1,43 +1,39 @@
 # Cardwire Analyzer
 
-The goal of the analyzer is to allow or block an app on the fly
+The goal of the analyzer is to allow or block an app on the fly.
 
-The analyzer will uses a database, and both dynamic and static analysis to determine if an app should be allowed or not.
+The analyzer combines a database, and both dynamic and static analysis to determine
+if an app should be allowed or not.
 
-Database is for known entities, the result of the static analysis should be stored in this database
+The database stores known entities (apps discovered via static analysis) and their
+policy. Dynamic results are never stored.
 
-dynamic result will never be stored
+## Modules
 
-if static return blocked but dynamic return allow, app should be allowed
+- `models.rs` — the `CardwireAnalyzer` runtime: eBPF ring buffer consumers, process
+  evaluation (`evaluate_app`) and app discovery (`discover_app`), blocked-event
+  reporting.
+- `dynamic_analysis.rs` — runtime checks: `CARDWIRE_*` environment parsing, GPU env
+  detection, Steam app id detection, wayland app id lookup.
+- `static_analysis.rs` — FDO desktop entry scanning, builds the `AppMetadata` map.
+- `helpers.rs` — generic proc/cmdline helpers shared by the runtime: real process
+  name parsing (wine/proton, java, flatpak, steam), kernel comm decoding, proc
+  checks
 
-## Dynamic
+## Evaluation order
 
-### Gamemode
-If the game uses gamemoderun
+When a process exec is reported by eBPF, `evaluate_app` runs:
 
-Example with Persona 4 Golden launched with gamemoderun:
+1. `CARDWIRE_ALLOW=1` — allow
+2. `CARDWIRE_FORCE_DGPU=value` — force dGPU
+3. `CARDWIRE_FORCE_GPU=value` — force the given GPU
+4. `DRI_PRIME=1` / `__NV_PRIME_RENDER_OFFLOAD=1` — allow
+5. Database lookup by app name (or `steam_app_<id>` when `SteamAppId` is set):
+   - `Blocked` — block
+   - `Allowed` — allow
+   - `Forced` — force
+6. XDG list lookup — app is new: persist it to the database (blocked by default),
+   then block
+7. Steam fallback — unknown `steam_app_<id>`: persist and block
 
-```bash
-❯ grep -i gamemode /proc/24710/maps
-76631d641000-76631d642000 r--p 00000000 00:25 98239241                   /nix/store/mi8lmzjfkmcmiwhsir8z8v4fyihi1mwf-gamemode-1.8.2-lib/lib/libgamemodeauto.so.0.0.0
-76631d642000-76631d644000 r-xp 00001000 00:25 98239241                   /nix/store/mi8lmzjfkmcmiwhsir8z8v4fyihi1mwf-gamemode-1.8.2-lib/lib/libgamemodeauto.so.0.0.0
-76631d644000-76631d645000 r--p 00003000 00:25 98239241                   /nix/store/mi8lmzjfkmcmiwhsir8z8v4fyihi1mwf-gamemode-1.8.2-lib/lib/libgamemodeauto.so.0.0.0
-76631d645000-76631d646000 r--p 00003000 00:25 98239241                   /nix/store/mi8lmzjfkmcmiwhsir8z8v4fyihi1mwf-gamemode-1.8.2-lib/lib/libgamemodeauto.so.0.0.0
-76631d646000-76631d647000 rw-p 00004000 00:25 98239241                   /nix/store/mi8lmzjfkmcmiwhsir8z8v4fyihi1mwf-gamemode-1.8.2-lib/lib/libgamemodeauto.so.0.0.0
-```
-Allow
-
-### Electron
-If the daemon detects an app is using electron
-
-check via /proc/PID/cmdline ?
-
-Block
-
-## Static
-
-### XDG
-XDG-dir if category = game or run on dgpu = true
-
-Allow
-
+If static says blocked but dynamic says allow, the app is allowed.

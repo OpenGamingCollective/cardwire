@@ -164,7 +164,7 @@ impl SmartPolicyInterface {
         let db_clone = self.database.clone();
         let app_id_clone = app_id.clone();
 
-        tokio::task::spawn_blocking(move || db_clone.update_cache(&app_id_clone, policy))
+        tokio::task::spawn_blocking(move || db_clone.update_policy(&app_id_clone, policy))
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;

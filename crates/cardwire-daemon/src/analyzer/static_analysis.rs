@@ -99,7 +99,7 @@ pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, AppMetadata>> {
 
                     // Push both lowercase and normal name as fallbacks
                     app_list.insert(name.to_ascii_lowercase(), meta.clone());
-                    app_list.insert(name.to_string(), meta.clone());
+                    app_list.insert(meta.display_name.clone(), meta.clone());
 
                     // Also insert the flatpak ID, lowercased since lookups are lowercased
                     if let Some(flatpak_id) = app_fdo.flatpak() {
