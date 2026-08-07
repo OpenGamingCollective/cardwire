@@ -4,6 +4,7 @@ use crate::{analyzer::AppMetadata, file::state::STATE_PATH};
 use log::error;
 use rusqlite::{Connection, Result};
 use tokio::sync::{RwLock, mpsc};
+use zbus::zvariant;
 
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -21,6 +22,30 @@ impl GpuPolicy {
             _ => GpuPolicy::Blocked,
         }
     }
+
+    pub fn try_from_i32(val: i32) -> Option<Self> {
+        match val {
+            0 => Some(GpuPolicy::Blocked),
+            1 => Some(GpuPolicy::Allowed),
+            2 => Some(GpuPolicy::Forced),
+            _ => None,
+        }
+    }
+}
+
+fn open_db() -> Result<Connection> {
+    let db_path = format!("{}/cardwire.db", STATE_PATH);
+    let conn = Connection::open(db_path)?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    Ok(conn)
+}
+
+#[derive(Debug, Clone, zvariant::Type, serde::Serialize)]
+pub struct DbusAppMetadata {
+    pub display_name: String,
+    pub desktop_file_id: Option<String>,
+    pub icon_name: Option<String>,
+    pub gpu_policy: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -30,9 +55,7 @@ pub struct CardwireDatabase {
 }
 impl CardwireDatabase {
     pub fn build() -> Result<Self> {
-        let db_path = format!("{}/cardwire.db", STATE_PATH);
-
-        let conn = Connection::open(db_path)?;
+        let conn = open_db()?;
         conn.execute(
             "CREATE TABLE IF NOT EXISTS app_policies (
                 binary_name TEXT PRIMARY KEY,
@@ -83,6 +106,43 @@ impl CardwireDatabase {
 
         Ok(Self { cache, tx })
     }
+
+    pub fn read_db(&self) -> Result<HashMap<String, DbusAppMetadata>> {
+        let conn = open_db()?;
+
+        let mut apps: HashMap<String, DbusAppMetadata> = HashMap::new();
+
+        {
+            let mut stmt = conn.prepare("SELECT binary_name, display_name, desktop_file_id, icon_name, policy FROM app_policies")?;
+            let rows = stmt.query_map([], |row| {
+                let name: String = row.get(0)?;
+                let meta = DbusAppMetadata {
+                    display_name: row.get(1)?,
+                    desktop_file_id: row.get(2)?,
+                    icon_name: row.get(3)?,
+                    gpu_policy: row.get(4)?,
+                };
+                Ok((name, meta))
+            })?;
+            for row in rows.flatten() {
+                apps.insert(row.0, row.1);
+            }
+        }
+
+        Ok(apps)
+    }
+    pub fn update_cache(&self, binary_name: &str, gpu_policy: i32) -> Result<()> {
+        let conn = open_db()?;
+
+        let affected = conn.execute(
+            "UPDATE app_policies SET policy = ?1 WHERE binary_name = ?2",
+            rusqlite::params![gpu_policy, binary_name],
+        )?;
+        if affected == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -90,8 +150,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_gpu_policy_from_i32_defaults_to_allowed() {
-        assert_eq!(GpuPolicy::from_i32(-1), GpuPolicy::Allowed);
-        assert_eq!(GpuPolicy::from_i32(42), GpuPolicy::Allowed);
+    fn test_gpu_policy_from_i32_defaults_to_blocked() {
+        assert_eq!(GpuPolicy::from_i32(-1), GpuPolicy::Blocked);
+        assert_eq!(GpuPolicy::from_i32(42), GpuPolicy::Blocked);
+        assert_eq!(GpuPolicy::try_from_i32(-1), None);
+        assert_eq!(GpuPolicy::try_from_i32(42), None);
+        assert_eq!(GpuPolicy::try_from_i32(1), Some(GpuPolicy::Allowed));
     }
 }
