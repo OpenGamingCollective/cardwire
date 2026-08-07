@@ -18,7 +18,7 @@ pub struct DebugInterface {
     pub mode_state: Arc<RwLock<CardwireModeState>>,
     pub mode_interface: ModeInterface,
     pub gpu_state: Arc<RwLock<CardwireGpuState>>,
-    pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
+    pub gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
     pub config: Arc<ConfigMemory>,
     pub blocker: Arc<RwLock<EbpfBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
@@ -32,7 +32,7 @@ impl DebugInterface {
         mode_state: Arc<RwLock<CardwireModeState>>,
         mode_interface: ModeInterface,
         gpu_state: Arc<RwLock<CardwireGpuState>>,
-        gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
+        gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
         config: Arc<ConfigMemory>,
         blocker: Arc<RwLock<EbpfBlocker>>,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
@@ -128,19 +128,19 @@ impl DebugInterface {
                 )
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
-                gpu_interfaces.insert(id, gpu);
+                gpu_interfaces.insert(id, Arc::new(gpu));
             }
 
             // now re-populate the gpu api
             for (id, gpu_interface) in gpu_interfaces.iter() {
                 let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
                 object_server
-                    .at(path.clone(), gpu_interface.clone())
+                    .at(path.clone(), gpu_interface.as_ref().clone())
                     .await?;
                 // spawn power state tasks only for available GPUs
                 if gpu_interface.device.is_available() {
                     let handle = task::spawn(watch_power_state(
-                        gpu_interface.clone(),
+                        Arc::clone(gpu_interface),
                         object_server
                             .interface(path)
                             .await

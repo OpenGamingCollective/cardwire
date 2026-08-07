@@ -28,7 +28,7 @@ impl<T, E: std::fmt::Display> FdoResultExt<T> for Result<T, E> {
 #[derive(Clone)]
 pub struct GpuInterface {
     pub id: u32,
-    pub device: GpuDevice,
+    pub device: Arc<GpuDevice>,
     blocker: Arc<RwLock<EbpfBlocker>>,
     pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
@@ -46,7 +46,7 @@ impl GpuInterface {
     ) -> anyhow::Result<GpuInterface> {
         Ok(Self {
             id,
-            device,
+            device: Arc::new(device),
             blocker,
             pci_list,
             gpu_state,
@@ -57,7 +57,7 @@ impl GpuInterface {
 
 impl GpuInterface {
     /// block the gpu, value = gpu key
-    pub async fn block_gpu(&mut self, value: u32) -> fdo::Result<()> {
+    pub async fn block_gpu(&self, value: u32) -> fdo::Result<()> {
         let (render, card, pci_address, pci_parent, nvidia_minor, pci_list) = {
             let pci_list_guard = self.pci_list.read().await;
 
@@ -95,7 +95,7 @@ impl GpuInterface {
     }
 
     /// unblock the gpu
-    pub async fn unblock_gpu(&mut self) -> fdo::Result<()> {
+    pub async fn unblock_gpu(&self) -> fdo::Result<()> {
         let (render, card, pci_address, pci_parent, nvidia_minor, pci_list) = {
             let pci_list_guard = self.pci_list.read().await;
 

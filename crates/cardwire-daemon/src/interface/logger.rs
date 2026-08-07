@@ -1,4 +1,6 @@
-use std::{collections::VecDeque, sync::Arc, time::SystemTime};
+use std::{
+    collections::VecDeque, sync::{Arc, OnceLock}, time::SystemTime
+};
 
 use tokio::sync::RwLock;
 
@@ -16,12 +18,15 @@ pub struct LogEntry {
 #[derive(Clone)]
 pub struct LoggerInterface {
     pub report_logs: Arc<RwLock<VecDeque<LogEntry>>>,
+    // Signal emitter for the blocked-process log, populated once the interface is served
+    pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
 }
 
 impl LoggerInterface {
     pub fn build() -> Self {
         Self {
             report_logs: Arc::new(RwLock::new(VecDeque::with_capacity(4096))),
+            signal_emitter: Arc::new(OnceLock::new()),
         }
     }
 }

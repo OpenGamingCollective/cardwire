@@ -11,16 +11,14 @@ use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
 use log::error;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, task};
-use zbus::{
-    fdo::{self}, interface, object_server::{InterfaceRef, SignalEmitter}
-};
+use zbus::{fdo, interface};
 
 /// Contain the variable used by the daemon in daemon.rs
 #[derive(Clone)]
 pub struct DaemonInner {
     pub mode_state: Arc<RwLock<CardwireModeState>>,
     pub gpu_state: Arc<RwLock<CardwireGpuState>>,
-    pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
+    pub gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
     pub config: Arc<ConfigMemory>,
     pub blocker: Arc<RwLock<EbpfBlocker>>,
     pub power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<anyhow::Result<()>>>>>,
@@ -29,12 +27,11 @@ pub struct DaemonInner {
 #[derive(Clone)]
 pub struct DaemonManager {
     pub mode_interface: ModeInterface,
-    pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
+    pub gpu_interfaces: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
     pub config_interface: ConfigInterface,
     pub debug_interface: DebugInterface,
     pub switcheroo_interface: SwitcherooInterface,
     pub logger_interface: LoggerInterface,
-    pub logger_signal: Option<SignalEmitter<'static>>,
     pub smart_policy_interface: SmartPolicyInterface,
     pub inner: DaemonInner,
 }
@@ -70,7 +67,7 @@ impl DaemonManager {
 
         let power_tasks = Arc::new(RwLock::new(BTreeMap::new()));
 
-        let mut gpu_interfaces_map: BTreeMap<usize, GpuInterface> = BTreeMap::new();
+        let mut gpu_interfaces_map: BTreeMap<usize, Arc<GpuInterface>> = BTreeMap::new();
 
         for (id, device) in gpu_list {
             let gpu = GpuInterface::build(
@@ -81,10 +78,10 @@ impl DaemonManager {
                 Arc::clone(&gpu_state),
                 Arc::clone(&mode_state),
             )?;
-            gpu_interfaces_map.insert(id, gpu);
+            gpu_interfaces_map.insert(id, Arc::new(gpu));
         }
 
-        let gpu_interfaces: Arc<RwLock<BTreeMap<usize, GpuInterface>>> =
+        let gpu_interfaces: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>> =
             Arc::new(RwLock::new(gpu_interfaces_map));
 
         let mode_interface = ModeInterface::build(
@@ -121,7 +118,6 @@ impl DaemonManager {
             )?,
             switcheroo_interface,
             logger_interface,
-            logger_signal: None,
             smart_policy_interface,
             inner: DaemonInner {
                 mode_state: Arc::clone(&mode_state),
@@ -287,12 +283,10 @@ impl DaemonManager {
     }
     pub fn monitor_display_future(
         &self,
-        mode_interface: InterfaceRef<ModeInterface>,
     ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
-        // Clone the shared D-Bus interface into the long-running monitor task.
         let mode = self.mode_interface.clone();
         async move {
-            let res = tasks::monitor_display_changes(mode, mode_interface).await;
+            let res = tasks::monitor_display_changes(mode).await;
             if let Err(ref e) = res {
                 error!("monitor_display task failed: {}", e);
             }
@@ -302,7 +296,7 @@ impl DaemonManager {
     pub fn run_analyzer(&self) -> impl Future<Output = Result<(), anyhow::Error>> + 'static {
         let blocker = Arc::clone(&self.inner.blocker);
         let logger = Arc::clone(&self.logger_interface.report_logs);
-        let signal = self.logger_signal.clone();
+        let signal = Arc::clone(&self.logger_interface.signal_emitter);
         let db_cache = self.smart_policy_interface.database.cache.clone();
         let tx = self.smart_policy_interface.database.tx.clone();
 

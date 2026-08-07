@@ -11,7 +11,7 @@ use crate::{models::DaemonManager, tasks::watch_power_state};
 use anyhow::Result;
 use env_logger::Env;
 use log::info;
-use std::future::pending;
+use std::{future::pending, sync::Arc};
 use tokio::task;
 use zbus::connection;
 #[tokio::main]
@@ -92,14 +92,20 @@ async fn main() -> Result<()> {
     let object_server: &zbus::ObjectServer = conn.object_server();
     spawn_dbus_api(object_server, &mut daemon).await?;
     // Spawn background tasks
-    // Automatic transitions happen outside a D-Bus call, so the monitor needs this reference to
-    // emit Mode property changes to clients.
-    let mode_interface = object_server
+    // Give the Mode interface its signal emitter so automatic transitions (which bypass the
+    // D-Bus property setter) can notify clients.
+    if let Ok(mode_ref) = object_server
         .interface::<_, crate::interface::ModeInterface>("/org/opengamingcollective/cardwire")
-        .await?;
+        .await
+    {
+        daemon
+            .mode_interface
+            .signal_emitter
+            .get_or_init(|| mode_ref.signal_emitter().to_owned());
+    }
     task::spawn(daemon.battery_switch_future());
     task::spawn(daemon.monitor_udev_future());
-    task::spawn(daemon.monitor_display_future(mode_interface));
+    task::spawn(daemon.monitor_display_future());
     task::spawn(daemon.run_analyzer());
     info!("Daemon started succesfully");
     pending::<()>().await;
@@ -126,12 +132,12 @@ async fn spawn_dbus_api(
     for (id, gpu_interface) in gpu_interfaces.iter() {
         let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
         object_server
-            .at(path.clone(), gpu_interface.clone())
+            .at(path.clone(), gpu_interface.as_ref().clone())
             .await?;
         // spawn power state watcher only for available GPUs
         if gpu_interface.device.is_available() {
             let handle = task::spawn(watch_power_state(
-                gpu_interface.clone(),
+                Arc::clone(gpu_interface),
                 object_server.interface(path).await?,
             ));
             power_tasks.insert(*id, handle);
@@ -141,10 +147,15 @@ async fn spawn_dbus_api(
     object_server
         .at(path, daemon.logger_interface.clone())
         .await?;
-    let logger_ref = object_server
+    if let Ok(logger_ref) = object_server
         .interface::<_, crate::interface::LoggerInterface>(path)
-        .await?;
-    daemon.logger_signal = Some(logger_ref.signal_emitter().clone());
+        .await
+    {
+        daemon
+            .logger_interface
+            .signal_emitter
+            .get_or_init(|| logger_ref.signal_emitter().to_owned());
+    }
 
     // Cardwire Smart Policy
     object_server

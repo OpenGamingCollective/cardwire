@@ -6,11 +6,13 @@ use anyhow::Result;
 use aya::maps::Array as AyaArray;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{error, info, warn};
-use std::{collections::BTreeMap, process::Stdio, sync::Arc};
+use std::{
+    collections::BTreeMap, process::Stdio, sync::{Arc, OnceLock}
+};
 use tokio::{
     process::Command, sync::{Mutex, RwLock}, task
 };
-use zbus::{fdo, interface, object_server::InterfaceRef};
+use zbus::{fdo, interface, object_server::SignalEmitter};
 
 pub use crate::types::Modes;
 
@@ -19,20 +21,22 @@ pub use crate::types::Modes;
 pub struct ModeInterface {
     mode_state: Arc<RwLock<CardwireModeState>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
-    gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
+    gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
     config: Arc<ConfigMemory>,
     mode_map: Arc<Mutex<AyaArray<aya::maps::MapData, u8>>>,
     // Effective mode currently applied to the GPUs
     effective_mode: Arc<RwLock<Modes>>,
     // Mutex to serialize mode transitions
     transition: Arc<Mutex<()>>,
+    // Signal emitter for automatic mode changes, populated once the interface is served
+    pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
 }
 
 impl ModeInterface {
     pub async fn build(
         mode_state: Arc<RwLock<CardwireModeState>>,
         gpu_state: Arc<RwLock<CardwireGpuState>>,
-        gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
+        gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
         config: Arc<ConfigMemory>,
         blocker: Arc<RwLock<EbpfBlocker>>,
     ) -> Result<ModeInterface> {
@@ -48,6 +52,7 @@ impl ModeInterface {
             mode_map,
             effective_mode: Arc::new(RwLock::new(initial_mode)),
             transition: Arc::new(Mutex::new(())),
+            signal_emitter: Arc::new(OnceLock::new()),
         })
     }
 
@@ -123,13 +128,9 @@ impl ModeInterface {
         }
     }
 
-    pub async fn emit_mode_change(
-        &self,
-        interface: &InterfaceRef<ModeInterface>,
-        changed: bool,
-    ) -> zbus::Result<()> {
-        if changed {
-            self.mode_changed(interface.signal_emitter()).await?;
+    pub async fn emit_mode_change(&self, changed: bool) -> zbus::Result<()> {
+        if changed && let Some(emitter) = self.signal_emitter.get() {
+            self.mode_changed(emitter).await?;
         }
         Ok(())
     }
@@ -226,7 +227,7 @@ impl ModeInterface {
     ///
     /// Keeping persistence out of this helper lets display overrides restore the requested mode.
     pub(crate) async fn apply_mode(&self, mode: Modes) -> fdo::Result<()> {
-        let mut gpu_list = self.gpu_list.write().await;
+        let gpu_list = self.gpu_list.read().await;
         match mode {
             // Integrated and Smart modes only work on hybrid setups with a offload discrete GPU
             // (laptops)
@@ -301,10 +302,7 @@ impl ModeInterface {
                     return Err(fdo::Error::NotSupported(error_message));
                 }
 
-                for (id, gpu) in gpu_list
-                    .iter_mut()
-                    .filter(|(_, gpu)| gpu.device.is_available())
-                {
+                for (id, gpu) in gpu_list.iter().filter(|(_, gpu)| gpu.device.is_available()) {
                     if gpu.device.is_discrete() && !gpu.device.is_default() {
                         // Here we block the offload dGPU
                         gpu.block_gpu(*id as u32).await?;
@@ -323,10 +321,7 @@ impl ModeInterface {
 
             // Hybrid mode unblocks all GPUs so all are available to the system
             Modes::Hybrid => {
-                for gpu in gpu_list
-                    .values_mut()
-                    .filter(|gpu| gpu.device.is_available())
-                {
+                for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
                     gpu.unblock_gpu().await?;
                 }
             }
@@ -339,10 +334,7 @@ impl ModeInterface {
                     .auto_apply_gpu_state
                     .load(std::sync::atomic::Ordering::Relaxed);
                 let gpu_state = self.gpu_state.read().await;
-                for (id, gpu) in gpu_list
-                    .iter_mut()
-                    .filter(|(_, gpu)| gpu.device.is_available())
-                {
+                for (id, gpu) in gpu_list.iter().filter(|(_, gpu)| gpu.device.is_available()) {
                     if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && config {
                         if gpu.device.is_default() {
                             // For safety, warn and unblock if default

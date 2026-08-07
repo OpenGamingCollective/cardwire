@@ -9,7 +9,7 @@ use log::{error, info, warn};
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::RwLock
 };
-use zbus::{fdo, object_server::InterfaceRef};
+use zbus::fdo;
 
 use crate::interface::{ConfigMemory, GpuInterface, ModeInterface, Modes};
 
@@ -32,7 +32,7 @@ pub fn external_display_target(requested: Modes, connected: bool) -> Modes {
 
 /// Determine target effective mode and DRM card taking into account external display state.
 pub(crate) async fn detect_external_display_target(
-    gpu_list: &Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
+    gpu_list: &Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
     config: &Arc<ConfigMemory>,
     requested: Modes,
 ) -> fdo::Result<(Modes, Option<u32>)> {
@@ -115,10 +115,7 @@ async fn reconcile_display_mode(
 }
 
 /// Monitor DRM uevents and periodic retries, applying and signaling automatic mode changes.
-async fn run_display_monitor(
-    mode: &ModeInterface,
-    interface: &InterfaceRef<ModeInterface>,
-) -> zbus::Result<()> {
+async fn run_display_monitor(mode: &ModeInterface) -> zbus::Result<()> {
     let drm_monitor = udev::MonitorBuilder::new()?.match_subsystem("drm")?;
     let drm_fd = AsyncFd::new(drm_monitor.listen()?)?;
     let mut retry = tokio::time::interval(RETRY_INTERVAL);
@@ -153,7 +150,7 @@ async fn run_display_monitor(
             Ok((changed, card)) => {
                 connected = card.is_some();
                 // Automatic transitions bypass the D-Bus property setter, so emit its signal here.
-                if let Err(err) = mode.emit_mode_change(interface, changed).await {
+                if let Err(err) = mode.emit_mode_change(changed).await {
                     error!("failed to emit automatic mode change: {err}");
                 }
             }
@@ -163,12 +160,9 @@ async fn run_display_monitor(
 }
 
 /// Keep the display monitor alive by recreating it after recoverable failures.
-pub async fn monitor_display_changes(
-    mode: ModeInterface,
-    mode_interface: InterfaceRef<ModeInterface>,
-) -> zbus::Result<()> {
+pub async fn monitor_display_changes(mode: ModeInterface) -> zbus::Result<()> {
     loop {
-        if let Err(err) = run_display_monitor(&mode, &mode_interface).await {
+        if let Err(err) = run_display_monitor(&mode).await {
             warn!(
                 "display monitor exited with error: {err}; retrying in {} seconds",
                 RETRY_INTERVAL.as_secs()
