@@ -54,24 +54,8 @@ impl DebugInterface {
         let pci_list = &self.pci_list.read().await;
         let mut dbus_list: BTreeMap<String, DbusPciDevice> = BTreeMap::new();
         for (id, pci) in pci_list.iter() {
-            let temp_pci = DbusPciDevice {
-                iommu_group: if let Some(iommu) = pci.iommu_group() {
-                    iommu.to_string()
-                } else {
-                    "".to_string()
-                },
-                vendor_id: pci.vendor_id().clone().unwrap_or("".to_string()),
-                device_id: pci.device_id().clone().unwrap_or("".to_string()),
-                vendor_name: pci.vendor_name().clone().unwrap_or("".to_string()),
-                device_name: pci.device_name().clone().unwrap_or("".to_string()),
-                driver: pci.driver().clone().unwrap_or("".to_string()),
-                class: pci.class().clone().unwrap_or("".to_string()),
-                parent_pci: pci.parent_pci().clone().unwrap_or("".to_string()),
-                child_pci: pci.child_pci().clone().unwrap_or("".to_string()),
-            };
-            dbus_list.insert(id.clone(), temp_pci);
+            dbus_list.insert(id.clone(), DbusPciDevice::from(pci));
         }
-
         Ok(dbus_list)
     }
     pub async fn refresh_gpu(&self) -> fdo::Result<()> {

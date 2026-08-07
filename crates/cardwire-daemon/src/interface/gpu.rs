@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     core::{
-        gpu::{DbusGpuDevice, GpuDevice, GpuVendor, external_display_connected}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
+        gpu::{DbusGpuDevice, GpuDevice, external_display_connected}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
@@ -266,25 +266,7 @@ impl GpuInterface {
         Ok(proc_map)
     }
     pub async fn get_device(&self) -> fdo::Result<DbusGpuDevice> {
-        let gpu = &self.device;
-        Ok(DbusGpuDevice {
-            pci: gpu.pci.pci_address().to_string(),
-            render: *gpu.render(),
-            name: gpu.name().to_string(),
-            card: *gpu.card(),
-            default: gpu.is_default(),
-            discrete: gpu.is_discrete(),
-            virtual_gpu: gpu.is_virtual(),
-            available: gpu.is_available(),
-            vendor: gpu.gpu_vendor().to_string(),
-            driver: gpu.pci.driver().clone().unwrap_or("none".to_string()),
-            nvidia: gpu.gpu_vendor() == GpuVendor::Nvidia,
-            nvidia_minor: if let Some(minor) = gpu.nvidia_minor() {
-                minor.to_string()
-            } else {
-                "none".to_string()
-            },
-        })
+        Ok(DbusGpuDevice::from(&*self.device))
     }
 
     pub async fn power_state(&self) -> fdo::Result<String> {
