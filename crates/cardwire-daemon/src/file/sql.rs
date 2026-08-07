@@ -5,7 +5,8 @@ use log::error;
 use rusqlite::{Connection, Result};
 use tokio::sync::{RwLock, mpsc};
 
-#[derive(Debug, Clone, PartialEq)]
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GpuPolicy {
     Allowed = 0,
     Blocked = 1,
@@ -15,8 +16,8 @@ impl GpuPolicy {
     pub fn from_i32(val: i32) -> Self {
         match val {
             0 => GpuPolicy::Allowed,
-            1 => GpuPolicy::Forced,
-            2 => GpuPolicy::Blocked,
+            1 => GpuPolicy::Blocked,
+            2 => GpuPolicy::Forced,
             _ => GpuPolicy::Allowed,
         }
     }
@@ -81,5 +82,16 @@ impl CardwireDatabase {
         });
 
         Ok(Self { cache, tx })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gpu_policy_from_i32_defaults_to_allowed() {
+        assert_eq!(GpuPolicy::from_i32(-1), GpuPolicy::Allowed);
+        assert_eq!(GpuPolicy::from_i32(42), GpuPolicy::Allowed);
     }
 }
