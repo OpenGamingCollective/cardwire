@@ -7,7 +7,7 @@ use aya_ebpf::{
 use aya_log_ebpf::{error, warn};
 
 use crate::{
-    helpers::{is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_smart}, maps::{CW_CLOSE_EVENTS, CW_DIRENT, CW_EXEC_EVENTS, CloseEvent, ExecEvent}, vmlinux::{dentry, file, inode, linux_dirent64, path}
+    helpers::{is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_smart}, maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent}, vmlinux::{dentry, file, inode, linux_dirent64, path}
 };
 
 #[allow(
@@ -424,6 +424,10 @@ pub fn tracepoint_sched_process_exec(ctx: TracePointContext) -> u32 {
 }
 
 unsafe fn try_tracepoint_sched_process_exec(ctx: TracePointContext) -> Result<i32, i32> {
+    // First we clean the MAP
+    let pid = (bpf_get_current_pid_tgid() >> 32) as u32;
+    let _ = CW_ALLOWED_PID.remove(&pid);
+    let _ = CW_FORCED_PID.remove(&pid);
     // If it's the daemon, we must exit
     match is_cardwired() {
         Some(res) => {
@@ -459,7 +463,6 @@ unsafe fn try_tracepoint_sched_process_exec(ctx: TracePointContext) -> Result<i3
                 return ReturnCode::SUCCESS;
             }
         };
-        let pid = (bpf_get_current_pid_tgid() >> 32) as u32;
 
         // We just send the event to userspace
         let event: ExecEvent = ExecEvent { pid };
@@ -480,38 +483,18 @@ pub fn tracepoint_sched_process_exit(ctx: TracePointContext) -> u32 {
     }
 }
 
-unsafe fn try_tracepoint_sched_process_exit(ctx: TracePointContext) -> Result<i32, i32> {
-    // Only proceed if we are in smart mode, events are not used when not in smart mode and it would
-    // slow down the system for no reason
-    if let Some(res) = unsafe { is_smart() }
-        && res
-    {
-        let pid_tgid: u64 = bpf_get_current_pid_tgid();
-        let tgid = pid_tgid as u32;
-        let pid = (pid_tgid >> 32) as u32;
+unsafe fn try_tracepoint_sched_process_exit(_ctx: TracePointContext) -> Result<i32, i32> {
+    let pid_tgid: u64 = bpf_get_current_pid_tgid();
+    let tgid = pid_tgid as u32;
+    let pid = (pid_tgid >> 32) as u32;
 
-        // Only send close event if the main thread is exiting
-        if pid != tgid {
-            return ReturnCode::SUCCESS;
-        }
-
-        let event: CloseEvent = CloseEvent { pid };
-
-        let mut ring_buf = match CW_CLOSE_EVENTS.reserve(0) {
-            Some(ring_buf) => ring_buf,
-            // Reservation fail, warn and leave
-            None => {
-                warn!(
-                    &ctx,
-                    "failed to reserve bytes for ring_buf: CW_CLOSE_EVENTS"
-                );
-                return ReturnCode::SUCCESS;
-            }
-        };
-
-        ring_buf.write(event);
-        ring_buf.submit(0);
+    // Only process the exit if the main thread is exiting
+    if pid != tgid {
+        return ReturnCode::SUCCESS;
     }
+    // Remove PID from the maps
+    let _ = CW_ALLOWED_PID.remove(&pid);
+    let _ = CW_FORCED_PID.remove(&pid);
 
     ReturnCode::SUCCESS
 }

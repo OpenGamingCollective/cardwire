@@ -80,15 +80,6 @@ pub struct ExecEvent {
 #[btf_map]
 pub static CW_EXEC_EVENTS: RingBuf<ExecEvent, 262144> = RingBuf::new();
 
-#[repr(align(8))]
-#[allow(dead_code)]
-pub struct CloseEvent {
-    pub pid: u32,
-}
-
-#[btf_map]
-pub static CW_CLOSE_EVENTS: RingBuf<CloseEvent, 262144> = RingBuf::new();
-
 #[repr(C)]
 #[repr(align(8))]
 #[allow(dead_code)]
