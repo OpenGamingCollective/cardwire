@@ -1,4 +1,4 @@
-use aya::maps::HashMap as AyaHashMap;
+use aya::maps::{HashMap as AyaHashMap, MapError as AyaMapError};
 use cardwire_ebpf_userspace::EbpfBlocker;
 use std::{path::Path, sync::Arc};
 
@@ -75,16 +75,38 @@ impl SmartPolicyInterface {
 
         {
             let pid_map = self.pid_map.read().await;
-            if let Ok(gpu) = pid_map.get(&pid, 0) {
-                status = "Allowed".to_string();
-                gpu_id = Some(gpu)
+            match pid_map.get(&pid, 0) {
+                Ok(id) => {
+                    status = "Allowed".to_string();
+                    gpu_id = Some(id)
+                }
+                Err(err) => match err {
+                    AyaMapError::KeyNotFound => {}
+                    _ => {
+                        return Err(fdo::Error::Failed(format!(
+                            "Couldn't read PID MAP: {}",
+                            err
+                        )));
+                    }
+                },
             }
         }
         {
             let forced_map = self.forced_map.read().await;
-            if let Ok(gpu) = forced_map.get(&pid, 0) {
-                status = "Forced".to_string();
-                gpu_id = Some(gpu)
+            match forced_map.get(&pid, 0) {
+                Ok(id) => {
+                    status = "Forced".to_string();
+                    gpu_id = Some(id)
+                }
+                Err(err) => match err {
+                    AyaMapError::KeyNotFound => {}
+                    _ => {
+                        return Err(fdo::Error::Failed(format!(
+                            "Couldn't read FORCED MAP: {}",
+                            err
+                        )));
+                    }
+                },
             }
         }
 
