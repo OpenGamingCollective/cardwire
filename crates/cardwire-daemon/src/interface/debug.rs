@@ -59,22 +59,20 @@ impl DebugInterface {
         Ok(dbus_list)
     }
     pub async fn refresh_gpu(&self) -> fdo::Result<()> {
-        // lock the importants components
-        let mut pci_list = self.pci_list.write().await;
-        let mut gpu_interfaces = self.gpu_list.write().await;
-
         // read a new pci list, if it's different than the current one, refresh the gpus, else do
-        // nothing
+        // nothing. The sysfs scan runs without holding any lock.
         let new_pci_list =
             pci::read_pci_devices().map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        if new_pci_list != *pci_list
-            && let Some(object_server) = &self.object_server
-        {
+        let mut pci_list = self.pci_list.write().await;
+        let changed = new_pci_list != *pci_list;
+        if changed && let Some(object_server) = &self.object_server {
             info!("pci list changed, refreshing the internal gpu list");
-            // Overwrite old list
+            // Overwrite old list, drop the lock before the blocking rebuild
             *pci_list = new_pci_list.clone();
-            drop(pci_list); // drop lock to prevent deadlocks when blocking
+            drop(pci_list);
 
+            // lock the importants components
+            let mut gpu_interfaces = self.gpu_list.write().await;
             let mut power_tasks = self.power_tasks.write().await;
 
             // get rid of the old gpu api and the old tasks
