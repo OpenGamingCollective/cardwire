@@ -33,17 +33,14 @@ pub fn lsof_read(device_path: &str) -> io::Result<Vec<String>> {
                 for entry in fd_entries.flatten() {
                     if let Ok(link) = entry.path().read_link()
                         && let Some(file) = link.to_str()
+                        && file == device_path
                     {
-                        let file = file.to_string();
-                        if file.contains(device_path) {
-                            // Found the file, now get process name
-                            let comm_read = fs::read_to_string(path.join("comm"));
-                            let mut process_name: String = String::new();
-                            if let Ok(comm) = comm_read {
-                                process_name = comm.trim_ascii_end().to_string()
-                            }
-                            proc_found.push(process_name);
-                        }
+                        // Found the file, now get process name, skip process if unreadable
+                        let Ok(comm) = fs::read_to_string(path.join("comm")) else {
+                            break;
+                        };
+                        proc_found.push(comm.trim_ascii_end().to_string());
+                        break;
                     }
                 }
             }
