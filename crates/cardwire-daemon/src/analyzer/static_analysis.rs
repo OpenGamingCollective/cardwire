@@ -6,8 +6,15 @@ use std::{
 };
 use xdg::BaseDirectories;
 
+#[derive(Clone, Debug)]
+pub struct AppMetadata {
+    pub display_name: String,
+    pub desktop_file_id: Option<String>,
+    pub icon_name: Option<String>,
+}
+
 /// Return a list of fdo apps present in the system
-pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, bool>, Vec<PathBuf>)> {
+pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, AppMetadata>, Vec<PathBuf>)> {
     let mut app_directories: Vec<PathBuf> = Vec::new();
     // get from ENV
     let xdg_dir = BaseDirectories::new();
@@ -55,7 +62,7 @@ pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, bool>, Vec<PathBu
         }
     }
     // Now read the paths to get the .desktop entries
-    let mut app_list: HashMap<String, bool> = HashMap::new();
+    let mut app_list: HashMap<String, AppMetadata> = HashMap::new();
     let locales = get_languages_from_env();
 
     for app_directory in &app_directories {
@@ -68,7 +75,7 @@ pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, bool>, Vec<PathBu
                 // ignore if app doesnt end with .desktop
                 if let Some(ext) = path.extension()
                     && ext == "desktop"
-                    && let Ok(app_fdo) = DesktopEntry::from_path(path, Some(&locales))
+                    && let Ok(app_fdo) = DesktopEntry::from_path(&path, Some(&locales))
                     && let Some(name) = app_fdo.name(&locales)
                 {
                     // Push both lowercase and normal name to the hashmap
@@ -76,10 +83,38 @@ pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, bool>, Vec<PathBu
                     // we need to lowercase it On the other, Ryujinx
                     // .desktop's name is `Ryujinx` and the comm is `Ryujinx`, so we also push
                     // the default name
-                    app_list.insert(name.to_ascii_lowercase(), true);
-                    app_list.insert(name.to_string(), true);
+                    let display_name = name.to_string();
+
+                    let icon_name = app_fdo.icon().map(|icon| icon.to_string());
+
+                    let desktop_file_id = path.file_name().map(|s| s.to_string_lossy().to_string());
+
+                    let meta = AppMetadata {
+                        display_name,
+                        desktop_file_id,
+                        icon_name,
+                    };
+
+                    // Push both lowercase and normal name as fallbacks
+                    app_list.insert(name.to_ascii_lowercase(), meta.clone());
+                    app_list.insert(name.to_string(), meta.clone());
+
+                    // Also insert the flatpak ID
                     if let Some(flatpak_id) = app_fdo.flatpak() {
-                        app_list.insert(flatpak_id.to_string(), true);
+                        app_list.insert(flatpak_id.to_string(), meta.clone());
+                    }
+                    if let Some(exec_str) = app_fdo.exec() {
+                        for part in exec_str.split_whitespace() {
+                            if part == "env" || part.contains('=') {
+                                continue;
+                            }
+
+                            let binary = part.split('/').next_back().unwrap_or(part);
+                            if !binary.is_empty() {
+                                app_list.insert(binary.to_lowercase(), meta.clone());
+                            }
+                            break;
+                        }
                     }
                 }
             }

@@ -27,6 +27,7 @@ udev.workspace = true
 aya-log.workspace = true
 vulkano.workspace = true
 khronos-egl.workspace = true
+rusqlite.workspace = true
 
 [[bin]]
 name = "cardwired"

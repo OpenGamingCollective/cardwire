@@ -3,10 +3,10 @@ use aya_log::EbpfLogger;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{Log, debug, error, info, warn};
 use std::{
-    collections::{HashMap, HashSet, VecDeque}, fs, path::{Path, PathBuf}, ptr, sync::Arc, time::SystemTime
+    collections::{HashMap, HashSet, VecDeque}, fs, path::Path, ptr, sync::Arc, time::SystemTime
 };
 use tokio::{
-    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore}, task, time::Instant
+    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore, mpsc}, task, time::Instant
 };
 use zbus::object_server::SignalEmitter;
 
@@ -14,8 +14,8 @@ use crate::{
     analyzer::{
         dynamic_analysis::{
             check_env, check_gpu_env, check_steam_environ, get_app_id_wayland_with_retry
-        }, static_analysis
-    }, interface::{LogEntry, LoggerInterfaceSignals}
+        }, static_analysis::{self, AppMetadata}
+    }, file::GpuPolicy, interface::{LogEntry, LoggerInterfaceSignals}
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -44,13 +44,13 @@ pub struct CardwireAnalyzer {
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>>,
-    xdg_list: Arc<RwLock<HashMap<String, bool>>>,
+    xdg_list: Arc<RwLock<HashMap<String, AppMetadata>>>,
+    db_cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
+    db_tx: mpsc::Sender<(String, AppMetadata)>,
     report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
     reported_pids: Arc<RwLock<HashSet<u32>>>,
     report_semaphore: Arc<Semaphore>,
     signal: Option<SignalEmitter<'static>>,
-    #[allow(dead_code)]
-    xdg_folders: Vec<PathBuf>,
 }
 
 // Bound the number of concurrent report tasks
@@ -63,6 +63,8 @@ impl CardwireAnalyzer {
         blocker: Arc<RwLock<EbpfBlocker>>,
         report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
         signal: Option<SignalEmitter<'static>>,
+        db_cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
+        db_tx: mpsc::Sender<(String, AppMetadata)>,
     ) -> anyhow::Result<CardwireAnalyzer> {
         let mut blocker = blocker.write().await;
         let exec_ring = blocker.get_exec_ring()?;
@@ -82,7 +84,7 @@ impl CardwireAnalyzer {
 
         let xdg_result = static_analysis::get_fdo_apps().await?;
         let xdg_list = Arc::new(RwLock::new(xdg_result.0));
-        let xdg_folders: Vec<PathBuf> = xdg_result.1;
+
         Ok(CardwireAnalyzer {
             exec_ring,
             report_ring,
@@ -90,11 +92,12 @@ impl CardwireAnalyzer {
             forced_map,
             ebpf_logger,
             xdg_list,
+            db_cache,
+            db_tx,
             report_vec,
             reported_pids: Arc::new(RwLock::new(HashSet::new())),
             report_semaphore: Arc::new(Semaphore::new(REPORT_SEMAPHORE_PERMITS)),
             signal,
-            xdg_folders,
         })
     }
     pub async fn run(self) -> anyhow::Result<()> {
@@ -266,7 +269,7 @@ impl CardwireAnalyzer {
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app, the u8 is the
     /// gpu id
-    async fn evaluate_app(&self, pid: u32, _comm: &str) -> Option<(bool, PidType, u32)> {
+    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, PidType, u32)> {
         let path = format!("/proc/{}/environ", pid);
         let environ = match fs::read(path) {
             Ok(content) => content,
@@ -283,17 +286,50 @@ impl CardwireAnalyzer {
             return Some((true, PidType::Forced, value));
         }
 
-        let result = check_steam_environ(&environ) || check_gpu_env(&environ);
-        Some((result, PidType::Allowed, 0))
+        if check_steam_environ(&environ) || check_gpu_env(&environ) {
+            return Some((true, PidType::Allowed, 0));
+        }
+
+        // Check the database now, we can take our time since if we reached it, the app would've
+        // been blocked
+        let lookup_name = comm.to_lowercase();
+        {
+            let db = self.db_cache.read().await;
+            if let Some(policy) = db.get(&lookup_name) {
+                // For now this only work for the smart mode, will need to find a way to get the GPU
+                // id to make it compatible with manual mode
+                match policy {
+                    GpuPolicy::Allowed => return Some((true, PidType::Allowed, 0)),
+                    GpuPolicy::Blocked => return None,
+                    GpuPolicy::Forced => return Some((true, PidType::Forced, 1)),
+                }
+            }
+        }
+
+        {
+            let xdg_list = self.xdg_list.read().await;
+            if let Some(meta) = xdg_list.get(&lookup_name) {
+                let meta = meta.clone();
+                drop(xdg_list);
+                let res = self.db_tx.send((lookup_name.clone(), meta)).await;
+                match res {
+                    Ok(_) => info!(
+                        "Discovered a new app: {}, adding to the database",
+                        lookup_name
+                    ),
+                    Err(err) => {
+                        error!("Couln't send new app to DB rw: {}", err)
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     #[allow(dead_code)]
-    pub fn xdg_list(&self) -> Arc<RwLock<HashMap<String, bool>>> {
+    pub fn xdg_list(&self) -> Arc<RwLock<HashMap<String, AppMetadata>>> {
         Arc::clone(&self.xdg_list)
-    }
-    #[allow(dead_code)]
-    pub fn xdg_folders(&self) -> &Vec<PathBuf> {
-        &self.xdg_folders
     }
 }
 

@@ -7,7 +7,7 @@ use anyhow::{Context, Ok};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs};
-const STATE_PATH: &str = "/var/lib/cardwire";
+pub const STATE_PATH: &str = "/var/lib/cardwire";
 
 #[derive(Serialize, Deserialize)]
 #[serde(default)]

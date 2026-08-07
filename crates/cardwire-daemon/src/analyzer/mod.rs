@@ -4,3 +4,4 @@ mod models;
 mod static_analysis;
 
 pub use models::CardwireAnalyzer;
+pub use static_analysis::AppMetadata;

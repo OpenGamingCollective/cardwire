@@ -7,20 +7,24 @@ use zbus::{
     fdo::{self, Error::Failed}, interface
 };
 
+use crate::file::CardwireDatabase;
+
 #[derive(Clone, Debug)]
 pub struct SmartPolicyInterface {
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
+    pub database: CardwireDatabase,
 }
 
 impl SmartPolicyInterface {
-    pub fn build(blocker: &mut EbpfBlocker) -> Self {
+    pub fn build(blocker: &mut EbpfBlocker, db: CardwireDatabase) -> Self {
         let pid_map = Arc::clone(&blocker.pid_map);
         let forced_map = Arc::clone(&blocker.forced_map);
 
         Self {
             pid_map,
             forced_map,
+            database: db,
         }
     }
 }
