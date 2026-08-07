@@ -1,12 +1,12 @@
 //! DBUS Interface for single gpu interaction
 
 use std::{
-    collections::{BTreeMap, HashMap}, ffi::OsStr, fs::{self, read_dir}, path::{Path, PathBuf}, sync::Arc
+    collections::{BTreeMap, HashMap}, fs, sync::Arc
 };
 
 use crate::{
     core::{
-        gpu::{DbusGpuDevice, GpuDevice, GpuVendor, external_display_connected}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice
+        gpu::{DbusGpuDevice, GpuDevice, GpuVendor, external_display_connected}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
@@ -163,58 +163,6 @@ impl GpuInterface {
 
         Ok(card && render && pci && nvidia)
     }
-    /// read fd link to find which apps opened the gpu
-    async fn lsof_read(&self, s: &str) -> fdo::Result<Vec<String>> {
-        let proc_path = Path::new("/proc");
-        let mut proc_found: Vec<String> = Vec::new();
-        // If proc path doesn't exist, exit
-        if !proc_path.exists() || !proc_path.is_dir() {
-            return Err(fdo::Error::Failed("couldn't find /proc path".to_string()));
-        }
-        // read /proc
-        for entry in read_dir(proc_path)
-            .map_err(|e| fdo::Error::IOError(e.to_string()))?
-            .flatten()
-        {
-            // Check if folder name is a numerical, if not skip
-            if let Ok(string) = entry.file_name().into_string()
-                && string.parse::<u32>().is_err()
-            {
-                continue;
-            }
-            let path = entry.path();
-            // now read eg: /proc/1
-            if path.is_dir() {
-                // now get fd directory
-                let fd_dir: PathBuf = read_dir(&path)
-                    .map_err(|e| fdo::Error::IOError(e.to_string()))?
-                    .flatten()
-                    .map(|r| r.path())
-                    .filter(|r| r.file_name() == Some(OsStr::new("fd")))
-                    .collect();
-                for entry in read_dir(fd_dir)
-                    .map_err(|e| fdo::Error::IOError(e.to_string()))?
-                    .flatten()
-                {
-                    if let Ok(link) = entry.path().read_link()
-                        && let Some(file) = link.to_str()
-                    {
-                        let file = file.to_string();
-                        if file.contains(s) {
-                            // Found the file, now get process name
-                            let comm_read = fs::read_to_string(path.join("comm"));
-                            let mut process_name: String = String::new();
-                            if let Ok(comm) = comm_read {
-                                process_name = comm.trim_ascii_end().to_string()
-                            }
-                            proc_found.push(process_name);
-                        }
-                    }
-                }
-            }
-        }
-        Ok(proc_found)
-    }
 }
 
 #[interface(name = "org.opengamingcollective.cardwire.Gpu")]
@@ -290,8 +238,12 @@ impl GpuInterface {
         let render_path = format!("/dev/dri/renderD{}", self.device.render());
         let mut proc_map: HashMap<String, Vec<String>> = HashMap::new();
 
-        let (card, render) =
-            tokio::try_join!(self.lsof_read(&card_path), self.lsof_read(&render_path))?;
+        let (card, render) = tokio::try_join!(
+            async { procfs::lsof_read(&card_path).map_err(|e| fdo::Error::IOError(e.to_string())) },
+            async {
+                procfs::lsof_read(&render_path).map_err(|e| fdo::Error::IOError(e.to_string()))
+            },
+        )?;
         proc_map.insert(card_path, card);
         proc_map.insert(render_path, render);
 
@@ -299,8 +251,13 @@ impl GpuInterface {
             let nvidia_path = format!("/dev/nvidia{}", minor);
             let nvidiactl_path = "/dev/nvidiactl".to_string();
             let (nvidia, nvidiactl) = tokio::try_join!(
-                self.lsof_read(&nvidia_path),
-                self.lsof_read(&nvidiactl_path)
+                async {
+                    procfs::lsof_read(&nvidia_path).map_err(|e| fdo::Error::IOError(e.to_string()))
+                },
+                async {
+                    procfs::lsof_read(&nvidiactl_path)
+                        .map_err(|e| fdo::Error::IOError(e.to_string()))
+                },
             )?;
             proc_map.insert(nvidia_path, nvidia);
             proc_map.insert(nvidiactl_path, nvidiactl);
