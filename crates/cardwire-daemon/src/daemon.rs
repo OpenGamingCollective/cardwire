@@ -5,6 +5,7 @@ mod file;
 mod interface;
 mod models;
 mod tasks;
+pub mod types;
 
 use crate::{models::DaemonManager, tasks::watch_power_state};
 use anyhow::Result;

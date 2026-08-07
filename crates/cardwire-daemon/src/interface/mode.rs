@@ -6,59 +6,13 @@ use anyhow::Result;
 use aya::maps::Array as AyaArray;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{error, info, warn};
-use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt, process::Stdio, sync::Arc};
+use std::{collections::BTreeMap, process::Stdio, sync::Arc};
 use tokio::{
     process::Command, sync::{Mutex, RwLock}, task
 };
 use zbus::{fdo, interface, object_server::InterfaceRef};
 
-#[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum Modes {
-    Integrated,
-    #[default]
-    Hybrid,
-    Manual,
-    Smart,
-}
-
-impl fmt::Display for Modes {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Modes::Integrated => write!(f, "Integrated"),
-            Modes::Hybrid => write!(f, "Hybrid"),
-            Modes::Manual => write!(f, "Manual"),
-            Modes::Smart => write!(f, "Smart"),
-        }
-    }
-}
-
-/// try to convert a u32 into a mode
-impl TryFrom<u32> for Modes {
-    type Error = &'static str;
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Self::Integrated),
-            1 => Ok(Self::Hybrid),
-            2 => Ok(Self::Manual),
-            3 => Ok(Self::Smart),
-            _ => Err("unknown mode"),
-        }
-    }
-}
-
-/// Convert a mode into a u32 and reverse
-impl From<Modes> for u32 {
-    fn from(value: Modes) -> Self {
-        match value {
-            Modes::Integrated => 0,
-            Modes::Hybrid => 1,
-            Modes::Manual => 2,
-            Modes::Smart => 3,
-        }
-    }
-}
+pub use crate::types::Modes;
 
 // to change a mode, we need the config, the mode_state, the gpu_list
 #[derive(Clone)]
@@ -444,69 +398,5 @@ impl ModeInterface {
     #[zbus(property)]
     pub(crate) async fn requested_mode(&self) -> fdo::Result<u32> {
         Ok(self.requested_mode_value().await.into())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_modes_try_from_valid_values() {
-        assert_eq!(Modes::try_from(0).unwrap(), Modes::Integrated);
-        assert_eq!(Modes::try_from(1).unwrap(), Modes::Hybrid);
-        assert_eq!(Modes::try_from(2).unwrap(), Modes::Manual);
-        assert_eq!(Modes::try_from(3).unwrap(), Modes::Smart);
-    }
-
-    #[test]
-    fn test_modes_try_from_invalid_value() {
-        assert!(Modes::try_from(4).is_err());
-        assert!(Modes::try_from(u32::MAX).is_err());
-    }
-
-    #[test]
-    fn test_modes_into_u32_roundtrip() {
-        for i in 0..=3u32 {
-            let mode = Modes::try_from(i).unwrap();
-            let back: u32 = mode.into();
-            assert_eq!(back, i);
-        }
-    }
-
-    #[test]
-    fn test_modes_display_formatting() {
-        assert_eq!(Modes::Integrated.to_string(), "Integrated");
-        assert_eq!(Modes::Hybrid.to_string(), "Hybrid");
-        assert_eq!(Modes::Manual.to_string(), "Manual");
-        assert_eq!(Modes::Smart.to_string(), "Smart");
-    }
-
-    #[test]
-    fn test_modes_default_is_hybrid() {
-        assert_eq!(Modes::default(), Modes::Hybrid);
-    }
-
-    #[test]
-    fn test_modes_serde_json_roundtrip() {
-        let modes = [
-            Modes::Integrated,
-            Modes::Hybrid,
-            Modes::Manual,
-            Modes::Smart,
-        ];
-        for mode in modes {
-            let json = serde_json::to_string(&mode).unwrap();
-            let deserialized: Modes = serde_json::from_str(&json).unwrap();
-            assert_eq!(deserialized, mode);
-        }
-    }
-
-    #[test]
-    fn test_modes_serde_uses_snake_case() {
-        let json = serde_json::to_string(&Modes::Integrated).unwrap();
-        assert_eq!(json, "\"integrated\"");
-        let json = serde_json::to_string(&Modes::Hybrid).unwrap();
-        assert_eq!(json, "\"hybrid\"");
     }
 }
