@@ -13,7 +13,7 @@ use zbus::object_server::SignalEmitter;
 use crate::{
     analyzer::{
         dynamic_analysis::{
-            check_env, check_fdo_app_id, check_for_flatpak_run, check_gpu_env, check_steam_environ, desktop_supports_switcheroo, get_app_id_wayland_with_retry
+            check_env, check_gpu_env, check_steam_environ, get_app_id_wayland_with_retry
         }, static_analysis
     }, interface::{LogEntry, LoggerInterfaceSignals}
 };
@@ -266,7 +266,7 @@ impl CardwireAnalyzer {
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app, the u8 is the
     /// gpu id
-    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, PidType, u32)> {
+    async fn evaluate_app(&self, pid: u32, _comm: &str) -> Option<(bool, PidType, u32)> {
         let path = format!("/proc/{}/environ", pid);
         let environ = match fs::read(path) {
             Ok(content) => content,
@@ -282,22 +282,8 @@ impl CardwireAnalyzer {
         if let Some(value) = check_env("CARDWIRE_FORCE_GPU", &environ) {
             return Some((true, PidType::Forced, value));
         }
-        let switcheroo_support = desktop_supports_switcheroo(&environ);
 
-        let xdg_list = self.xdg_list.read().await;
-        let mut result = (!switcheroo_support && check_fdo_app_id(comm, &xdg_list))
-            || check_steam_environ(&environ)
-            || check_gpu_env(&environ);
-        // if no result with environ file, read cmdline
-        // The goal is to reduce unnecessary reads
-        if !result && !switcheroo_support {
-            let path_cmd = format!("/proc/{}/cmdline", pid);
-            let cmdline = match fs::read_to_string(path_cmd) {
-                Ok(content) => content,
-                Err(_) => return None,
-            };
-            result = check_for_flatpak_run(&cmdline, &xdg_list);
-        }
+        let result = check_steam_environ(&environ) || check_gpu_env(&environ);
         Some((result, PidType::Allowed, 0))
     }
 
