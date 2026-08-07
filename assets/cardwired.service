@@ -12,5 +12,32 @@ ExecStart=/usr/bin/cardwired
 Restart=on-failure
 RestartSec=5s
 
+# Hardening
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectHostname=true
+User=root
+NoNewPrivileges=true
+ProtectClock=true
+ProtectSystem=strict
+StateDirectory=cardwire
+StateDirectoryMode=0700
+ConfigurationDirectory=cardwire
+ConfigurationDirectoryMode=0700
+ProtectHome=read-only
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+UMask=0077
+IPAddressDeny=any
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_BPF CAP_SYS_PTRACE CAP_DAC_OVERRIDE
+SystemCallFilter=~@cpu-emulation @module @obsolete @raw-io @reboot @swap
+
+
 [Install]
 WantedBy=multi-user.target

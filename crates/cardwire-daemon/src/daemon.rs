@@ -36,6 +36,8 @@ async fn main() -> Result<()> {
             "/org/opengamingcollective/cardwire",
             zbus::fdo::ObjectManager,
         )?
+        .replace_existing_names(false)
+        .allow_name_replacements(false)
         .build()
         .await?;
 

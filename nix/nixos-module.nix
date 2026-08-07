@@ -75,6 +75,41 @@ in
         ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/cardwired";
         Restart = "on-failure";
         RestartSec = "5s";
+        # Hardening
+        User = "root";
+        PrivateNetwork = true;
+        PrivateTmp = true;
+        ProtectHostname = true;
+        NoNewPrivileges = true;
+        ProtectClock = true;
+        ProtectSystem = "strict";
+        StateDirectory = "cardwire";
+        StateDirectoryMode = "0700";
+        ConfigurationDirectory = "cardwire";
+        ConfigurationDirectoryMode = "0700";
+        ProtectHome = "read-only";
+        ProtectKernelLogs = true;
+        ProtectControlGroups = true;
+        ProtectKernelModules = true;
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_NETLINK"
+        ];
+        RestrictNamespaces = true;
+        RestrictRealtime = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
+        UMask = "0077";
+        IPAddressDeny = "any";
+        CapabilityBoundingSet = [
+          "CAP_SYS_ADMIN"
+          "CAP_BPF"
+          "CAP_SYS_PTRACE"
+          "CAP_DAC_OVERRIDE"
+        ];
+        SystemCallFilter = [
+          "~`@cpu-emulation` `@module` `@obsolete` `@raw-io` `@reboot` `@swap`"
+        ];
       };
       wantedBy = [ "multi-user.target" ];
     };
