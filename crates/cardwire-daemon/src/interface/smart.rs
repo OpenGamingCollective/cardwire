@@ -44,6 +44,13 @@ impl SmartPolicyInterface {
             "Default" => Ok(()),
             // Equivalent to CARDWIRE_ALLOW=1, show both iGPU and dGPU
             "Allow_dGPU" => {
+                {
+                    // First remove the PID from the other map if present
+                    let mut forced_map = self.forced_map.write().await;
+                    forced_map
+                        .remove(&pid)
+                        .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+                }
                 let mut pid_map = self.pid_map.write().await;
                 pid_map
                     .insert(pid, 0, 0)
@@ -51,6 +58,13 @@ impl SmartPolicyInterface {
             }
             // Equivalent to CARDWIRE_FORCE_DGPU=value
             "Force_dGPU" => {
+                {
+                    // First remove the PID from the other map if present
+                    let mut pid_map = self.pid_map.write().await;
+                    pid_map
+                        .remove(&pid)
+                        .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+                }
                 let mut force_map = self.forced_map.write().await;
                 force_map
                     .insert(pid, value, 0)
@@ -58,6 +72,13 @@ impl SmartPolicyInterface {
             }
             // Equivalent to CARDWIRE_FORCE_GPU=value
             "Force_GPU" => {
+                {
+                    // First remove the PID from the other map if present
+                    let mut pid_map = self.pid_map.write().await;
+                    pid_map
+                        .remove(&pid)
+                        .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+                }
                 let mut force_map = self.forced_map.write().await;
                 force_map
                     .insert(pid, value, 0)
