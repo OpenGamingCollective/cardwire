@@ -303,9 +303,6 @@ impl CardwireAnalyzer {
                 match policy {
                     GpuPolicy::Blocked => return None,
                     GpuPolicy::Allowed => return Some((true, PidType::Allowed, 0)),
-                    // TODO: hardcoded gpu id 1, the schema has no gpu_id column so this can't be
-                    // correct for systems where the dGPU isn't enumerated as id 1
-                    GpuPolicy::Forced => return Some((true, PidType::Forced, 1)),
                 }
             }
         }

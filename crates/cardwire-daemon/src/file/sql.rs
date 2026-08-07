@@ -11,14 +11,12 @@ use zbus::zvariant;
 pub enum GpuPolicy {
     Blocked = 0,
     Allowed = 1,
-    Forced = 2,
 }
 impl GpuPolicy {
     pub fn from_i32(val: i32) -> Self {
         match val {
             0 => GpuPolicy::Blocked,
             1 => GpuPolicy::Allowed,
-            2 => GpuPolicy::Forced,
             _ => GpuPolicy::Blocked,
         }
     }
@@ -27,7 +25,6 @@ impl GpuPolicy {
         match val {
             0 => Some(GpuPolicy::Blocked),
             1 => Some(GpuPolicy::Allowed),
-            2 => Some(GpuPolicy::Forced),
             _ => None,
         }
     }
