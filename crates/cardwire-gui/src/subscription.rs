@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 
 use iced::{
     Subscription, futures::{SinkExt, StreamExt, channel::mpsc::Sender}, stream
@@ -9,7 +9,7 @@ use tokio::select;
 use tokio_stream::StreamMap;
 
 use crate::{
-    helpers::CardwireDbus, message::Message, models::{DaemonSettings, Mode, PciDevice}, tray
+    helpers::CardwireDbus, message::Message, models::{DaemonSettings, LogEntry, Mode, PciDevice}, tray
 };
 use zbus::{
     Connection, Proxy, names::OwnedInterfaceName, proxy, zvariant::{OwnedObjectPath, OwnedValue}
@@ -525,6 +525,78 @@ fn pci_sub() -> Subscription<Message> {
     })
 }
 
+// CardwireLogger is used to listen to log signals
+
+#[proxy(
+    default_service = "org.opengamingcollective.cardwire",
+    default_path = "/org/opengamingcollective/cardwire",
+    interface = "org.opengamingcollective.cardwire.Logger"
+)]
+// org.freedesktop.DBus.Properties
+trait CardwireLogger {
+    fn process_blocked(&self) -> zbus::Result<VecDeque<LogEntry>>;
+    #[zbus(signal)]
+    fn process_blocked_changed(&self, log: LogEntry) -> zbus::Result<()>;
+}
+
+fn logger_sub() -> Subscription<Message> {
+    Subscription::run_with("cardwire_logger_subscription", |_id| {
+        stream::channel(100, |mut output: Sender<Message>| async move {
+            let connection = match Connection::system().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    warn!("Failed to connect to D-Bus: {}", e);
+                    let _ = output.send(Message::FetchedLogs(Err(e.to_string()))).await;
+                    return;
+                }
+            };
+
+            let proxy = match CardwireLoggerProxy::new(&connection).await {
+                Ok(p) => p,
+                Err(e) => {
+                    warn!("Failed to create D-Bus proxy: {}", e);
+                    let _ = output.send(Message::FetchedLogs(Err(e.to_string()))).await;
+                    return;
+                }
+            };
+            // for startup, get current blocked apps logs
+            match proxy.process_blocked().await {
+                Ok(initial_logs) => {
+                    if !initial_logs.is_empty() {
+                        let _ = output.send(Message::FetchedLogs(Ok(initial_logs))).await;
+                    }
+                }
+                Err(error) => {
+                    let _ = output
+                        .send(Message::FetchedLogs(Err(error.to_string())))
+                        .await;
+                }
+            }
+            let mut logs_stream = match proxy.receive_process_blocked_changed().await {
+                Ok(stream) => stream,
+                Err(err) => {
+                    warn!("Failed to subscribe to D-Bus logs signal: {}", err);
+                    let _ = output
+                        .send(Message::FetchedLogs(Err(err.to_string())))
+                        .await;
+                    return;
+                }
+            };
+            while let Some(log_signal) = logs_stream.next().await {
+                if let Ok(log_arg) = log_signal.args() {
+                    let log: LogEntry = log_arg.log().clone();
+                    let _ = output.send(Message::NewLog(log)).await;
+                }
+            }
+            let _ = output
+                .send(Message::FetchedLogs(Err(
+                    "Cardwire daemon disconnected".to_string()
+                )))
+                .await;
+        })
+    })
+}
+
 pub fn dbus_sub() -> Subscription<Message> {
-    Subscription::batch([config_sub(), mode_sub(), gpu_sub(), pci_sub()])
+    Subscription::batch([config_sub(), mode_sub(), gpu_sub(), pci_sub(), logger_sub()])
 }

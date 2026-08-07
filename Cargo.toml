@@ -66,6 +66,7 @@ iced = { version = "0.14.0", default-features = false, features = [
 iced_aw = "0.14.1"
 strum = { version = "0.28", features = ["derive"] }
 ksni = "0.3.6"
+chrono = "0.4.45"
 
 [profile.dev]
 overflow-checks = true

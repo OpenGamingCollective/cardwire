@@ -1,3 +1,4 @@
+use chrono::{DateTime, Local};
 use iced::{
     Alignment, Border, Color, Element, Font, Length::{Fill, FillPortion, Fixed}, widget::{
         button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler
@@ -8,7 +9,7 @@ use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    gui_config::{GuiConfig, PrimaryClickAction}, helpers::GpuDevice, message::Message, models::{LsofData, MainState, Mode, Page, PciDevice, SettingState}
+    gui_config::{GuiConfig, PrimaryClickAction}, helpers::GpuDevice, message::Message, models::{LogEntry, LogState, LsofData, MainState, Mode, Page, PciDevice, SettingState}
 };
 
 // Custom macro for box theming, used by cards
@@ -140,7 +141,7 @@ pub fn main_page<'a>(
 ) -> Element<'a, Message> {
     column![
         mode_element(main_state.current_mode),
-        gpu_cards(gpu_list, main_state.open_gpu_menu)
+        gpu_cards(gpu_list, main_state.open_gpu_menu, main_state.current_mode)
     ]
     .spacing(20)
     .into()
@@ -160,6 +161,7 @@ fn mode_element(current_mode: Option<Mode>) -> Element<'static, Message> {
 fn gpu_cards(
     gpu_list: &BTreeMap<usize, GpuDevice>,
     open_dropdown: Option<usize>,
+    current_mode: Option<Mode>,
 ) -> Element<'_, Message> {
     let cards = gpu_list
         .iter()
@@ -180,14 +182,13 @@ fn gpu_cards(
             let gpu_id = *id;
             let is_blocked = gpu.blocked;
 
-            let is_offload_dgpu = !gpu.default && gpu.discrete;
-
             let is_available = gpu.available;
 
             // Build dropdown menu items
             let mut dropdown_col = column![];
-            // Block/Unblock (only for offload dGPU)
-            if is_offload_dgpu && is_available {
+            // Block/Unblock (only in manual mode and if not default)
+            if current_mode.is_some_and(|mode| mode == Mode::Manual) && !gpu.default && is_available
+            {
                 if is_blocked {
                     dropdown_col = dropdown_col.push(
                         button("Unblock")
@@ -435,6 +436,94 @@ pub fn lsof_overlay<'a>(
             ..Default::default()
         })
         .into()
+}
+
+// A dark terminal-like page showing the blocked process logs
+pub fn logs_page<'a>(
+    log_state: &'a LogState,
+    gpu_list: &'a BTreeMap<usize, GpuDevice>,
+) -> Element<'a, Message> {
+    let header = row![
+        text("Blocked Process Logs")
+            .size(20)
+            .color(Color::from_rgb(0.9, 0.9, 0.9)),
+        horizontal(),
+        text!("{} entries", log_state.logs.len()).color(Color::from_rgb(0.6, 0.6, 0.6)),
+    ]
+    .align_y(Alignment::Center);
+
+    let content = if log_state.logs.is_empty() {
+        column![
+            text("No blocked process logs yet")
+                .color(Color::from_rgb(0.5, 0.5, 0.5))
+                .font(Font::MONOSPACE)
+        ]
+    } else {
+        log_state
+            .logs
+            .iter()
+            .fold(column![].spacing(4), |col, log| {
+                col.push(log_line(log, gpu_list))
+            })
+    };
+
+    let terminal = container(scrollable(content))
+        .width(Fill)
+        .height(Fill)
+        .padding(16)
+        .style(|_| container::Style {
+            background: Some(Color::from_rgb(0.07, 0.07, 0.08).into()),
+            border: Border {
+                radius: 8.0.into(),
+                width: 1.0,
+                color: Color::from_rgb(0.2, 0.2, 0.2),
+            },
+            ..Default::default()
+        });
+
+    column![header, terminal].spacing(12).into()
+}
+
+// One color-coded log line, the gpu id is replaced by the gpu name when known
+fn log_line<'a>(
+    log: &'a LogEntry,
+    gpu_list: &'a BTreeMap<usize, GpuDevice>,
+) -> Element<'a, Message> {
+    let timestamp = DateTime::<Local>::from(log.timestamp)
+        .format("%H:%M:%S")
+        .to_string();
+    let app_name = if log.wayland_app_id.is_empty() {
+        log.comm.as_str()
+    } else {
+        log.wayland_app_id.as_str()
+    };
+    let gpu_name = gpu_list
+        .get(&(log.gpu_id as usize))
+        .map(|g| g.name.as_str())
+        .unwrap_or("Unknown");
+
+    row![
+        text!("[{}] ", timestamp)
+            .color(Color::from_rgb(0.55, 0.55, 0.55))
+            .font(Font::MONOSPACE),
+        text(app_name)
+            .color(Color::from_rgb(0.35, 0.8, 0.98))
+            .font(Font::MONOSPACE),
+        text!("[{}] ", log.pid)
+            .color(Color::from_rgb(0.98, 0.2, 0.6))
+            .font(Font::MONOSPACE),
+        text("tried to access GPU ")
+            .color(Color::from_rgb(0.75, 0.75, 0.75))
+            .font(Font::MONOSPACE),
+        text(gpu_name)
+            .color(Color::from_rgb(0.4, 0.8, 0.4))
+            .font(Font::MONOSPACE),
+        text(" (blocked by cardwire)")
+            .color(Color::from_rgb(0.5, 0.5, 0.5))
+            .font(Font::MONOSPACE),
+    ]
+    .align_y(Alignment::Center)
+    .into()
 }
 
 pub fn about_page() -> Element<'static, Message> {

@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap, fmt::{self, Display}
+    collections::{HashMap, VecDeque}, fmt::{self, Display}, time::SystemTime
 };
 use strum::{EnumIter, FromRepr, VariantArray};
 
@@ -50,7 +50,7 @@ pub enum Page {
     Main,
     Pci,
     SmartMode,
-    AccessLogs,
+    Logs,
     CardwireSettings,
     Advanced,
     About,
@@ -62,7 +62,7 @@ impl Display for Page {
             Page::Pci => write!(f, "PCI"),
             Page::SmartMode => write!(f, "Smart Mode"),
             Page::CardwireSettings => write!(f, "Cardwire Settings"),
-            Page::AccessLogs => write!(f, "Access Logs"),
+            Page::Logs => write!(f, "Logs"),
             Page::Advanced => write!(f, "Advanced"),
             Page::About => write!(f, "About"),
         }
@@ -74,6 +74,40 @@ pub struct MainState {
     pub current_mode: Option<Mode>,
     pub open_gpu_menu: Option<usize>,
     pub lsof_window: Option<LsofData>,
+}
+
+#[derive(serde::Deserialize, zbus::zvariant::Type, Debug, Clone)]
+pub struct LogEntry {
+    pub timestamp: SystemTime,
+    pub pid: u32,
+    pub comm: String,
+    pub gpu_id: u32,
+    pub wayland_app_id: String,
+}
+
+// Maximum number of log entries kept in the GUI
+const MAX_GUI_LOG_ENTRIES: usize = 500;
+
+#[derive(Default, Clone, Debug)]
+pub struct LogState {
+    pub logs: VecDeque<LogEntry>,
+}
+
+impl LogState {
+    pub fn replace(&mut self, logs: VecDeque<LogEntry>) {
+        let mut logs = logs;
+        while logs.len() > MAX_GUI_LOG_ENTRIES {
+            logs.pop_front();
+        }
+        self.logs = logs;
+    }
+
+    pub fn push(&mut self, log: LogEntry) {
+        self.logs.push_back(log);
+        while self.logs.len() > MAX_GUI_LOG_ENTRIES {
+            self.logs.pop_front();
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

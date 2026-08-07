@@ -1,7 +1,7 @@
 use crate::{
-    gui_config::GuiConfig, helpers::GpuDevice, models::{DaemonSettings, LsofData, Mode, Page, PciDevice}, tray::{TrayAction, TrayHandle}
+    gui_config::GuiConfig, helpers::GpuDevice, models::{DaemonSettings, LogEntry, LsofData, Mode, Page, PciDevice}, tray::{TrayAction, TrayHandle}
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -32,6 +32,8 @@ pub enum Message {
     CloseLsofWindow,
     RefreshGpu,
     RefreshGpuResult(Result<(), String>),
+    FetchedLogs(Result<VecDeque<LogEntry>, String>),
+    NewLog(LogEntry),
     OpenUrl(String),
     ClearError,
     ClearInfo,

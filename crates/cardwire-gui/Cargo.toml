@@ -22,6 +22,7 @@ serde_json.workspace = true
 ksni.workspace = true
 toml.workspace = true
 xdg.workspace = true
+chrono.workspace = true
 
 [[bin]]
 name = "cardwire-gui"
