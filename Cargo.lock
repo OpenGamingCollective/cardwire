@@ -689,6 +689,7 @@ dependencies = [
 name = "cardwire-gui"
 version = "0.11.1"
 dependencies = [
+ "chrono",
  "env_logger",
  "iced",
  "iced_aw",

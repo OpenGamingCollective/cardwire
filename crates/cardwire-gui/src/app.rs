@@ -5,7 +5,7 @@ use log::error;
 use std::collections::BTreeMap;
 
 use crate::{
-    gui_config::{GuiConfig, PrimaryClickAction}, helpers::{CardwireDbus, GpuDevice}, message::Message, models::{DaemonSettings, MainState, Mode, Page, PciDevice, SettingState}, tray::{self, TrayAction, TrayHandle}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
+    gui_config::{GuiConfig, PrimaryClickAction}, helpers::{CardwireDbus, GpuDevice}, message::Message, models::{DaemonSettings, LogState, MainState, Mode, Page, PciDevice, SettingState}, tray::{self, TrayAction, TrayHandle}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
 };
 
 #[derive(Debug)]
@@ -18,6 +18,7 @@ pub struct AppState {
     pub pci_list: BTreeMap<String, PciDevice>,
     pub main_state: MainState,
     pub setting_state: SettingState,
+    pub log_state: LogState,
     window_id: Option<window::Id>,
     tray_handle: Option<TrayHandle>,
     tray_available: bool,
@@ -50,6 +51,7 @@ impl AppState {
                 gui_config,
                 ..SettingState::default()
             },
+            log_state: LogState::default(),
             window_id,
             tray_handle: None,
             tray_available: true,
@@ -361,6 +363,16 @@ impl AppState {
                 Ok(()) => self.info = Some("GPU list refreshed".to_string()),
                 Err(err) => self.error = Some(format!("Refresh error: {}", err)),
             },
+            // Fetch the initial blocked process logs from dbus
+            Message::FetchedLogs(res) => match res {
+                Ok(logs) => {
+                    self.log_state.replace(logs);
+                    self.error = None;
+                }
+                Err(err) => self.error = Some(format!("Error fetching logs: {}", err)),
+            },
+            // Append a new blocked process log received from dbus
+            Message::NewLog(log) => self.log_state.push(log),
             Message::OpenUrl(url) => {
                 let _ = std::process::Command::new("xdg-open").arg(url).spawn();
             }
@@ -429,7 +441,7 @@ impl AppState {
             Page::Pci => pci_page(&self.pci_list),
             Page::SmartMode => text("Smart Mode TODO").into(),
             Page::CardwireSettings => daemon_setting_page(&self.setting_state),
-            Page::AccessLogs => text!("TODO").into(),
+            Page::Logs => ui::logs_page(&self.log_state, &self.gpu_list),
             Page::Advanced => ui::advanced_page(),
             Page::About => ui::about_page(),
         }));
