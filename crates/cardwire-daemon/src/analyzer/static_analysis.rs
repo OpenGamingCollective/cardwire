@@ -14,7 +14,7 @@ pub struct AppMetadata {
 }
 
 /// Return a list of fdo apps present in the system
-pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, AppMetadata>, Vec<PathBuf>)> {
+pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, AppMetadata>> {
     let mut app_directories: Vec<PathBuf> = Vec::new();
     // get from ENV
     let xdg_dir = BaseDirectories::new();
@@ -87,7 +87,9 @@ pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, AppMetadata>, Vec
 
                     let icon_name = app_fdo.icon().map(|icon| icon.to_string());
 
-                    let desktop_file_id = path.file_name().map(|s| s.to_string_lossy().to_string());
+                    let desktop_file_id = path
+                        .file_name()
+                        .map(|s| s.to_string_lossy().trim_end_matches(".desktop").to_string());
 
                     let meta = AppMetadata {
                         display_name,
@@ -99,9 +101,9 @@ pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, AppMetadata>, Vec
                     app_list.insert(name.to_ascii_lowercase(), meta.clone());
                     app_list.insert(name.to_string(), meta.clone());
 
-                    // Also insert the flatpak ID
+                    // Also insert the flatpak ID, lowercased since lookups are lowercased
                     if let Some(flatpak_id) = app_fdo.flatpak() {
-                        app_list.insert(flatpak_id.to_string(), meta.clone());
+                        app_list.insert(flatpak_id.to_ascii_lowercase(), meta.clone());
                     }
                     if let Some(exec_str) = app_fdo.exec() {
                         for part in exec_str.split_whitespace() {
@@ -120,5 +122,5 @@ pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, AppMetadata>, Vec
             }
         }
     }
-    Ok((app_list, app_directories))
+    Ok(app_list)
 }

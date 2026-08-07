@@ -82,8 +82,7 @@ impl CardwireAnalyzer {
         let ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>> =
             Arc::new(Mutex::new(ebpf_logger));
 
-        let xdg_result = static_analysis::get_fdo_apps().await?;
-        let xdg_list = Arc::new(RwLock::new(xdg_result.0));
+        let xdg_list = Arc::new(RwLock::new(static_analysis::get_fdo_apps().await?));
 
         Ok(CardwireAnalyzer {
             exec_ring,
