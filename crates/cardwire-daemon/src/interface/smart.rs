@@ -4,9 +4,7 @@ use std::{path::Path, sync::Arc};
 
 use tokio::sync::RwLock;
 use zbus::{
-    fdo::{
-        self, Error::{Failed, InvalidArgs}
-    }, interface
+    fdo::{self, Error::Failed}, interface
 };
 
 #[derive(Clone, Debug)]
@@ -47,10 +45,9 @@ impl SmartPolicyInterface {
             // Equivalent to CARDWIRE_ALLOW=1, show both iGPU and dGPU
             "Allow_dGPU" => {
                 let mut pid_map = self.pid_map.write().await;
-                let _res = pid_map
+                pid_map
                     .insert(pid, 0, 0)
-                    .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-                Ok(())
+                    .map_err(|err| fdo::Error::Failed(err.to_string()))
             }
             // Equivalent to CARDWIRE_FORCE_DGPU=value
             "Force_dGPU" => {
