@@ -75,8 +75,8 @@ impl CardwireAnalyzer {
         let exec_ring = blocker.get_exec_ring()?;
         let close_ring = blocker.get_close_ring()?;
         let report_ring = blocker.get_report_ring()?;
-        let pid_map = blocker.get_pid_map()?;
-        let forced_map = blocker.get_forced_pid_map()?;
+        let pid_map = Arc::clone(&blocker.pid_map);
+        let forced_map = Arc::clone(&blocker.forced_map);
         let ebpf_logger = blocker.get_ebpf_logger()?;
 
         let exec_ring = AsyncFd::new(exec_ring)?;
@@ -85,8 +85,6 @@ impl CardwireAnalyzer {
 
         // Now Rwlock -> Arc
         let exec_ring = Arc::new(Mutex::new(exec_ring));
-        let pid_map = Arc::new(RwLock::new(pid_map));
-        let forced_map = Arc::new(RwLock::new(forced_map));
         let close_ring = Arc::new(Mutex::new(close_ring));
         let report_ring = Arc::new(Mutex::new(report_ring));
         let ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>> =
