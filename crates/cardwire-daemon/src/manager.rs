@@ -209,7 +209,7 @@ impl DaemonManager {
                 Modes::into(mode_lock.mode())
             }
         };
-        let mode = Modes::try_from(mode_to_apply).map_err(anyhow::Error::msg)?;
+        let mode = Modes::try_from(mode_to_apply)?;
         // On first attempt: don't persist (already persisted).
         // On fallback: persist so the broken mode isn't retried on every boot.
         let save = if mode_arg.is_some() {
