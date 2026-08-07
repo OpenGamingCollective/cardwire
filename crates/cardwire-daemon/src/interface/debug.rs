@@ -1,7 +1,7 @@
 use crate::{
     core::{
         gpu::GpuEnumerator, pci::{self, DbusPciDevice, PciDevice}
-    }, tasks::watch_power_state
+    }, interface::SwitcherooInterface, tasks::watch_power_state
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{info, warn};
@@ -24,6 +24,7 @@ pub struct DebugInterface {
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     pub object_server: Option<zbus::ObjectServer>,
     pub power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<anyhow::Result<()>>>>>,
+    pub switcheroo: SwitcherooInterface,
 }
 impl DebugInterface {
     #[allow(clippy::too_many_arguments)]
@@ -37,6 +38,7 @@ impl DebugInterface {
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
         object_server: Option<zbus::ObjectServer>,
         power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<anyhow::Result<()>>>>>,
+        switcheroo: SwitcherooInterface,
     ) -> anyhow::Result<DebugInterface> {
         Ok(DebugInterface {
             mode_state,
@@ -48,6 +50,7 @@ impl DebugInterface {
             pci_list,
             object_server,
             power_tasks,
+            switcheroo,
         })
     }
 }
@@ -155,6 +158,7 @@ impl DebugInterface {
                 warn!("failed to re-apply mode on hotplug: {e}");
                 return Err(e);
             }
+            self.switcheroo.emit_gpu_list_changed().await;
         }
 
         Ok(())

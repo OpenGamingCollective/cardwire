@@ -82,7 +82,10 @@ async fn main() -> anyhow::Result<()> {
                 }
             } else {
                 let mut map = std::collections::BTreeMap::new();
-                let objects = client.get_managed_objects().await.unwrap_or_default();
+                let objects = match client.get_managed_objects().await {
+                    Ok(objects) => objects,
+                    Err(e) => handle_error(e.into()),
+                };
                 for (path, interfaces) in objects {
                     let path_str = path.as_str();
                     if let Some(id_str) =
@@ -376,7 +379,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn handle_error(err: zbus::Error) {
+fn handle_error(err: zbus::Error) -> ! {
     match err {
         zbus::Error::MethodError(name, description, _) => {
             if let Some(msg) = description {
@@ -397,4 +400,5 @@ fn handle_error(err: zbus::Error) {
         },
         _ => eprintln!("{}", err),
     }
+    std::process::exit(1)
 }

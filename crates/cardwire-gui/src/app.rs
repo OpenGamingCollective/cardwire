@@ -83,7 +83,7 @@ impl AppState {
                     self.error = None;
                 }
                 Err(err) => {
-                    self.gpu_list.clear();
+                    // Keep the previous gpu list on failure, just surface the error
                     self.error = Some(format!("Error fetching GPUs: {}", err));
                 }
             },

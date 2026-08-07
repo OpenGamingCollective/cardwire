@@ -71,12 +71,12 @@
       t.assertIn("17", machine.succeed("cardwire list | wc -l"), "Must be 17 (15 GPUs + 2 headers)")
 
     with subtest("Try to switch to integrated and hybrid"):
-      t.assertIn("Couldn't set mode to Integrated, the mode require exactly 2 GPUs", machine.succeed("cardwire set integrated 2>&1"), "Mode has been switched to integrated")
-      t.assertIn("Couldn't set mode to Hybrid, the mode require exactly 2 GPUs", machine.succeed("cardwire set hybrid 2>&1"), "Mode has been switched to hybrid")
+      t.assertIn("Couldn't set mode to Integrated, the mode requires exactly 2 GPUs", machine.fail("cardwire set integrated 2>&1"), "Mode has been switched to integrated")
+      t.assertIn("Mode has been set to Hybrid", machine.succeed("cardwire set hybrid"), "Mode has been switched to hybrid")
 
     with subtest("Set to manual, and block 14 gpus"):
       machine.succeed("cardwire set manual")
-      t.assertIn("cannot be blocked", machine.succeed("cardwire gpu 0 --block 2>&1"), "Default gpu got blocked")
+      t.assertIn("cannot be blocked", machine.fail("cardwire gpu 0 --block 2>&1"), "Default gpu got blocked")
 
       for x in range(1, 15):
         machine.succeed(f'cardwire gpu {x} --block')

@@ -188,8 +188,8 @@ impl GpuInterface {
                 // now get fd directory
                 let fd_dir: PathBuf = read_dir(&path)
                     .map_err(|e| fdo::Error::IOError(e.to_string()))?
-                    .filter(|r| r.is_ok())
-                    .map(|r| r.unwrap().path())
+                    .flatten()
+                    .map(|r| r.path())
                     .filter(|r| r.file_name() == Some(OsStr::new("fd")))
                     .collect();
                 for entry in read_dir(fd_dir)

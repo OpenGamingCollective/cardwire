@@ -160,7 +160,6 @@ impl CardwireDbus {
             }
             DaemonSettings::BattAutoSwitchMode => {
                 if let Some(mode_to_apply) = mode_opt {
-                    println!("setting mode: {:?}", mode_to_apply as u32);
                     proxy
                         .set_property(&setting.to_string(), mode_to_apply as u32)
                         .await
