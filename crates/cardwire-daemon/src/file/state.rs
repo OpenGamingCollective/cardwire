@@ -50,13 +50,15 @@ impl CardwireModeState {
     pub fn mode(&self) -> Modes {
         self.mode
     }
-    /// Save the new mode into the daemon and to the mode_state.json file
-    pub async fn save_state(&mut self, new_mode: Modes) -> anyhow::Result<()> {
+    /// Update the mode in daemon state, persisting it to mode_state.json only when `save` is true
+    pub async fn save_state(&mut self, new_mode: Modes, save: bool) -> anyhow::Result<()> {
         // Save to daemon state
         self.mode = new_mode;
         // Save the whole state into the json
-        let state_file = serde_json::to_string_pretty(&self)?;
-        tokio::fs::write(format!("{}/mode.json", crate::STATE_PATH), state_file).await?;
+        if save {
+            let state_file = serde_json::to_string_pretty(&self)?;
+            tokio::fs::write(format!("{}/mode.json", crate::STATE_PATH), state_file).await?;
+        }
         Ok(())
     }
 }

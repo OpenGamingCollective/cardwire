@@ -6,7 +6,7 @@ use anyhow::Result;
 use aya::maps::Array as AyaArray;
 use log::{error, info, warn};
 use std::{
-    collections::BTreeMap, process::Stdio, sync::{Arc, OnceLock}
+    collections::BTreeMap, process::Stdio, sync::{Arc, OnceLock, atomic::Ordering}
 };
 use tokio::{
     process::Command, sync::{Mutex, RwLock}, task
@@ -23,8 +23,6 @@ pub struct ModeInterface {
     gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
     config: Arc<ConfigMemory>,
     mode_map: Arc<Mutex<AyaArray<aya::maps::MapData, u8>>>,
-    // Effective mode currently applied to the GPUs
-    effective_mode: Arc<RwLock<Modes>>,
     // Mutex to serialize mode transitions
     transition: Arc<Mutex<()>>,
     // Signal emitter for automatic mode changes, populated once the interface is served
@@ -36,14 +34,12 @@ impl ModeInterface {
         let mut blocker = context.blocker.write().await;
         let mode_map: aya::maps::Array<aya::maps::MapData, u8> = blocker.get_mode_map()?;
         let mode_map = Arc::new(Mutex::new(mode_map));
-        let initial_mode = context.mode_state.read().await.mode();
         Ok(ModeInterface {
             mode_state: context.mode_state.clone(),
             gpu_state: context.gpu_state.clone(),
             gpu_list: context.gpu_list.clone(),
             config: context.config.clone(),
             mode_map,
-            effective_mode: Arc::new(RwLock::new(initial_mode)),
             transition: Arc::new(Mutex::new(())),
             signal_emitter: Arc::new(OnceLock::new()),
         })
@@ -103,116 +99,19 @@ impl ModeInterface {
         }
     }
 
-    /// Return the effective mode currently applied to the GPUs.
-    pub async fn current_mode_value(&self) -> Modes {
-        *self.effective_mode.read().await
-    }
-
-    /// Return the user-requested mode stored in state file.
-    pub async fn requested_mode_value(&self) -> Modes {
-        self.mode_state.read().await.mode()
-    }
-
-    /// Persist a user-requested mode without changing a temporary effective override.
-    pub(crate) async fn save_mode(&self, mode: Modes) {
-        let mut current_mode = self.mode_state.write().await;
-        if let Err(e) = current_mode.save_state(mode).await {
+    /// Apply a mode and optionally persist it to the state file.
+    /// - `None` or `Some(true)`: persist the mode (default)
+    /// - `Some(false)`: apply only (for display override / hotplug recovery)
+    pub async fn internal_set_mode(&self, mode: Modes, save: Option<bool>) -> fdo::Result<()> {
+        let _transition = self.transition.lock().await;
+        self.apply_mode(mode).await?;
+        let mut state = self.mode_state.write().await;
+        if let Err(e) = state.save_state(mode, save.unwrap_or(true)).await {
             warn!("mode couldn't be saved to config: {e}");
         }
-    }
-
-    pub async fn emit_mode_change(&self, changed: bool) -> zbus::Result<()> {
-        if changed && let Some(emitter) = self.signal_emitter.get() {
+        if let Some(emitter) = self.signal_emitter.get() {
             self.mode_changed(emitter).await?;
         }
-        Ok(())
-    }
-
-    /// Resolve the target effective mode and DRM card for a requested mode.
-    pub(crate) async fn detect_display_target(
-        &self,
-        requested: Modes,
-    ) -> fdo::Result<(Modes, Option<u32>)> {
-        crate::tasks::detect_external_display_target(&self.gpu_list, &self.config, requested).await
-    }
-
-    /// Apply an effective mode without persisting it to mode_state.
-    pub async fn effective_set_mode(&self, target: Modes, force: bool) -> fdo::Result<bool> {
-        let _transition = self.transition.lock().await;
-        let previous = *self.effective_mode.read().await;
-        if force || target != previous {
-            self.apply_mode(target).await?;
-            *self.effective_mode.write().await = target;
-        }
-        Ok(target != previous)
-    }
-
-    /// Apply and persist a user-requested mode.
-    pub async fn set_requested_mode(&self, requested: Modes) -> fdo::Result<()> {
-        let _transition = self.transition.lock().await;
-        let (target, _card) = match self.detect_display_target(requested).await {
-            Ok(res) => res,
-            Err(err) => {
-                warn!("failed to read external display topology: {err}");
-                return Err(err);
-            }
-        };
-        let previous = *self.effective_mode.read().await;
-        if target != previous {
-            self.apply_mode(target).await?;
-            *self.effective_mode.write().await = target;
-        }
-        self.save_mode(requested).await;
-        Ok(())
-    }
-
-    /// Apply mode at daemon startup.
-    pub async fn apply_mode_at_startup(&self, requested: Modes, force: bool) -> fdo::Result<()> {
-        let _transition = self.transition.lock().await;
-        let (target, _card) = match self.detect_display_target(requested).await {
-            Ok(target) => target,
-            Err(err) => {
-                warn!("failed to read external display topology at startup: {err}");
-                return Err(err);
-            }
-        };
-        let previous = *self.effective_mode.read().await;
-        if force || target != previous {
-            self.apply_mode(target).await?;
-            *self.effective_mode.write().await = target;
-        }
-        Ok(())
-    }
-
-    /// Rebuild the applied state after a GPU hotplug
-    pub async fn reconcile_after_hotplug(&self) -> fdo::Result<()> {
-        let _transition = self.transition.lock().await;
-        let requested = self.requested_mode_value().await;
-
-        let (target, _card) = match self.detect_display_target(requested).await {
-            Ok(target) => target,
-            Err(err) => {
-                warn!("failed to resolve display target on hotplug, falling back to hybrid: {err}");
-                if let Err(fb) = self.apply_mode(Modes::Hybrid).await {
-                    warn!("failed to fall back to hybrid mode on hotplug: {fb}");
-                    return Err(fb);
-                }
-                *self.effective_mode.write().await = Modes::Hybrid;
-                return Err(err);
-            }
-        };
-
-        if let Err(err) = self.apply_mode(target).await {
-            warn!("failed to re-apply mode on hotplug, falling back to hybrid: {err}");
-            if let Err(fb) = self.apply_mode(Modes::Hybrid).await {
-                warn!("failed to fall back to hybrid mode on hotplug: {fb}");
-                return Err(fb);
-            }
-            *self.effective_mode.write().await = Modes::Hybrid;
-            return Ok(());
-        }
-
-        *self.effective_mode.write().await = target;
         Ok(())
     }
 
@@ -322,10 +221,7 @@ impl ModeInterface {
             // If the auto apply is false, return all gpus to unblocked
             // Else apply the gpu_state but still unblock other gpus
             Modes::Manual => {
-                let config = self
-                    .config
-                    .auto_apply_gpu_state
-                    .load(std::sync::atomic::Ordering::Relaxed);
+                let config = self.config.auto_apply_gpu_state.load(Ordering::Relaxed);
                 let gpu_state = self.gpu_state.read().await;
                 for (id, gpu) in gpu_list.iter().filter(|(_, gpu)| gpu.device.is_available()) {
                     if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && config {
@@ -361,27 +257,15 @@ impl ModeInterface {
 impl ModeInterface {
     /// Set the user-requested GPU mode over D-Bus and persist it to state file.
     #[zbus(property)]
-    pub(crate) async fn set_mode(
-        &self,
-        mode: u32,
-        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
-    ) -> fdo::Result<()> {
+    pub(crate) async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
         let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
-        self.set_requested_mode(mode).await?;
-        self.requested_mode_changed(&emitter).await?;
+        self.internal_set_mode(mode, None).await?;
         Ok(())
     }
 
-    /// Return the effective GPU mode currently applied to hardware and eBPF maps.
+    /// Return the GPU mode currently applied to hardware and eBPF maps.
     #[zbus(property)]
     pub(crate) async fn mode(&self) -> fdo::Result<u32> {
-        Ok(self.current_mode_value().await.into())
-    }
-
-    /// Return the persisted user-requested GPU mode, which may differ from `mode` during an
-    /// external display override.
-    #[zbus(property)]
-    pub(crate) async fn requested_mode(&self) -> fdo::Result<u32> {
-        Ok(self.requested_mode_value().await.into())
+        Ok(u32::from(self.mode_state.read().await.mode()))
     }
 }

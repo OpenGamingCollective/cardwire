@@ -120,3 +120,37 @@ pub fn drm_node_ids(pci_address: &str) -> io::Result<(u32, u32)> {
         ),
     ))
 }
+
+/// Check whether the given DRM card currently has any connected display.
+///
+/// Reads `/sys/class/drm/card{card}-*/status` — returns `true` if any connector
+/// reports `"connected"`, `false` otherwise. Read errors are treated as not
+/// connected (fail-safe).
+pub async fn is_gpu_active(card: u32) -> bool {
+    let prefix = format!("card{card}-");
+    if let Ok(mut entries) = tokio::fs::read_dir("/sys/class/drm").await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let Some(connector) = name.strip_prefix(&prefix) else {
+                continue;
+            };
+            if connector.is_empty() {
+                continue;
+            }
+            if let Ok(status) = tokio::fs::read_to_string(entry.path().join("status")).await
+                && status.trim() == "connected"
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Send a "change" uevent for a DRM card, prompting the display server to
+/// rescan connectors.
+#[expect(dead_code)]
+pub async fn send_drm_uevent(card: u32) -> io::Result<()> {
+    tokio::fs::write(format!("/sys/class/drm/card{card}/uevent"), "change\n").await
+}

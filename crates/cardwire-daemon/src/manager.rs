@@ -210,18 +210,20 @@ impl DaemonManager {
             }
         };
         let mode = Modes::try_from(mode_to_apply).map_err(anyhow::Error::msg)?;
-        // Store the result to return after any fallback mode state has been updated.
+        // On first attempt: don't persist (already persisted).
+        // On fallback: persist so the broken mode isn't retried on every boot.
+        let save = if mode_arg.is_some() {
+            Some(true)
+        } else {
+            Some(false)
+        };
         let res = self
             .mode_interface
-            .apply_mode_at_startup(mode, true)
+            .internal_set_mode(mode, save)
             .await
             .map_err(anyhow::Error::from);
-        // If the configured mode failed, persist the supplied fallback instead of retrying the
-        // failing mode on every daemon start.
-        if mode_arg.is_some() {
-            let mut mode_lock = self.inner.mode_state.write().await;
-            mode_lock.save_state(mode).await?;
-        }
+        // The internal_set_mode above handles persistence based on `save`.
+        // No separate save_state call needed.
         res
     }
     pub fn battery_switch_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
@@ -251,8 +253,9 @@ impl DaemonManager {
         &self,
     ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let mode = self.mode_interface.clone();
+        let gpu_list = Arc::clone(&self.inner.gpu_list);
         async move {
-            let res = tasks::monitor_display_changes(mode).await;
+            let res = tasks::monitor_display_changes(mode, gpu_list).await;
             if let Err(ref e) = res {
                 error!("monitor_display task failed: {}", e);
             }

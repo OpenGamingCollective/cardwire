@@ -10,7 +10,7 @@ use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, DaemonContext, GpuInterface, ModeInterface}
+    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, DaemonContext, GpuInterface, ModeInterface, Modes}
 };
 
 #[derive(Clone)]
@@ -130,10 +130,21 @@ impl DebugInterface {
             drop(power_tasks);
             drop(gpu_interfaces);
 
-            // Rebuild hotplug state atomically with respect to concurrent mode changes.
-            if let Err(e) = self.mode_interface.reconcile_after_hotplug().await {
-                warn!("failed to re-apply mode on hotplug: {e}");
-                return Err(e);
+            // Re-apply the persisted mode against the new GPU list.
+            let requested = self.mode_state.read().await.mode();
+            if let Err(e) = self
+                .mode_interface
+                .internal_set_mode(requested, Some(false))
+                .await
+            {
+                warn!("failed to re-apply mode on hotplug, falling back to hybrid: {e}");
+                if let Err(fb) = self
+                    .mode_interface
+                    .internal_set_mode(Modes::Hybrid, Some(false))
+                    .await
+                {
+                    warn!("failed to fall back to hybrid mode on hotplug: {fb}");
+                }
             }
             self.switcheroo.emit_gpu_list_changed().await;
         }
