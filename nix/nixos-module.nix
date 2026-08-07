@@ -108,12 +108,7 @@ in
           "CAP_DAC_OVERRIDE"
         ];
         SystemCallFilter = [
-          "~@cpu-emulation"
-          "@module"
-          "@obsolete"
-          "@raw-io"
-          "@reboot"
-          "@swap"
+          "~`@cpu-emulation` `@module` `@obsolete` `@raw-io` `@reboot` `@swap`"
         ];
       };
       wantedBy = [ "multi-user.target" ];
