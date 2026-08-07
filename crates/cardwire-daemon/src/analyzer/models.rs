@@ -12,9 +12,7 @@ use zbus::object_server::SignalEmitter;
 
 use crate::{
     analyzer::{
-        dynamic_analysis::{
-            check_env, check_gpu_env, check_steam_environ, get_app_id_wayland_with_retry
-        }, static_analysis::{self, AppMetadata}
+        dynamic_analysis::{check_env, check_gpu_env, get_app_id_wayland_with_retry}, static_analysis::{self, AppMetadata}
     }, file::GpuPolicy, interface::{LogEntry, LoggerInterfaceSignals}
 };
 #[repr(C)]
@@ -285,21 +283,24 @@ impl CardwireAnalyzer {
             return Some((true, PidType::Forced, value));
         }
 
-        if check_steam_environ(&environ) || check_gpu_env(&environ) {
+        if check_gpu_env(&environ) {
             return Some((true, PidType::Allowed, 0));
         }
 
         // Check the database now, we can take our time since if we reached it, the app would've
         // been blocked
-        let lookup_name = comm.to_lowercase();
+        let mut lookup_name = comm.to_lowercase();
+        if let Some(steam_app) = crate::analyzer::dynamic_analysis::get_steam_app_id(&environ) {
+            lookup_name = steam_app;
+        }
         {
             let db = self.db_cache.read().await;
             if let Some(policy) = db.get(&lookup_name) {
                 // For now this only work for the smart mode, will need to find a way to get the GPU
                 // id to make it compatible with manual mode
                 match policy {
-                    GpuPolicy::Allowed => return Some((true, PidType::Allowed, 0)),
                     GpuPolicy::Blocked => return None,
+                    GpuPolicy::Allowed => return Some((true, PidType::Allowed, 0)),
                     // TODO: hardcoded gpu id 1, the schema has no gpu_id column so this can't be
                     // correct for systems where the dGPU isn't enumerated as id 1
                     GpuPolicy::Forced => return Some((true, PidType::Forced, 1)),
@@ -319,7 +320,7 @@ impl CardwireAnalyzer {
                         self.db_cache
                             .write()
                             .await
-                            .insert(lookup_name.clone(), GpuPolicy::Allowed);
+                            .insert(lookup_name.clone(), GpuPolicy::Blocked);
                         info!(
                             "Discovered a new app: {}, adding to the database",
                             lookup_name
@@ -331,7 +332,24 @@ impl CardwireAnalyzer {
                 }
             }
         }
+        // Fallback for steam games
+        if lookup_name.starts_with("steam_app_") {
+            let app_id = lookup_name.replace("steam_app_", "");
+            let meta = AppMetadata {
+                display_name: format!("Steam Game {}", app_id),
+                desktop_file_id: None,
+                icon_name: Some(format!("steam_icon_{}", app_id)),
+            };
 
+            let _ = self.db_tx.send((lookup_name.clone(), meta)).await;
+            self.db_cache
+                .write()
+                .await
+                .insert(lookup_name.clone(), GpuPolicy::Blocked);
+
+            info!("Discovered Steam Game {}, blocked by default.", app_id);
+            return Some((false, PidType::Allowed, 0));
+        }
         None
     }
 

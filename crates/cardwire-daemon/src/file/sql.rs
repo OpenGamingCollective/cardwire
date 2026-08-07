@@ -8,17 +8,17 @@ use tokio::sync::{RwLock, mpsc};
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GpuPolicy {
-    Allowed = 0,
-    Blocked = 1,
+    Blocked = 0,
+    Allowed = 1,
     Forced = 2,
 }
 impl GpuPolicy {
     pub fn from_i32(val: i32) -> Self {
         match val {
-            0 => GpuPolicy::Allowed,
-            1 => GpuPolicy::Blocked,
+            0 => GpuPolicy::Blocked,
+            1 => GpuPolicy::Allowed,
             2 => GpuPolicy::Forced,
-            _ => GpuPolicy::Allowed,
+            _ => GpuPolicy::Blocked,
         }
     }
 }

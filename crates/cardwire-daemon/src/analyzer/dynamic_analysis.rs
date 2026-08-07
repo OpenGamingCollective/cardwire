@@ -30,10 +30,18 @@ impl Desktop {
     }
 }
 
-/// Read the proc `environ` file to find the `SteamAppId=` string
-/// used to identify both native and proton games
-pub fn check_steam_environ(environ: &[u8]) -> bool {
-    environ.windows(11).any(|window| window == b"SteamAppId=")
+pub fn get_steam_app_id(environ: &[u8]) -> Option<String> {
+    let prefix = b"SteamAppId=";
+    for var in environ.split(|&b| b == 0) {
+        if let Some(value_bytes) = var.strip_prefix(prefix)
+            && let Ok(id_str) = std::str::from_utf8(value_bytes)
+            && id_str != "0"
+            && id_str != "769"
+        {
+            return Some(format!("steam_app_{}", id_str));
+        }
+    }
+    None
 }
 
 /// Find the process name inside the flatpak cmdline, and match if it's inside our xdg_list
@@ -183,33 +191,6 @@ fn find_niri_socket() -> Option<PathBuf> {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-
-    /*
-        check_steam_environ
-    */
-    #[test]
-    fn test_check_steam_environ_detects_steam_app_id() {
-        let environ = b"HOME=/home/user\0SteamAppId=12345\0DISPLAY=:0";
-        assert!(check_steam_environ(environ));
-    }
-
-    #[test]
-    fn test_check_steam_environ_returns_false_when_absent() {
-        let environ = b"HOME=/home/user\0DISPLAY=:0\0TERM=xterm";
-        assert!(!check_steam_environ(environ));
-    }
-
-    #[test]
-    fn test_check_steam_environ_returns_false_for_empty_input() {
-        assert!(!check_steam_environ(b""));
-    }
-
-    #[test]
-    fn test_check_steam_environ_detects_at_start_of_environ() {
-        let environ = b"SteamAppId=999";
-        assert!(check_steam_environ(environ));
-    }
-
     /*
         check_for_flatpak_run
     */

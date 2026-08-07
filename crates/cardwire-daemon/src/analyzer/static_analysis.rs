@@ -111,6 +111,14 @@ pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, AppMetadata>> {
                                 continue;
                             }
 
+                            // Get the steam ID
+                            if part.starts_with("steam://rungameid/") {
+                                let app_id = part
+                                    .trim_start_matches("steam://rungameid/")
+                                    .trim_matches('/');
+                                app_list.insert(format!("steam_app_{}", app_id), meta.clone());
+                                break;
+                            }
                             let binary = part.split('/').next_back().unwrap_or(part);
                             if ["flatpak", "steam", "sh", "bash", "bwrap"].contains(&binary) {
                                 break;
