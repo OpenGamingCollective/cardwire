@@ -44,6 +44,7 @@ pub struct CardwireAnalyzer {
     ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>>,
     xdg_list: Arc<RwLock<HashMap<String, AppMetadata>>>,
     db_cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
+    pending_discoveries: Arc<Mutex<HashSet<String>>>,
     db_tx: mpsc::Sender<(String, AppMetadata, oneshot::Sender<bool>)>,
     report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
     reported_pids: Arc<RwLock<HashSet<u32>>>,
@@ -90,6 +91,7 @@ impl CardwireAnalyzer {
             ebpf_logger,
             xdg_list,
             db_cache,
+            pending_discoveries: Arc::new(Mutex::new(HashSet::new())),
             db_tx,
             report_vec,
             reported_pids: Arc::new(RwLock::new(HashSet::new())),
@@ -326,6 +328,15 @@ impl CardwireAnalyzer {
 
     /// Persist a newly discovered app in the database and mirror it in the cache
     async fn discover_app(&self, lookup_name: &str, meta: AppMetadata) {
+        // Allow only one persistence request per unknown app at a time, skip
+        // duplicate discoveries while a request is still pending
+        {
+            let mut pending = self.pending_discoveries.lock().await;
+            if !pending.insert(lookup_name.to_string()) {
+                return;
+            }
+        }
+
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         let res = self
             .db_tx
@@ -355,6 +366,9 @@ impl CardwireAnalyzer {
                 error!("Couldn't send new app to DB rw: {}", err)
             }
         }
+
+        // Remove the pending entry on every exit path
+        self.pending_discoveries.lock().await.remove(lookup_name);
     }
 }
 
