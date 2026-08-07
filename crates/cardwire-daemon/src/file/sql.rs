@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{analyzer::AppMetadata, file::state::STATE_PATH};
 use log::error;
 use rusqlite::{Connection, Result};
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{RwLock, mpsc, oneshot};
 use zbus::zvariant;
 
 #[repr(i32)]
@@ -51,7 +51,7 @@ pub struct DbusAppMetadata {
 #[derive(Debug, Clone)]
 pub struct CardwireDatabase {
     pub cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
-    pub tx: mpsc::Sender<(String, AppMetadata)>,
+    pub tx: mpsc::Sender<(String, AppMetadata, oneshot::Sender<bool>)>,
 }
 impl CardwireDatabase {
     pub fn build() -> Result<Self> {
@@ -82,11 +82,11 @@ impl CardwireDatabase {
 
         let cache = Arc::new(RwLock::new(cache_map));
 
-        let (tx, mut rx) = mpsc::channel::<(String, AppMetadata)>(100);
+        let (tx, mut rx) = mpsc::channel::<(String, AppMetadata, oneshot::Sender<bool>)>(100);
 
         tokio::task::spawn_blocking(move || {
             let conn = conn;
-            while let Some((binary_name, meta)) = rx.blocking_recv() {
+            while let Some((binary_name, meta, reply)) = rx.blocking_recv() {
                 let res = conn.execute(
                     "INSERT INTO app_policies (binary_name, display_name, desktop_file_id, icon_name, policy)
                      VALUES (?1, ?2, ?3, ?4, 0)
@@ -98,8 +98,14 @@ impl CardwireDatabase {
                         meta.icon_name
                     ],
                 );
-                if let Err(err) = res {
-                    error!("failed to write {} to cardwire.db: {}", binary_name, err);
+                match res {
+                    Ok(_) => {
+                        let _ = reply.send(true);
+                    }
+                    Err(err) => {
+                        error!("failed to write {} to cardwire.db: {}", binary_name, err);
+                        let _ = reply.send(false);
+                    }
                 }
             }
         });

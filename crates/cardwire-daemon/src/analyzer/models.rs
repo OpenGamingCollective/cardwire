@@ -6,7 +6,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque}, fs, ptr, sync::Arc, time::SystemTime
 };
 use tokio::{
-    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore, mpsc}, task, time::Instant
+    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore, mpsc, oneshot}, task, time::Instant
 };
 use zbus::object_server::SignalEmitter;
 
@@ -46,7 +46,7 @@ pub struct CardwireAnalyzer {
     ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>>,
     xdg_list: Arc<RwLock<HashMap<String, AppMetadata>>>,
     db_cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
-    db_tx: mpsc::Sender<(String, AppMetadata)>,
+    db_tx: mpsc::Sender<(String, AppMetadata, oneshot::Sender<bool>)>,
     report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
     reported_pids: Arc<RwLock<HashSet<u32>>>,
     report_semaphore: Arc<Semaphore>,
@@ -64,7 +64,7 @@ impl CardwireAnalyzer {
         report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
         signal: Option<SignalEmitter<'static>>,
         db_cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
-        db_tx: mpsc::Sender<(String, AppMetadata)>,
+        db_tx: mpsc::Sender<(String, AppMetadata, oneshot::Sender<bool>)>,
     ) -> anyhow::Result<CardwireAnalyzer> {
         let mut blocker = blocker.write().await;
         let exec_ring = blocker.get_exec_ring()?;
@@ -335,19 +335,31 @@ impl CardwireAnalyzer {
 
     /// Persist a newly discovered app in the database and mirror it in the cache
     async fn discover_app(&self, lookup_name: &str, meta: AppMetadata) {
-        let res = self.db_tx.send((lookup_name.to_string(), meta)).await;
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        let res = self
+            .db_tx
+            .send((lookup_name.to_string(), meta, reply_tx))
+            .await;
         match res {
-            Ok(_) => {
-                // Mirror in the cache
-                self.db_cache
-                    .write()
-                    .await
-                    .insert(lookup_name.to_string(), GpuPolicy::Blocked);
-                info!(
-                    "Discovered a new app: {}, adding to the database",
-                    lookup_name
-                );
-            }
+            Ok(_) => match reply_rx.await {
+                Ok(true) => {
+                    // Mirror in the cache
+                    self.db_cache
+                        .write()
+                        .await
+                        .insert(lookup_name.to_string(), GpuPolicy::Blocked);
+                    info!(
+                        "Discovered a new app: {}, adding to the database",
+                        lookup_name
+                    );
+                }
+                Ok(false) => {
+                    error!("Couldn't write {} to the database", lookup_name)
+                }
+                Err(err) => {
+                    error!("DB worker dropped the reply for {}: {}", lookup_name, err)
+                }
+            },
             Err(err) => {
                 error!("Couldn't send new app to DB rw: {}", err)
             }
