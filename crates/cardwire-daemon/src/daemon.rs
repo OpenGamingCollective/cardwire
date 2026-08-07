@@ -73,8 +73,10 @@ async fn main() -> Result<()> {
             .await
         {
             Ok(switcheroo_ref) => {
-                daemon.switcheroo_interface.signal_emitter =
-                    Some(switcheroo_ref.signal_emitter().to_owned());
+                daemon
+                    .switcheroo_interface
+                    .signal_emitter
+                    .get_or_init(|| switcheroo_ref.signal_emitter().to_owned());
             }
             Err(e) => {
                 log::warn!(

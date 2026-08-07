@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap}, sync::Arc
+    collections::{BTreeMap, HashMap}, sync::{Arc, OnceLock}
 };
 
 use log::warn;
@@ -13,20 +13,20 @@ use crate::{core::gpu::GpuVendor, interface::GpuInterface};
 #[derive(Clone)]
 pub struct SwitcherooInterface {
     pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
-    pub signal_emitter: Option<SignalEmitter<'static>>,
+    pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
 }
 impl SwitcherooInterface {
     pub fn build(gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>) -> Self {
         Self {
             gpu_list,
-            signal_emitter: None,
+            signal_emitter: Arc::new(OnceLock::new()),
         }
     }
 
     /// Emit a PropertiesChanged signal for the three read-only properties, mirroring
     /// upstream switcheroo-control's change notification on GPU list updates
     pub async fn emit_gpu_list_changed(&self) {
-        let Some(emitter) = &self.signal_emitter else {
+        let Some(emitter) = &self.signal_emitter.get() else {
             return;
         };
 
