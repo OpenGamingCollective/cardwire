@@ -1,5 +1,4 @@
 mod battery_switch;
-mod fdo_list;
 mod monitor_display;
 mod monitor_udev;
 mod watch_power_state;

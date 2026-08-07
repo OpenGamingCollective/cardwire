@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs, io, time::{SystemTime, UNIX_EPOCH}
 };
-const CONFIG_PATH: &str = "/etc/cardwire";
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(default)]
@@ -52,7 +51,7 @@ impl CardwireConfig {
     }
     /// Read TOML config file and return it's settings as a struct
     pub fn build() -> anyhow::Result<CardwireConfig> {
-        let config_file = format!("{}/cardwire.toml", CONFIG_PATH);
+        let config_file = format!("{}/cardwire.toml", crate::CONFIG_PATH);
         // create the config if it doesnt exist
         if !(fs::exists(&config_file)?) {
             Self::create_default_config().context("Could not create default dir for config")?;
@@ -66,7 +65,7 @@ impl CardwireConfig {
     }
     /// Remove leftover cardwire.toml.*.tmp files from a save interrupted by a crash
     fn cleanup_stale_tmp_files() {
-        let Ok(entries) = fs::read_dir(CONFIG_PATH) else {
+        let Ok(entries) = fs::read_dir(crate::CONFIG_PATH) else {
             return;
         };
         for entry in entries.flatten() {
@@ -99,12 +98,12 @@ impl CardwireConfig {
     /// directory (exclusive create so concurrent saves never share a file), fsync, then rename
     /// over the target so a crash can't truncate the config
     pub async fn save_config(&self) -> io::Result<()> {
-        let path = format!("{}/cardwire.toml", CONFIG_PATH);
+        let path = format!("{}/cardwire.toml", crate::CONFIG_PATH);
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(io::Error::other)?
             .as_nanos();
-        let tmp_path = format!("{}/cardwire.toml.{}.tmp", CONFIG_PATH, unique);
+        let tmp_path = format!("{}/cardwire.toml.{}.tmp", crate::CONFIG_PATH, unique);
         let config_toml = match toml::to_string_pretty(&self) {
             Ok(config_toml) => config_toml,
             Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidData, e)),
