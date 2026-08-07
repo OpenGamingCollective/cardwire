@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_check_env_returns_none_for_unexpected_value() {
-        // "CARDWIRE_ALLOW=x" — value at index 15 is 'x', not '1'
+        // "CARDWIRE_ALLOW=x" value at index 15 is 'x', not '1'
         let environ = b"CARDWIRE_ALLOW=x";
         assert_eq!(check_env("CARDWIRE_ALLOW", environ), None);
     }

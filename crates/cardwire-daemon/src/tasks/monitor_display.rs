@@ -53,7 +53,10 @@ async fn reconcile_gpu(
     mode: &ModeInterface,
     gpu_list: &Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
 ) {
-    let active = is_gpu_active(card).await;
+    let Some(active) = is_gpu_active(card).await else {
+        warn!("failed to probe display state for card{card}; skipping reconcile");
+        return;
+    };
     let Some(current_mode) = mode
         .mode()
         .await

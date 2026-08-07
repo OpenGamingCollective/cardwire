@@ -190,7 +190,6 @@ mod tests {
 
     #[test]
     fn test_cardwire_config_toml_parse_with_missing_fields_uses_defaults() {
-        // Only specify one field — serde(default) should fill the rest
         let toml_str = "auto_apply_gpu_state = false\n";
         let parsed: CardwireConfig = toml::from_str(toml_str).unwrap();
         assert!(!parsed.auto_apply_gpu_state());
