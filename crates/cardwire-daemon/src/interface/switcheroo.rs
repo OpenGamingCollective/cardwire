@@ -12,11 +12,11 @@ use crate::{core::gpu::GpuVendor, interface::GpuInterface};
 
 #[derive(Clone)]
 pub struct SwitcherooInterface {
-    pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
+    pub gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
     pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
 }
 impl SwitcherooInterface {
-    pub fn build(gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>) -> Self {
+    pub fn build(gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>) -> Self {
         Self {
             gpu_list,
             signal_emitter: Arc::new(OnceLock::new()),
@@ -65,24 +65,24 @@ impl SwitcherooInterface {
     }
 
     /// true if exactly two GPUs are available, see has_dual_gpu()
-    fn has_dual_gpu_locked(gpu_list: &BTreeMap<usize, GpuInterface>) -> bool {
+    fn has_dual_gpu_locked(gpu_list: &BTreeMap<usize, Arc<GpuInterface>>) -> bool {
         Self::num_gpus_locked(gpu_list) == 2
     }
 
     /// number of available GPUs, see num_gpus()
-    fn num_gpus_locked(gpu_list: &BTreeMap<usize, GpuInterface>) -> u32 {
+    fn num_gpus_locked(gpu_list: &BTreeMap<usize, Arc<GpuInterface>>) -> u32 {
         gpu_list
             .values()
             .filter(|gpu| gpu.device.is_available())
             .count() as u32
     }
 
-    /// Build the GPUs property payload from an already-locked gpu list, see gpus()
+    /// Build the GPUs property payload from a gpu list, see gpus()
     fn gpus_locked(
-        gpu_list: &BTreeMap<usize, GpuInterface>,
+        gpu_list: &BTreeMap<usize, Arc<GpuInterface>>,
     ) -> Vec<HashMap<&'static str, OwnedValue>> {
         let mut vec: Vec<HashMap<&str, OwnedValue>> = Vec::new();
-        let available_gpus: Vec<&GpuInterface> = gpu_list
+        let available_gpus: Vec<&Arc<GpuInterface>> = gpu_list
             .values()
             .filter(|gpu| gpu.device.is_available())
             .collect();

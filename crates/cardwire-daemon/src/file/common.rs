@@ -3,22 +3,19 @@
 use crate::file::{CardwireConfig, CardwireGpuUnit, CardwireModeState};
 use anyhow::{Context, Ok};
 use std::{collections::BTreeMap, fs, io};
-const CONFIG_PATH: &str = "/etc/cardwire";
-const STATE_PATH: &str = "/var/lib/cardwire";
 
 #[allow(dead_code)]
 pub enum FileKind {
     Config,
     GpuState,
     ModeState,
-    PciState,
 }
 
 /// Create all folders cardwire need
 pub fn create_default_folder(kind: FileKind) -> anyhow::Result<()> {
     let directory = match kind {
-        FileKind::Config => CONFIG_PATH,
-        _ => STATE_PATH,
+        FileKind::Config => crate::CONFIG_PATH,
+        _ => crate::STATE_PATH,
     };
     // fs error that should make the daemon exit
     if let Err(e) = fs::create_dir_all(directory) {
@@ -38,10 +35,12 @@ pub fn create_default_file(kind: FileKind) -> anyhow::Result<()> {
             create_default_folder(FileKind::Config)
                 .context("could not create default folder for cardwire.toml")?;
             // Default config for cardwire
-            // TODO: Move to default trait?
             let default_config = toml::to_string_pretty(&CardwireConfig::default())?;
             // write
-            fs::write(format!("{}/cardwire.toml", CONFIG_PATH), default_config)
+            fs::write(
+                format!("{}/cardwire.toml", crate::CONFIG_PATH),
+                default_config,
+            )
         }
         FileKind::GpuState => {
             create_default_folder(FileKind::GpuState)
@@ -51,25 +50,22 @@ pub fn create_default_file(kind: FileKind) -> anyhow::Result<()> {
             gpu_hash.insert("Null".to_string(), CardwireGpuUnit::default());
             let default_gpu_state = serde_json::to_string_pretty(&gpu_hash)?;
             // write
-            fs::write(format!("{}/gpu_state.json", STATE_PATH), default_gpu_state)
+            fs::write(
+                format!("{}/gpu_state.json", crate::STATE_PATH),
+                default_gpu_state,
+            )
         }
         FileKind::ModeState => {
             create_default_folder(FileKind::ModeState)
                 .context("could not create default folder for mode.json")?;
             // Default mode for cardwire
-            // TODO: Move to default trait?
             let default_state = CardwireModeState::default();
             let default_mode_state = serde_json::to_string_pretty(&default_state)?;
             // write
-            fs::write(format!("{}/mode.json", STATE_PATH), default_mode_state)
-        }
-        FileKind::PciState => {
-            create_default_folder(FileKind::PciState)
-                .context("could not create default folder for pci_state.json")?;
-            // Default pci_state for cardwire, not implemented yet
-            // TODO: Move to default trait?
-            let default_state = r#"{}"#;
-            fs::write(format!("{}/pci_state.json", STATE_PATH), default_state)
+            fs::write(
+                format!("{}/mode.json", crate::STATE_PATH),
+                default_mode_state,
+            )
         }
     };
     // Handle the fs error here

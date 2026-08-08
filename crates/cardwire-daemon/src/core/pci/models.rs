@@ -85,6 +85,26 @@ pub struct DbusPciDevice {
     pub child_pci: String,
 }
 
+impl From<&PciDevice> for DbusPciDevice {
+    fn from(pci: &PciDevice) -> Self {
+        DbusPciDevice {
+            iommu_group: if let Some(iommu) = pci.iommu_group() {
+                iommu.to_string()
+            } else {
+                String::new()
+            },
+            vendor_id: pci.vendor_id().clone().unwrap_or_default(),
+            device_id: pci.device_id().clone().unwrap_or_default(),
+            vendor_name: pci.vendor_name().clone().unwrap_or_default(),
+            device_name: pci.device_name().clone().unwrap_or_default(),
+            driver: pci.driver().clone().unwrap_or_default(),
+            class: pci.class().clone().unwrap_or_default(),
+            parent_pci: pci.parent_pci().clone().unwrap_or_default(),
+            child_pci: pci.child_pci().clone().unwrap_or_default(),
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub struct IommuGroup {
     pub id: usize,

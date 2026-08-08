@@ -7,7 +7,7 @@ use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 
 use crate::core::{
     gpu::{
-        GpuDevice, GpuVendor, check_default_drm_class, egl::is_discrete_egl, helpers::{amd_get_device_model, drm_node_ids, nvidia_get_device_model, nvidia_get_minor}, vulkan::vlk_enumerate
+        GpuDevice, GpuVendor, check_default_drm_class, device_info::{amd_get_device_model, nvidia_get_device_model, nvidia_get_minor}, display::drm_node_ids, egl::is_discrete_egl, vulkan::vlk_enumerate
     }, pci::PciDevice
 };
 

@@ -3,7 +3,7 @@ use aya_log::EbpfLogger;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{Log, debug, error, info, warn};
 use std::{
-    collections::{HashMap, HashSet, VecDeque}, fs, ptr, sync::Arc, time::SystemTime
+    collections::{HashMap, HashSet, VecDeque}, fs, ptr, sync::{Arc, OnceLock}, time::SystemTime
 };
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore, mpsc, oneshot}, task, time::Instant
@@ -49,7 +49,7 @@ pub struct CardwireAnalyzer {
     report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
     reported_pids: Arc<RwLock<HashSet<u32>>>,
     report_semaphore: Arc<Semaphore>,
-    signal: Option<SignalEmitter<'static>>,
+    signal: Arc<OnceLock<SignalEmitter<'static>>>,
 }
 
 // Bound the number of concurrent report tasks
@@ -61,7 +61,7 @@ impl CardwireAnalyzer {
     pub async fn build(
         blocker: Arc<RwLock<EbpfBlocker>>,
         report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
-        signal: Option<SignalEmitter<'static>>,
+        signal: Arc<OnceLock<SignalEmitter<'static>>>,
         db_cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
         db_tx: mpsc::Sender<(String, AppMetadata, oneshot::Sender<bool>)>,
     ) -> anyhow::Result<CardwireAnalyzer> {
@@ -375,7 +375,7 @@ impl CardwireAnalyzer {
 /// Record a blocked process in the report history and notify listeners
 async fn report_blocked(
     report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
-    signal: Option<SignalEmitter<'static>>,
+    signal: Arc<OnceLock<SignalEmitter<'static>>>,
     pid: u32,
     gpu_id: u32,
     name: String,
@@ -406,8 +406,8 @@ async fn report_blocked(
             wayland_app_id, pid, gpu_id
         );
     }
-    if let Some(signal) = signal
-        && let Err(e) = LoggerInterfaceSignals::process_blocked_changed(&signal, log_entry).await
+    if let Some(emitter) = signal.get()
+        && let Err(e) = LoggerInterfaceSignals::process_blocked_changed(emitter, log_entry).await
     {
         error!("failed to emit process_blocked_changed: {}", e);
     }

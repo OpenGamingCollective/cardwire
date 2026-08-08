@@ -3,16 +3,23 @@ mod analyzer;
 mod core;
 mod file;
 mod interface;
-mod models;
+mod manager;
 mod tasks;
+pub mod types;
 
-use crate::{models::DaemonManager, tasks::watch_power_state};
+use crate::{manager::DaemonManager, tasks::watch_power_state};
 use anyhow::Result;
 use env_logger::Env;
 use log::info;
-use std::future::pending;
+use std::{future::pending, sync::Arc};
 use tokio::task;
 use zbus::connection;
+
+/// Cardwire configuration directory.
+pub const CONFIG_PATH: &str = "/etc/cardwire";
+/// Cardwire state directory.
+pub const STATE_PATH: &str = "/var/lib/cardwire";
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // log
@@ -91,14 +98,27 @@ async fn main() -> Result<()> {
     let object_server: &zbus::ObjectServer = conn.object_server();
     spawn_dbus_api(object_server, &mut daemon).await?;
     // Spawn background tasks
-    // Automatic transitions happen outside a D-Bus call, so the monitor needs this reference to
-    // emit Mode property changes to clients.
-    let mode_interface = object_server
+    // Give the Mode interface its signal emitter so automatic transitions (which bypass the
+    // D-Bus property setter) can notify clients.
+    match object_server
         .interface::<_, crate::interface::ModeInterface>("/org/opengamingcollective/cardwire")
-        .await?;
+        .await
+    {
+        Ok(mode_ref) => {
+            daemon
+                .mode_interface
+                .signal_emitter
+                .get_or_init(|| mode_ref.signal_emitter().to_owned());
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to get the Mode interface ({e}); mode change notifications will not be emitted"
+            );
+        }
+    }
     task::spawn(daemon.battery_switch_future());
     task::spawn(daemon.monitor_udev_future());
-    task::spawn(daemon.monitor_display_future(mode_interface));
+    task::spawn(daemon.monitor_display_future());
     task::spawn(daemon.run_analyzer());
     info!("Daemon started succesfully");
     pending::<()>().await;
@@ -111,7 +131,7 @@ async fn spawn_dbus_api(
 ) -> anyhow::Result<()> {
     let path = "/org/opengamingcollective/cardwire";
 
-    let gpu_interfaces = daemon.gpu_interfaces.read().await;
+    let gpu_interfaces = daemon.inner.gpu_list.read().await;
     // cardwire.Mode
     object_server
         .at(path, daemon.mode_interface.clone())
@@ -125,12 +145,12 @@ async fn spawn_dbus_api(
     for (id, gpu_interface) in gpu_interfaces.iter() {
         let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
         object_server
-            .at(path.clone(), gpu_interface.clone())
+            .at(path.clone(), gpu_interface.as_ref().clone())
             .await?;
         // spawn power state watcher only for available GPUs
         if gpu_interface.device.is_available() {
             let handle = task::spawn(watch_power_state(
-                gpu_interface.clone(),
+                Arc::clone(gpu_interface),
                 object_server.interface(path).await?,
             ));
             power_tasks.insert(*id, handle);
@@ -140,10 +160,22 @@ async fn spawn_dbus_api(
     object_server
         .at(path, daemon.logger_interface.clone())
         .await?;
-    let logger_ref = object_server
+    match object_server
         .interface::<_, crate::interface::LoggerInterface>(path)
-        .await?;
-    daemon.logger_signal = Some(logger_ref.signal_emitter().clone());
+        .await
+    {
+        Ok(logger_ref) => {
+            daemon
+                .logger_interface
+                .signal_emitter
+                .get_or_init(|| logger_ref.signal_emitter().to_owned());
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to get the Logger interface ({e}); logger notifications will not be emitted"
+            );
+        }
+    }
 
     // Cardwire Smart Policy
     object_server

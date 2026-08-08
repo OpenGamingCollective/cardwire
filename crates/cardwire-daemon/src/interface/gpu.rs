@@ -1,12 +1,12 @@
 //! DBUS Interface for single gpu interaction
 
 use std::{
-    collections::{BTreeMap, HashMap}, ffi::OsStr, fs::{self, read_dir}, path::{Path, PathBuf}, sync::Arc
+    collections::{BTreeMap, HashMap}, fs, sync::Arc
 };
 
 use crate::{
     core::{
-        gpu::{DbusGpuDevice, GpuDevice, GpuVendor, external_display_connected}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice
+        gpu::{DbusGpuDevice, GpuDevice, is_gpu_active}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
@@ -28,7 +28,7 @@ impl<T, E: std::fmt::Display> FdoResultExt<T> for Result<T, E> {
 #[derive(Clone)]
 pub struct GpuInterface {
     pub id: u32,
-    pub device: GpuDevice,
+    pub device: Arc<GpuDevice>,
     blocker: Arc<RwLock<EbpfBlocker>>,
     pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
@@ -46,7 +46,7 @@ impl GpuInterface {
     ) -> anyhow::Result<GpuInterface> {
         Ok(Self {
             id,
-            device,
+            device: Arc::new(device),
             blocker,
             pci_list,
             gpu_state,
@@ -57,7 +57,7 @@ impl GpuInterface {
 
 impl GpuInterface {
     /// block the gpu, value = gpu key
-    pub async fn block_gpu(&mut self, value: u32) -> fdo::Result<()> {
+    pub async fn block_gpu(&self, value: u32) -> fdo::Result<()> {
         let (render, card, pci_address, pci_parent, nvidia_minor, pci_list) = {
             let pci_list_guard = self.pci_list.read().await;
 
@@ -95,7 +95,7 @@ impl GpuInterface {
     }
 
     /// unblock the gpu
-    pub async fn unblock_gpu(&mut self) -> fdo::Result<()> {
+    pub async fn unblock_gpu(&self) -> fdo::Result<()> {
         let (render, card, pci_address, pci_parent, nvidia_minor, pci_list) = {
             let pci_list_guard = self.pci_list.read().await;
 
@@ -163,58 +163,6 @@ impl GpuInterface {
 
         Ok(card && render && pci && nvidia)
     }
-    /// read fd link to find which apps opened the gpu
-    async fn lsof_read(&self, s: &str) -> fdo::Result<Vec<String>> {
-        let proc_path = Path::new("/proc");
-        let mut proc_found: Vec<String> = Vec::new();
-        // If proc path doesn't exist, exit
-        if !proc_path.exists() || !proc_path.is_dir() {
-            return Err(fdo::Error::Failed("couldn't find /proc path".to_string()));
-        }
-        // read /proc
-        for entry in read_dir(proc_path)
-            .map_err(|e| fdo::Error::IOError(e.to_string()))?
-            .flatten()
-        {
-            // Check if folder name is a numerical, if not skip
-            if let Ok(string) = entry.file_name().into_string()
-                && string.parse::<u32>().is_err()
-            {
-                continue;
-            }
-            let path = entry.path();
-            // now read eg: /proc/1
-            if path.is_dir() {
-                // now get fd directory
-                let fd_dir: PathBuf = read_dir(&path)
-                    .map_err(|e| fdo::Error::IOError(e.to_string()))?
-                    .flatten()
-                    .map(|r| r.path())
-                    .filter(|r| r.file_name() == Some(OsStr::new("fd")))
-                    .collect();
-                for entry in read_dir(fd_dir)
-                    .map_err(|e| fdo::Error::IOError(e.to_string()))?
-                    .flatten()
-                {
-                    if let Ok(link) = entry.path().read_link()
-                        && let Some(file) = link.to_str()
-                    {
-                        let file = file.to_string();
-                        if file.contains(s) {
-                            // Found the file, now get process name
-                            let comm_read = fs::read_to_string(path.join("comm"));
-                            let mut process_name: String = String::new();
-                            if let Ok(comm) = comm_read {
-                                process_name = comm.trim_ascii_end().to_string()
-                            }
-                            proc_found.push(process_name);
-                        }
-                    }
-                }
-            }
-        }
-        Ok(proc_found)
-    }
 }
 
 #[interface(name = "org.opengamingcollective.cardwire.Gpu")]
@@ -228,6 +176,12 @@ impl GpuInterface {
             ));
         }
         drop(mode);
+        if !self.device.is_available() {
+            return Err(fdo::Error::AccessDenied(format!(
+                "GPU {} is not available and cannot be blocked",
+                self.device.name()
+            )));
+        }
         if block {
             // Don't block if default
             if self.device.is_default() {
@@ -236,28 +190,20 @@ impl GpuInterface {
                     self.device.name()
                 )));
             }
-            if !self.device.is_available() {
-                return Err(fdo::Error::AccessDenied(format!(
-                    "GPU {} is not available and cannot be blocked",
-                    self.device.name()
-                )));
-            }
-            // Refuse to block a GPU that is currently driving a connected display, the display
-            // would go black. On read errors, fail safely instead of blocking on incomplete data.
-            match external_display_connected(*self.device.card()) {
-                Ok(true) => {
+            match is_gpu_active(*self.device.card()).await {
+                Some(true) => {
                     return Err(fdo::Error::AccessDenied(format!(
-                        "GPU {} is driving a connected display and cannot be blocked",
+                        "GPU {} is active (monitor IN) and cannot be blocked",
                         self.device.name()
                     )));
                 }
-                Err(err) => {
-                    return Err(fdo::Error::AccessDenied(format!(
-                        "could not verify the display state of GPU {}, refusing to block: {err}",
+                None => {
+                    return Err(fdo::Error::Failed(format!(
+                        "could not probe display state of GPU {}; refusing to block",
                         self.device.name()
                     )));
                 }
-                Ok(false) => {}
+                Some(false) => {}
             }
             // Now block
             self.block_gpu(self.id).await?;
@@ -285,22 +231,32 @@ impl GpuInterface {
     pub async fn block(&self) -> fdo::Result<bool> {
         self.gpu_blocked().await
     }
+
+    /// perform a lsof on the GPU nodes
     pub async fn lsof(&self) -> fdo::Result<HashMap<String, Vec<String>>> {
         let card_path = format!("/dev/dri/card{}", self.device.card());
         let render_path = format!("/dev/dri/renderD{}", self.device.render());
         let mut proc_map: HashMap<String, Vec<String>> = HashMap::new();
 
+        async fn read_lsof(path: String) -> fdo::Result<Vec<String>> {
+            tokio::task::spawn_blocking(move || procfs::lsof_read(&path))
+                .await
+                .map_err(|e| fdo::Error::Failed(e.to_string()))?
+                .map_err(|e| fdo::Error::Failed(e.to_string()))
+        }
+
         let (card, render) =
-            tokio::try_join!(self.lsof_read(&card_path), self.lsof_read(&render_path))?;
+            tokio::try_join!(read_lsof(card_path.clone()), read_lsof(render_path.clone()),)?;
         proc_map.insert(card_path, card);
         proc_map.insert(render_path, render);
 
         if let Some(minor) = self.device.nvidia_minor() {
             let nvidia_path = format!("/dev/nvidia{}", minor);
             let nvidiactl_path = "/dev/nvidiactl".to_string();
+
             let (nvidia, nvidiactl) = tokio::try_join!(
-                self.lsof_read(&nvidia_path),
-                self.lsof_read(&nvidiactl_path)
+                read_lsof(nvidia_path.clone()),
+                read_lsof(nvidiactl_path.clone()),
             )?;
             proc_map.insert(nvidia_path, nvidia);
             proc_map.insert(nvidiactl_path, nvidiactl);
@@ -309,25 +265,7 @@ impl GpuInterface {
         Ok(proc_map)
     }
     pub async fn get_device(&self) -> fdo::Result<DbusGpuDevice> {
-        let gpu = &self.device;
-        Ok(DbusGpuDevice {
-            pci: gpu.pci.pci_address().to_string(),
-            render: *gpu.render(),
-            name: gpu.name().to_string(),
-            card: *gpu.card(),
-            default: gpu.is_default(),
-            discrete: gpu.is_discrete(),
-            virtual_gpu: gpu.is_virtual(),
-            available: gpu.is_available(),
-            vendor: gpu.gpu_vendor().to_string(),
-            driver: gpu.pci.driver().clone().unwrap_or("none".to_string()),
-            nvidia: gpu.gpu_vendor() == GpuVendor::Nvidia,
-            nvidia_minor: if let Some(minor) = gpu.nvidia_minor() {
-                minor.to_string()
-            } else {
-                "none".to_string()
-            },
-        })
+        Ok(DbusGpuDevice::from(&*self.device))
     }
 
     pub async fn power_state(&self) -> fdo::Result<String> {

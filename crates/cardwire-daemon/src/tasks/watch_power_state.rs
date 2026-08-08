@@ -3,12 +3,12 @@ use crate::{
     core::gpu::PowerState, interface::{GpuInterface, GpuInterfaceSignals}
 };
 use log::{error, info, warn};
-use std::{fs, str::FromStr, time::Duration};
+use std::{fs, str::FromStr, sync::Arc, time::Duration};
 use tokio::time::sleep;
 use zbus::object_server::{self};
 
 pub async fn watch_power_state(
-    gpu: GpuInterface,
+    gpu: Arc<GpuInterface>,
     interface: object_server::InterfaceRef<GpuInterface>,
 ) -> anyhow::Result<()> {
     let power_path = format!(

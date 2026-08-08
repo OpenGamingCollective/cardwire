@@ -65,7 +65,7 @@ pkgs.rustPlatform.buildRustPackage {
     substituteInPlace crates/cardwire-daemon/src/core/pci/pci_device.rs \
       --replace-fail "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
 
-    substituteInPlace crates/cardwire-daemon/src/core/gpu/helpers.rs \
+    substituteInPlace crates/cardwire-daemon/src/core/gpu/device_info.rs \
       --replace-fail "/usr/share/libdrm/amdgpu.ids" "${pkgs.libdrm}/share/libdrm/amdgpu.ids"
   '';
 

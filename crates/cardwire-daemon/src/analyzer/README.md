@@ -24,16 +24,16 @@ policy. Dynamic results are never stored.
 
 When a process exec is reported by eBPF, `evaluate_app` runs:
 
-1. `CARDWIRE_ALLOW=1` — allow
-2. `CARDWIRE_FORCE_DGPU=value` — force dGPU
-3. `CARDWIRE_FORCE_GPU=value` — force the given GPU
-4. `DRI_PRIME=1` / `__NV_PRIME_RENDER_OFFLOAD=1` — allow
+1. `CARDWIRE_ALLOW=1` - allow
+2. `CARDWIRE_FORCE_DGPU=value` - force dGPU
+3. `CARDWIRE_FORCE_GPU=value` - force the given GPU
+4. `DRI_PRIME=1` / `__NV_PRIME_RENDER_OFFLOAD=1` - allow
 5. Database lookup by app name (or `steam_app_<id>` when `SteamAppId` is set):
-   - `Blocked` — block
-   - `Allowed` — allow
-   - `Forced` — force
-6. XDG list lookup — app is new: persist it to the database (blocked by default),
+   - `Blocked` - block
+   - `Allowed` - allow
+   - `Forced`  force
+6. XDG list lookup - app is new: persist it to the database (blocked by default),
    then block
-7. Steam fallback — unknown `steam_app_<id>`: persist and block
+7. Steam fallback - unknown `steam_app_<id>`: persist and block
 
 If static says blocked but dynamic says allow, the app is allowed.

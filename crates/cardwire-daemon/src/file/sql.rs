@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{analyzer::AppMetadata, file::state::STATE_PATH};
+use crate::{STATE_PATH, analyzer::AppMetadata};
 use log::error;
 use rusqlite::{Connection, Result};
 use tokio::sync::{RwLock, mpsc, oneshot};

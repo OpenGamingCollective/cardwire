@@ -10,7 +10,7 @@ use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface, ModeInterface}
+    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, DaemonContext, GpuInterface, ModeInterface, Modes}
 };
 
 #[derive(Clone)]
@@ -18,7 +18,7 @@ pub struct DebugInterface {
     pub mode_state: Arc<RwLock<CardwireModeState>>,
     pub mode_interface: ModeInterface,
     pub gpu_state: Arc<RwLock<CardwireGpuState>>,
-    pub gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
+    pub gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
     pub config: Arc<ConfigMemory>,
     pub blocker: Arc<RwLock<EbpfBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
@@ -27,29 +27,22 @@ pub struct DebugInterface {
     pub switcheroo: SwitcherooInterface,
 }
 impl DebugInterface {
-    #[allow(clippy::too_many_arguments)]
     pub fn build(
-        mode_state: Arc<RwLock<CardwireModeState>>,
+        context: &DaemonContext,
         mode_interface: ModeInterface,
-        gpu_state: Arc<RwLock<CardwireGpuState>>,
-        gpu_list: Arc<RwLock<BTreeMap<usize, GpuInterface>>>,
-        config: Arc<ConfigMemory>,
-        blocker: Arc<RwLock<EbpfBlocker>>,
-        pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
         object_server: Option<zbus::ObjectServer>,
-        power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<anyhow::Result<()>>>>>,
         switcheroo: SwitcherooInterface,
     ) -> anyhow::Result<DebugInterface> {
         Ok(DebugInterface {
-            mode_state,
+            mode_state: context.mode_state.clone(),
             mode_interface,
-            gpu_state,
-            gpu_list,
-            config,
-            blocker,
-            pci_list,
+            gpu_state: context.gpu_state.clone(),
+            gpu_list: context.gpu_list.clone(),
+            config: context.config.clone(),
+            blocker: context.blocker.clone(),
+            pci_list: context.pci_list.clone(),
             object_server,
-            power_tasks,
+            power_tasks: context.power_tasks.clone(),
             switcheroo,
         })
     }
@@ -61,43 +54,25 @@ impl DebugInterface {
         let pci_list = &self.pci_list.read().await;
         let mut dbus_list: BTreeMap<String, DbusPciDevice> = BTreeMap::new();
         for (id, pci) in pci_list.iter() {
-            let temp_pci = DbusPciDevice {
-                iommu_group: if let Some(iommu) = pci.iommu_group() {
-                    iommu.to_string()
-                } else {
-                    "".to_string()
-                },
-                vendor_id: pci.vendor_id().clone().unwrap_or("".to_string()),
-                device_id: pci.device_id().clone().unwrap_or("".to_string()),
-                vendor_name: pci.vendor_name().clone().unwrap_or("".to_string()),
-                device_name: pci.device_name().clone().unwrap_or("".to_string()),
-                driver: pci.driver().clone().unwrap_or("".to_string()),
-                class: pci.class().clone().unwrap_or("".to_string()),
-                parent_pci: pci.parent_pci().clone().unwrap_or("".to_string()),
-                child_pci: pci.child_pci().clone().unwrap_or("".to_string()),
-            };
-            dbus_list.insert(id.clone(), temp_pci);
+            dbus_list.insert(id.clone(), DbusPciDevice::from(pci));
         }
-
         Ok(dbus_list)
     }
     pub async fn refresh_gpu(&self) -> fdo::Result<()> {
-        // lock the importants components
-        let mut pci_list = self.pci_list.write().await;
-        let mut gpu_interfaces = self.gpu_list.write().await;
-
         // read a new pci list, if it's different than the current one, refresh the gpus, else do
         // nothing
         let new_pci_list =
             pci::read_pci_devices().map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        if new_pci_list != *pci_list
-            && let Some(object_server) = &self.object_server
-        {
+        let mut pci_list = self.pci_list.write().await;
+        let changed = new_pci_list != *pci_list;
+        if changed && let Some(object_server) = &self.object_server {
             info!("pci list changed, refreshing the internal gpu list");
-            // Overwrite old list
+            // Overwrite old list, drop the lock before the blocking rebuild
             *pci_list = new_pci_list.clone();
-            drop(pci_list); // drop lock to prevent deadlocks when blocking
+            drop(pci_list);
 
+            // lock the importants components
+            let mut gpu_interfaces = self.gpu_list.write().await;
             let mut power_tasks = self.power_tasks.write().await;
 
             // get rid of the old gpu api and the old tasks
@@ -113,8 +88,7 @@ impl DebugInterface {
             // Empty the current gpu_interfaces
             gpu_interfaces.clear();
             // Read the new list. The blocking enumeration is intentional: the gpu_list write lock
-            // serializes readers until the new list is complete, and the multi-threaded runtime
-            // absorbs the stall
+            // until the new list is complete
             let gpu_enumator = GpuEnumerator::build();
             let new_gpu_list = gpu_enumator.enumerate(&new_pci_list);
             for (id, device) in new_gpu_list {
@@ -128,19 +102,19 @@ impl DebugInterface {
                 )
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
-                gpu_interfaces.insert(id, gpu);
+                gpu_interfaces.insert(id, Arc::new(gpu));
             }
 
             // now re-populate the gpu api
             for (id, gpu_interface) in gpu_interfaces.iter() {
                 let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
                 object_server
-                    .at(path.clone(), gpu_interface.clone())
+                    .at(path.clone(), gpu_interface.as_ref().clone())
                     .await?;
                 // spawn power state tasks only for available GPUs
                 if gpu_interface.device.is_available() {
                     let handle = task::spawn(watch_power_state(
-                        gpu_interface.clone(),
+                        Arc::clone(gpu_interface),
                         object_server
                             .interface(path)
                             .await
@@ -153,10 +127,27 @@ impl DebugInterface {
             drop(power_tasks);
             drop(gpu_interfaces);
 
-            // Rebuild hotplug state atomically with respect to concurrent mode changes.
-            if let Err(e) = self.mode_interface.reconcile_after_hotplug().await {
-                warn!("failed to re-apply mode on hotplug: {e}");
-                return Err(e);
+            // Re-apply the persisted mode against the new GPU list
+            let requested = match CardwireModeState::build() {
+                Ok(state) => state.mode(),
+                Err(e) => {
+                    warn!("failed to read persisted mode on hotplug, using hybrid: {e}");
+                    Modes::Hybrid
+                }
+            };
+            if let Err(e) = self
+                .mode_interface
+                .internal_set_mode(requested, false)
+                .await
+            {
+                warn!("failed to re-apply mode on hotplug, falling back to hybrid: {e}");
+                if let Err(fb) = self
+                    .mode_interface
+                    .internal_set_mode(Modes::Hybrid, false)
+                    .await
+                {
+                    warn!("failed to fall back to hybrid mode on hotplug: {fb}");
+                }
             }
             self.switcheroo.emit_gpu_list_changed().await;
         }

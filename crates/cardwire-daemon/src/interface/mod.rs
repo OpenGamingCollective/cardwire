@@ -1,4 +1,5 @@
 mod config;
+mod context;
 mod debug;
 mod gpu;
 mod logger;
@@ -7,6 +8,7 @@ mod smart;
 mod switcheroo;
 
 pub use config::{ConfigInterface, ConfigMemory};
+pub use context::DaemonContext;
 pub use debug::DebugInterface;
 pub use gpu::{GpuInterface, GpuInterfaceSignals};
 pub use logger::{LogEntry, LoggerInterface, LoggerInterfaceSignals};

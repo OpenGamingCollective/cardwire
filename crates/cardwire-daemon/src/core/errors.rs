@@ -19,10 +19,6 @@ pub enum Error {
     #[error("Missing 'devices' directory in group path: {0}")]
     MissingDevicesDir(path::PathBuf),
 
-    #[allow(dead_code)]
-    #[error("Missing hwdata pci.ids file")]
-    MissingHWData,
-
     #[error("{0}")]
     Other(String),
 }

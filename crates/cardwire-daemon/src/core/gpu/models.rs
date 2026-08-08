@@ -197,6 +197,29 @@ pub struct DbusGpuDevice {
     pub nvidia_minor: String,
 }
 
+impl From<&GpuDevice> for DbusGpuDevice {
+    fn from(gpu: &GpuDevice) -> Self {
+        DbusGpuDevice {
+            pci: gpu.pci.pci_address().to_string(),
+            render: *gpu.render(),
+            name: gpu.name().to_string(),
+            card: *gpu.card(),
+            default: gpu.is_default(),
+            discrete: gpu.is_discrete(),
+            virtual_gpu: gpu.is_virtual(),
+            available: gpu.is_available(),
+            vendor: gpu.gpu_vendor().to_string(),
+            driver: gpu.pci.driver().clone().unwrap_or("none".to_string()),
+            nvidia: gpu.gpu_vendor() == GpuVendor::Nvidia,
+            nvidia_minor: if let Some(minor) = gpu.nvidia_minor() {
+                minor.to_string()
+            } else {
+                "none".to_string()
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
