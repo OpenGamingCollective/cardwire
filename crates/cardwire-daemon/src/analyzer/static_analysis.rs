@@ -175,6 +175,12 @@ pub async fn watch_fdo_folders(
 fn parse_fdo_app(app_fdo: &DesktopEntry, name: &str, path: &Path) -> HashMap<String, AppMetadata> {
     let mut app_list: HashMap<String, AppMetadata> = HashMap::new();
 
+    if let Some(file_name) = path.file_name().and_then(|s| s.to_str())
+        && file_name.contains("xdg-desktop-portal")
+    {
+        return app_list;
+    }
+
     let display_name = name.to_string();
     let icon_name = app_fdo.icon().map(|icon| icon.to_string());
 

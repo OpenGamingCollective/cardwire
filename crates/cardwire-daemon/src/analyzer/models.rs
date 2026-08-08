@@ -304,6 +304,9 @@ impl CardwireAnalyzer {
         // Check the database now, we can take our time since if we reached it, the app would've
         // been blocked
         let mut lookup_name = comm.to_lowercase();
+        if lookup_name.contains("xdg-desktop-portal") {
+            return None;
+        }
         if let Some(steam_app) = get_steam_app_id(&environ) {
             lookup_name = steam_app;
         }
@@ -325,6 +328,7 @@ impl CardwireAnalyzer {
                 let meta = meta.clone();
                 drop(xdg_list);
                 self.discover_app(&lookup_name, meta).await;
+                return Some((false, PidType::Allowed, 0));
             }
         }
         // Fallback for steam games
