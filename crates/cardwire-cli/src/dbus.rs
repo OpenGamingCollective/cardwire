@@ -253,9 +253,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn get_external_display_auto_switch(&self) -> zbus::Result<bool> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await?;
         proxy.get_property("ExternalDisplayAutoSwitch").await
@@ -263,9 +263,9 @@ impl<'a> DaemonClient<'a> {
     pub async fn set_external_display_auto_switch(&self, state: bool) -> zbus::fdo::Result<()> {
         let proxy = zbus::Proxy::new(
             self.proxy.connection(),
-            "com.github.opengamingcollective.cardwire",
-            "/com/github/opengamingcollective/cardwire",
-            "com.github.opengamingcollective.cardwire.Config",
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Config",
         )
         .await
         .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;

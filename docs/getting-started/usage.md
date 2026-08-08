@@ -159,7 +159,7 @@ cardwire config battery-auto-switch-mode hybrid
 
 When an external display is connected to a port wired directly to the dedicated GPU, Cardwire can
 temporarily switch Integrated and Smart modes to Hybrid. It restores the requested mode after the
-display is disconnected. Hybrid and Manual modes are unchanged.
+display is disconnected.
 
 This feature is disabled by default. Enable or disable it with:
 
