@@ -34,6 +34,7 @@ pub struct GpuInterface {
     pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     mode_state: Arc<RwLock<CardwireModeState>>,
+    pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
 }
 
 impl GpuInterface {
@@ -54,6 +55,7 @@ impl GpuInterface {
             pci_list,
             gpu_state,
             mode_state,
+            signal_emitter: Arc::new(OnceLock::new()),
         })
     }
 }
