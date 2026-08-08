@@ -129,6 +129,11 @@ pub enum ConfigAction {
         #[arg(help = "Value to set")]
         set: Option<CliMode>,
     },
+    #[command(about = "Get or set ExternalDisplayAutoSwitch")]
+    ExternalDisplayAutoSwitch {
+        #[arg(help = "Value to set")]
+        set: Option<bool>,
+    },
     #[command(about = "Save current configuration to file")]
     Save,
 }
@@ -258,6 +263,43 @@ mod tests {
             },
             _ => panic!("expected Config command"),
         }
+    }
+
+    #[test]
+    fn test_args_parse_external_display_auto_switch() {
+        let args =
+            Args::try_parse_from(["cardwire", "config", "external-display-auto-switch", "true"])
+                .unwrap();
+        match args.command {
+            Commands::Config { action } => match action {
+                ConfigAction::ExternalDisplayAutoSwitch { set } => assert_eq!(set, Some(true)),
+                _ => panic!("expected ExternalDisplayAutoSwitch"),
+            },
+            _ => panic!("expected Config command"),
+        }
+
+        let args = Args::try_parse_from([
+            "cardwire",
+            "config",
+            "external-display-auto-switch",
+            "false",
+        ])
+        .unwrap();
+        assert!(matches!(
+            args.command,
+            Commands::Config {
+                action: ConfigAction::ExternalDisplayAutoSwitch { set: Some(false) }
+            }
+        ));
+
+        let args =
+            Args::try_parse_from(["cardwire", "config", "external-display-auto-switch"]).unwrap();
+        assert!(matches!(
+            args.command,
+            Commands::Config {
+                action: ConfigAction::ExternalDisplayAutoSwitch { set: None }
+            }
+        ));
     }
 
     #[test]

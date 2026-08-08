@@ -218,6 +218,20 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
+            ConfigAction::ExternalDisplayAutoSwitch { set } => {
+                if let Some(val) = set {
+                    if let Err(e) = client.set_external_display_auto_switch(val).await {
+                        handle_error(e.into());
+                    } else {
+                        println!("ExternalDisplayAutoSwitch set to {}", val);
+                    }
+                } else {
+                    match client.get_external_display_auto_switch().await {
+                        Ok(val) => println!("ExternalDisplayAutoSwitch: {}", val),
+                        Err(e) => handle_error(e),
+                    }
+                }
+            }
             ConfigAction::Save => {
                 if let Err(e) = client.save_to_file().await {
                     handle_error(e);
