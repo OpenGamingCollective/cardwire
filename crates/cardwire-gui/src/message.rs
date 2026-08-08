@@ -38,6 +38,7 @@ pub enum Message {
     FetchedAppPolicies(
         Result<std::collections::HashMap<String, crate::models::DbusAppMetadata>, String>,
     ),
+    NewAppDiscovered((String, crate::models::DbusAppMetadata)),
     SetAppPolicy(String, i32),
     AppPolicyResult(Result<(String, i32), String>),
     UpdateSmartSearch(String),

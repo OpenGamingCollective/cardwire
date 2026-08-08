@@ -618,20 +618,80 @@ fn logger_sub() -> Subscription<Message> {
     })
 }
 
+#[proxy(
+    default_service = "org.opengamingcollective.cardwire",
+    default_path = "/org/opengamingcollective/cardwire",
+    interface = "org.opengamingcollective.cardwire.SmartPolicy"
+)]
+trait CardwireSmartPolicy {
+    fn get_app_policies(&self) -> zbus::Result<HashMap<String, crate::models::DbusAppMetadata>>;
+    #[zbus(signal)]
+    fn new_app_added(&self, new_app: (String, crate::models::DbusAppMetadata)) -> zbus::Result<()>;
+}
+
+async fn run_smart_sub(connection: &Connection, output: &mut Sender<Message>) {
+    let proxy = match CardwireSmartPolicyProxy::new(connection).await {
+        Ok(p) => p,
+        Err(e) => {
+            warn!("Failed to create D-Bus SmartPolicy proxy: {}", e);
+            let _ = output
+                .send(Message::FetchedAppPolicies(Err(e.to_string())))
+                .await;
+            return;
+        }
+    };
+
+    let mut new_app_stream = match proxy.receive_new_app_added().await {
+        Ok(stream) => stream,
+        Err(err) => {
+            warn!("Failed to subscribe to D-Bus new_app_added signal: {}", err);
+            let _ = output
+                .send(Message::FetchedAppPolicies(Err(err.to_string())))
+                .await;
+            return;
+        }
+    };
+
+    match proxy.get_app_policies().await {
+        Ok(policies) => {
+            let _ = output.send(Message::FetchedAppPolicies(Ok(policies))).await;
+        }
+        Err(err) => {
+            let _ = output
+                .send(Message::FetchedAppPolicies(Err(err.to_string())))
+                .await;
+        }
+    }
+
+    while let Some(signal) = new_app_stream.next().await {
+        if let Ok(args) = signal.args() {
+            let new_app = args.new_app().clone();
+            let _ = output.send(Message::NewAppDiscovered(new_app)).await;
+        }
+    }
+
+    let _ = output
+        .send(Message::FetchedAppPolicies(Err(
+            "Cardwire daemon disconnected".to_string(),
+        )))
+        .await;
+}
+
 fn smart_sub() -> Subscription<Message> {
-    Subscription::run_with("cardwire_smart_subscription", |_| {
-        stream::channel(10, |mut output: Sender<Message>| async move {
-            let conn = CardwireDbus::new();
-            match conn.get_app_policies().await {
-                Ok(policies) => {
-                    let _ = output.send(Message::FetchedAppPolicies(Ok(policies))).await;
-                }
-                Err(err) => {
+    Subscription::run_with("cardwire_smart_subscription", |_id| {
+        stream::channel(100, |mut output: Sender<Message>| async move {
+            let connection = match Connection::system().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    warn!("Failed to connect to D-Bus: {}", e);
                     let _ = output
-                        .send(Message::FetchedAppPolicies(Err(err.to_string())))
+                        .send(Message::FetchedAppPolicies(Err(e.to_string())))
                         .await;
+                    return;
                 }
-            }
+            };
+
+            run_smart_sub(&connection, &mut output).await;
         })
     })
 }

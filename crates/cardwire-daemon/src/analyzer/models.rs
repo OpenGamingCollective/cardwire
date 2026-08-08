@@ -13,7 +13,7 @@ use zbus::object_server::SignalEmitter;
 use crate::{
     analyzer::{
         dynamic_analysis::{check_env, get_app_id_wayland_with_retry, get_steam_app_id}, helpers::{comm_to_string, get_real_process_name, is_proc_still_alive}, static_analysis::{self, AppMetadata, watch_fdo_folders}
-    }, file::GpuPolicy, interface::{LogEntry, LoggerInterfaceSignals}
+    }, file::{DbusAppMetadata, GpuPolicy}, interface::{LogEntry, LoggerInterfaceSignals, SmartPolicyInterface}
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -51,6 +51,7 @@ pub struct CardwireAnalyzer {
     reported_pids: Arc<RwLock<HashSet<u32>>>,
     report_semaphore: Arc<Semaphore>,
     signal: Arc<OnceLock<SignalEmitter<'static>>>,
+    new_app_signal: Arc<OnceLock<SignalEmitter<'static>>>,
 }
 
 // Bound the number of concurrent report tasks
@@ -65,6 +66,7 @@ impl CardwireAnalyzer {
         signal: Arc<OnceLock<SignalEmitter<'static>>>,
         db_cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
         db_tx: mpsc::Sender<(String, AppMetadata, oneshot::Sender<bool>)>,
+        new_app_signal: Arc<OnceLock<SignalEmitter<'static>>>,
     ) -> anyhow::Result<CardwireAnalyzer> {
         let mut blocker = blocker.write().await;
         let exec_ring = blocker.get_exec_ring()?;
@@ -103,6 +105,7 @@ impl CardwireAnalyzer {
             reported_pids: Arc::new(RwLock::new(HashSet::new())),
             report_semaphore: Arc::new(Semaphore::new(REPORT_SEMAPHORE_PERMITS)),
             signal,
+            new_app_signal,
         })
     }
     pub async fn run(self) -> anyhow::Result<()> {
@@ -350,6 +353,7 @@ impl CardwireAnalyzer {
             }
         }
 
+        let dbus_meta = DbusAppMetadata::from_app_metadata(&meta, GpuPolicy::Blocked as u32);
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         let res = self
             .db_tx
@@ -363,6 +367,15 @@ impl CardwireAnalyzer {
                         .write()
                         .await
                         .insert(lookup_name.to_string(), GpuPolicy::Blocked);
+                    if let Some(emitter) = self.new_app_signal.get()
+                        && let Err(e) = SmartPolicyInterface::new_app_added(
+                            emitter,
+                            (lookup_name.to_string(), dbus_meta),
+                        )
+                        .await
+                    {
+                        error!("failed to emit process_blocked_changed: {}", e);
+                    }
                     info!(
                         "Discovered a new app: {}, adding to the database",
                         lookup_name

@@ -1,10 +1,12 @@
 use aya::maps::{HashMap as AyaHashMap, MapError as AyaMapError};
 use cardwire_ebpf_userspace::EbpfBlocker;
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{
+    collections::HashMap, path::Path, sync::{Arc, OnceLock}
+};
 
 use tokio::sync::{Mutex, RwLock};
 use zbus::{
-    fdo::{self, Error::Failed}, interface
+    fdo::{self, Error::Failed}, interface, object_server::SignalEmitter
 };
 
 use crate::file::{CardwireDatabase, DbusAppMetadata, GpuPolicy};
@@ -15,6 +17,7 @@ pub struct SmartPolicyInterface {
     forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     pub database: CardwireDatabase,
     policy_lock: Arc<Mutex<()>>,
+    pub new_app_signal: Arc<OnceLock<SignalEmitter<'static>>>,
 }
 
 impl SmartPolicyInterface {
@@ -27,6 +30,7 @@ impl SmartPolicyInterface {
             forced_map,
             database: db,
             policy_lock: Arc::new(Mutex::new(())),
+            new_app_signal: Arc::new(OnceLock::new()),
         }
     }
 }
@@ -178,4 +182,10 @@ impl SmartPolicyInterface {
 
         Ok(())
     }
+
+    #[zbus(signal)]
+    pub async fn new_app_added(
+        emitter: &SignalEmitter<'_>,
+        new_app: (String, DbusAppMetadata),
+    ) -> zbus::Result<()>;
 }
