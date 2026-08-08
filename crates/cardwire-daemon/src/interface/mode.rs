@@ -56,11 +56,13 @@ impl ModeInterface {
     pub async fn internal_set_mode(&self, mode: Modes, save: bool) -> fdo::Result<()> {
         let _transition = self.transition.lock().await;
         self.apply_mode(mode).await?;
-        let mut state = self.mode_state.write().await;
-        if let Err(e) = state.save_state(mode, save).await {
-            warn!("mode couldn't be saved to config: {e}");
+        // Save
+        {
+            let mut state = self.mode_state.write().await;
+            if let Err(e) = state.save_state(mode, save).await {
+                warn!("mode couldn't be saved to config: {e}");
+            }
         }
-
         // Only emit the signal if save = false, this mean the request comes from internal tasks,
         // mode change request coming from the DBUS API already handle the signal emission
         if let Some(emitter) = self.signal_emitter.get() {
