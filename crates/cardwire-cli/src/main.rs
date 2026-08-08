@@ -37,8 +37,25 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Connect to D-Bus
-    let connection: zbus::Connection = zbus::connection::Builder::system()?.build().await?;
-    let client: DaemonClient<'_> = DaemonClient::connect(&connection).await?;
+    let connection: zbus::Connection = match zbus::connection::Builder::system() {
+        Ok(builder) => match builder.build().await {
+            Ok(conn) => conn,
+            Err(e) => handle_error(e),
+        },
+        Err(e) => handle_error(e),
+    };
+    let client: DaemonClient<'_> = match DaemonClient::connect(&connection).await {
+        Ok(client) => client,
+        Err(e) => handle_error(e),
+    };
+
+    // Verify the daemon is reachable via Cardwire Manager status before processing args
+    if let Err(e) = client.manager_status().await {
+        return Err(anyhow::anyhow!(
+            "Cannot communicate with cardwired, is the daemon running? - {}",
+            e
+        ));
+    }
 
     match args.command {
         Commands::Set { mode } => {
@@ -55,6 +72,15 @@ async fn main() -> anyhow::Result<()> {
             };
         }
         Commands::Get => {
+            let available_modes = match client.get_available_modes().await {
+                Ok(modes) => modes,
+                Err(e) => handle_error(e),
+            };
+            let available_modes_str = available_modes
+                .iter()
+                .map(|m| m.to_string().to_lowercase())
+                .collect::<Vec<_>>()
+                .join(", ");
             match client.get_mode().await {
                 Ok(response) => {
                     let response: CliMode = match response {
@@ -66,7 +92,7 @@ async fn main() -> anyhow::Result<()> {
                         _ => CliMode::Manual,
                     };
                     println!("Current Mode: {}", response);
-                    println!("Available Mode: integrated, hybrid, manual, smart");
+                    println!("Available Mode: {}", available_modes_str);
                 }
                 Err(e) => handle_error(e),
             };
@@ -223,6 +249,17 @@ async fn main() -> anyhow::Result<()> {
                     handle_error(e);
                 } else {
                     println!("GPU list refreshed");
+                    match client.get_available_modes().await {
+                        Ok(modes) => {
+                            let modes_str = modes
+                                .iter()
+                                .map(|m| m.to_string().to_lowercase())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            println!("Available Mode: {}", modes_str);
+                        }
+                        Err(e) => handle_error(e),
+                    }
                 }
             }
         },
@@ -309,7 +346,11 @@ async fn main() -> anyhow::Result<()> {
 fn handle_error(err: zbus::Error) -> ! {
     match err {
         zbus::Error::MethodError(name, description, _) => {
-            if let Some(msg) = description {
+            if name.as_str() == "org.freedesktop.DBus.Error.ServiceUnknown"
+                || name.as_str() == "org.freedesktop.DBus.Error.NameHasNoOwner"
+            {
+                eprintln!("error: cardwired daemon is not running. Is the service up?");
+            } else if let Some(msg) = description {
                 eprintln!("{}", msg);
             } else {
                 eprintln!("{}", name);
@@ -320,7 +361,7 @@ fn handle_error(err: zbus::Error) -> ! {
             | zbus::fdo::Error::Failed(msg)
             | zbus::fdo::Error::InvalidArgs(msg)
             | zbus::fdo::Error::NotSupported(msg) => eprintln!("{}", msg),
-            zbus::fdo::Error::ServiceUnknown(_) => {
+            zbus::fdo::Error::ServiceUnknown(_) | zbus::fdo::Error::NameHasNoOwner(_) => {
                 eprintln!("error: cardwired daemon is not running. Is the service up?");
             }
             _ => eprintln!("{}", fdo_err),

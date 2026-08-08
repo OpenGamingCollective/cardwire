@@ -17,7 +17,7 @@ use strum::{EnumIter, FromRepr, VariantArray};
     serde::Deserialize,
 )]
 #[repr(u32)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum Mode {
     Integrated = 0,
     Hybrid = 1,
@@ -69,11 +69,23 @@ impl Display for Page {
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct MainState {
     pub current_mode: Option<Mode>,
+    pub available_modes: Vec<Mode>,
     pub open_gpu_menu: Option<usize>,
     pub lsof_window: Option<LsofData>,
+}
+
+impl Default for MainState {
+    fn default() -> Self {
+        Self {
+            current_mode: None,
+            available_modes: Mode::VARIANTS.to_vec(),
+            open_gpu_menu: None,
+            lsof_window: None,
+        }
+    }
 }
 
 #[derive(serde::Deserialize, zbus::zvariant::Type, Debug, Clone)]

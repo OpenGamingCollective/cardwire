@@ -125,6 +125,17 @@ impl CardwireDbus {
         .await?;
         proxy.get_property("Mode").await
     }
+    pub async fn get_available_modes(&self) -> zbus::Result<Vec<Mode>> {
+        let connection = Connection::system().await?;
+        let proxy = zbus::Proxy::new(
+            &connection,
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Mode",
+        )
+        .await?;
+        proxy.call("AvailableModes", &()).await
+    }
     pub async fn set_mode(&self, mode: u32) -> zbus::fdo::Result<()> {
         let connection = Connection::system().await?;
         let proxy = zbus::Proxy::new(

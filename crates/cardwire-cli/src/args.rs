@@ -1,7 +1,11 @@
 use clap::{Args as ClapArgs, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
+use serde::{Deserialize, Serialize};
 use std::fmt;
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, ValueEnum, Serialize, Deserialize, zbus::zvariant::Type,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum CliMode {
     Integrated,
     Hybrid,

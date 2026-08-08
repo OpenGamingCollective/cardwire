@@ -21,6 +21,7 @@ pub enum TrayAction {
 
 pub struct CardwireTray {
     mode: Option<Mode>,
+    available_modes: Vec<Mode>,
     gpus: BTreeMap<usize, GpuDevice>,
     action_tx: mpsc::UnboundedSender<TrayAction>,
 }
@@ -29,6 +30,7 @@ impl CardwireTray {
     fn new(action_tx: mpsc::UnboundedSender<TrayAction>) -> Self {
         Self {
             mode: None,
+            available_modes: Mode::VARIANTS.to_vec(),
             gpus: BTreeMap::new(),
             action_tx,
         }
@@ -99,7 +101,12 @@ impl Tray for CardwireTray {
         ];
 
         if self.mode.is_some() {
-            let options = Mode::VARIANTS
+            let available_modes = if self.available_modes.is_empty() {
+                Mode::VARIANTS.to_vec()
+            } else {
+                self.available_modes.clone()
+            };
+            let options = available_modes
                 .iter()
                 .copied()
                 .map(|mode| ksni::menu::RadioItem {
@@ -108,11 +115,16 @@ impl Tray for CardwireTray {
                     ..Default::default()
                 })
                 .collect();
+            let selected = self
+                .mode
+                .and_then(|current| available_modes.iter().position(|&m| m == current))
+                .unwrap_or(0);
+            let modes_for_select = available_modes.clone();
             items.push(
                 ksni::menu::RadioGroup {
-                    selected: self.mode.map_or(0, |mode| mode as usize),
-                    select: Box::new(|tray: &mut Self, index| {
-                        if let Some(mode) = Mode::from_repr(index as u32) {
+                    selected,
+                    select: Box::new(move |tray: &mut Self, index| {
+                        if let Some(&mode) = modes_for_select.get(index) {
                             let _ = tray.action_tx.send(TrayAction::SetMode(mode));
                         }
                     }),
@@ -204,11 +216,17 @@ pub async fn spawn() -> Result<(TrayHandle, mpsc::UnboundedReceiver<TrayAction>)
     Ok((handle, action_rx))
 }
 
-pub async fn update(handle: TrayHandle, mode: Option<Mode>, gpus: BTreeMap<usize, GpuDevice>) {
+pub async fn update(
+    handle: TrayHandle,
+    mode: Option<Mode>,
+    available_modes: Vec<Mode>,
+    gpus: BTreeMap<usize, GpuDevice>,
+) {
     let _ = handle
         .0
         .update(|tray| {
             tray.mode = mode;
+            tray.available_modes = available_modes;
             tray.gpus = gpus;
         })
         .await;

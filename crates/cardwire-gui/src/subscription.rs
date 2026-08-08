@@ -64,6 +64,7 @@ pub fn tray_sub() -> Subscription<Message> {
 trait CardwireMode {
     #[zbus(property)]
     fn mode(&self) -> zbus::Result<u32>;
+    fn available_modes(&self) -> zbus::Result<Vec<Mode>>;
 }
 fn mode_sub() -> Subscription<Message> {
     Subscription::run_with("cardwire_mode_subscription", |_id| {
@@ -86,6 +87,16 @@ fn mode_sub() -> Subscription<Message> {
                 }
             };
             // for startup
+            match proxy.available_modes().await {
+                Ok(modes) => {
+                    let _ = output.send(Message::FetchedAvailableModes(Ok(modes))).await;
+                }
+                Err(error) => {
+                    let _ = output
+                        .send(Message::FetchedAvailableModes(Err(error.to_string())))
+                        .await;
+                }
+            }
             match proxy.mode().await {
                 Ok(initial_mode) => {
                     if let Some(mode) = Mode::from_repr(initial_mode) {
@@ -422,6 +433,16 @@ fn gpu_sub() -> Subscription<Message> {
                         Err(error) => {
                             let _ = output
                                 .send(Message::AllDevicesFetched(Err(error.to_string())))
+                                .await;
+                        }
+                    }
+                    match CardwireDbus::new().get_available_modes().await {
+                        Ok(modes) => {
+                            let _ = output.send(Message::FetchedAvailableModes(Ok(modes))).await;
+                        }
+                        Err(error) => {
+                            let _ = output
+                                .send(Message::FetchedAvailableModes(Err(error.to_string())))
                                 .await;
                         }
                     }

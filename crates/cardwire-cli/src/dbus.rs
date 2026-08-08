@@ -102,6 +102,17 @@ impl<'a> DaemonClient<'a> {
         proxy.get_property("Mode").await
     }
 
+    pub async fn get_available_modes(&self) -> zbus::Result<Vec<crate::args::CliMode>> {
+        let proxy = zbus::Proxy::new(
+            self.proxy.connection(),
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.Mode",
+        )
+        .await?;
+        proxy.call("AvailableModes", &()).await
+    }
+
     pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::fdo::Result<()> {
         let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
         let block_proxy = zbus::Proxy::new(

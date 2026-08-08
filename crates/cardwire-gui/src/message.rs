@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, VecDeque};
 pub enum Message {
     SwitchPage(Page),
     FetchedMode(Result<Mode, String>),
+    FetchedAvailableModes(Result<Vec<Mode>, String>),
     SetMode(Mode),
     AllDevicesFetched(Result<BTreeMap<usize, GpuDevice>, String>),
     UpdateNvidiaSetting(bool),

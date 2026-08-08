@@ -13,8 +13,8 @@ static TEMPORARY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, VariantArray)]
 #[serde(rename_all = "kebab-case")]
 pub enum PrimaryClickAction {
-    #[default]
     SwitchMode,
+    #[default]
     OpenGui,
 }
 
@@ -42,7 +42,7 @@ impl Default for GuiConfig {
     fn default() -> Self {
         Self {
             start_in_tray: false,
-            primary_click_action: PrimaryClickAction::SwitchMode,
+            primary_click_action: PrimaryClickAction::OpenGui,
             primary_click_modes: default_primary_click_modes(),
         }
     }
@@ -92,8 +92,12 @@ impl GuiConfig {
         result
     }
 
-    pub fn next_primary_click_mode(&self, current: Mode) -> Mode {
-        let modes = Mode::VARIANTS;
+    pub fn next_primary_click_mode(&self, current: Mode, available_modes: &[Mode]) -> Mode {
+        let modes = if available_modes.is_empty() {
+            Mode::VARIANTS
+        } else {
+            available_modes
+        };
         let current_index = modes.iter().position(|&mode| mode == current);
         current_index
             .into_iter()
@@ -106,7 +110,7 @@ impl GuiConfig {
                     .copied()
                     .find(|mode| self.primary_click_modes.contains(mode))
             })
-            .expect("validated GUI config must contain a primary-click mode")
+            .unwrap_or_else(|| modes[0])
     }
 
     pub fn with_primary_click_mode(mut self, mode: Mode, enabled: bool) -> Self {
@@ -174,7 +178,7 @@ mod tests {
         );
         assert_eq!(
             GuiConfig::default().primary_click_action,
-            PrimaryClickAction::SwitchMode
+            PrimaryClickAction::OpenGui
         );
         assert!(!GuiConfig::default().start_in_tray);
     }
@@ -226,15 +230,21 @@ mod tests {
             ..GuiConfig::default()
         };
         assert_eq!(
-            config.next_primary_click_mode(Mode::Integrated),
+            config.next_primary_click_mode(Mode::Integrated, &[]),
             Mode::Manual
         );
-        assert_eq!(config.next_primary_click_mode(Mode::Manual), Mode::Smart);
         assert_eq!(
-            config.next_primary_click_mode(Mode::Smart),
+            config.next_primary_click_mode(Mode::Manual, &[]),
+            Mode::Smart
+        );
+        assert_eq!(
+            config.next_primary_click_mode(Mode::Smart, &[]),
             Mode::Integrated
         );
-        assert_eq!(config.next_primary_click_mode(Mode::Hybrid), Mode::Manual);
+        assert_eq!(
+            config.next_primary_click_mode(Mode::Hybrid, &[]),
+            Mode::Manual
+        );
     }
 
     #[test]
@@ -243,8 +253,27 @@ mod tests {
             primary_click_modes: vec![Mode::Smart],
             ..GuiConfig::default()
         };
-        assert_eq!(config.next_primary_click_mode(Mode::Hybrid), Mode::Smart);
-        assert_eq!(config.next_primary_click_mode(Mode::Smart), Mode::Smart);
+        assert_eq!(
+            config.next_primary_click_mode(Mode::Hybrid, &[]),
+            Mode::Smart
+        );
+        assert_eq!(
+            config.next_primary_click_mode(Mode::Smart, &[]),
+            Mode::Smart
+        );
+    }
+
+    #[test]
+    fn skips_unavailable_configured_modes() {
+        let config = GuiConfig {
+            primary_click_modes: vec![Mode::Integrated, Mode::Hybrid, Mode::Smart],
+            ..GuiConfig::default()
+        };
+        let available = vec![Mode::Hybrid, Mode::Manual];
+        assert_eq!(
+            config.next_primary_click_mode(Mode::Hybrid, &available),
+            Mode::Hybrid
+        );
     }
 
     #[test]
