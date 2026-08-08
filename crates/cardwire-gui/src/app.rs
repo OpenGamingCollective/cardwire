@@ -1,11 +1,13 @@
 use iced::{
-    Alignment, Element, Length::{Fill, Fixed}, Subscription, Task, widget::{column, container, row, stack, text}, window
+    Alignment, Element, Length::{Fill, Fixed}, Subscription, Task, widget::{column, container, row, stack}, window
 };
 use log::error;
 use std::collections::BTreeMap;
 
 use crate::{
-    gui_config::{GuiConfig, PrimaryClickAction}, helpers::{CardwireDbus, GpuDevice}, message::Message, models::{DaemonSettings, LogState, MainState, Mode, Page, PciDevice, SettingState}, tray::{self, TrayAction, TrayHandle}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
+    gui_config::{GuiConfig, PrimaryClickAction}, helpers::{CardwireDbus, GpuDevice}, message::Message, models::{
+        DaemonSettings, LogState, MainState, Mode, Page, PciDevice, SettingState, SmartState
+    }, tray::{self, TrayAction, TrayHandle}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
 };
 
 #[derive(Debug)]
@@ -19,6 +21,7 @@ pub struct AppState {
     pub main_state: MainState,
     pub setting_state: SettingState,
     pub log_state: LogState,
+    pub smart_state: SmartState,
     window_id: Option<window::Id>,
     tray_handle: Option<TrayHandle>,
     tray_available: bool,
@@ -52,6 +55,7 @@ impl AppState {
                 ..SettingState::default()
             },
             log_state: LogState::default(),
+            smart_state: SmartState::default(),
             window_id,
             tray_handle: None,
             tray_available: true,
@@ -373,6 +377,57 @@ impl AppState {
             },
             // Append a new blocked process log received from dbus
             Message::NewLog(log) => self.log_state.push(log),
+            Message::FetchedAppPolicies(res) => match res {
+                Ok(policies) => {
+                    let mut map = BTreeMap::new();
+                    for (app_id, meta) in policies {
+                        let resolved = crate::helpers::resolve_app_metadata(&app_id, &meta);
+                        map.insert(app_id, resolved);
+                    }
+                    self.smart_state.app_policies = map;
+                    self.smart_state.loading = false;
+                    self.error = None;
+                }
+                Err(err) => {
+                    self.smart_state.loading = false;
+                    self.error = Some(format!("Error fetching app policies: {}", err));
+                }
+            },
+            Message::SetAppPolicy(app_id, policy) => {
+                let conn = self.zbus_conn.clone();
+                let app_id_clone = app_id.clone();
+                return Task::perform(
+                    async move {
+                        conn.set_app_policy(app_id_clone.clone(), policy)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        Ok((app_id_clone, policy))
+                    },
+                    Message::AppPolicyResult,
+                );
+            }
+            Message::AppPolicyResult(res) => match res {
+                Ok((app_id, policy)) => {
+                    if let Some(app) = self.smart_state.app_policies.get_mut(&app_id) {
+                        app.gpu_policy = policy as u32;
+                    }
+                    let status = if policy == 1 { "Allowed" } else { "Blocked" };
+                    self.info = Some(format!("App policy for {} updated to {}", app_id, status));
+                    self.error = None;
+                }
+                Err(err) => self.error = Some(format!("App policy error: {}", err)),
+            },
+            Message::UpdateSmartSearch(query) => {
+                self.smart_state.search_query = query;
+            }
+            Message::RefreshSmartPolicies => {
+                self.smart_state.loading = true;
+                let conn = self.zbus_conn.clone();
+                return Task::perform(
+                    async move { conn.get_app_policies().await.map_err(|e| e.to_string()) },
+                    Message::FetchedAppPolicies,
+                );
+            }
             Message::OpenUrl(url) => {
                 let _ = std::process::Command::new("xdg-open").arg(url).spawn();
             }
@@ -439,7 +494,7 @@ impl AppState {
         main_content = main_content.push(container(match &self.current_tab {
             Page::Main => ui::main_page(&self.main_state, &self.gpu_list),
             Page::Pci => pci_page(&self.pci_list),
-            Page::SmartMode => text("Smart Mode TODO").into(),
+            Page::SmartMode => ui::smart_mode_page(&self.smart_state, self.main_state.current_mode),
             Page::CardwireSettings => daemon_setting_page(&self.setting_state),
             Page::Logs => ui::logs_page(&self.log_state, &self.gpu_list),
             Page::Advanced => ui::advanced_page(),

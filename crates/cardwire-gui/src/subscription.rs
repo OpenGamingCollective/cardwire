@@ -597,6 +597,31 @@ fn logger_sub() -> Subscription<Message> {
     })
 }
 
+fn smart_sub() -> Subscription<Message> {
+    Subscription::run_with("cardwire_smart_subscription", |_| {
+        stream::channel(10, |mut output: Sender<Message>| async move {
+            let conn = CardwireDbus::new();
+            match conn.get_app_policies().await {
+                Ok(policies) => {
+                    let _ = output.send(Message::FetchedAppPolicies(Ok(policies))).await;
+                }
+                Err(err) => {
+                    let _ = output
+                        .send(Message::FetchedAppPolicies(Err(err.to_string())))
+                        .await;
+                }
+            }
+        })
+    })
+}
+
 pub fn dbus_sub() -> Subscription<Message> {
-    Subscription::batch([config_sub(), mode_sub(), gpu_sub(), pci_sub(), logger_sub()])
+    Subscription::batch([
+        config_sub(),
+        mode_sub(),
+        gpu_sub(),
+        pci_sub(),
+        logger_sub(),
+        smart_sub(),
+    ])
 }

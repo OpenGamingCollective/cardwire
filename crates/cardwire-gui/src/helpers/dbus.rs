@@ -4,7 +4,7 @@ use zbus::{
     self, Connection, fdo, names::OwnedInterfaceName, zvariant::{OwnedObjectPath, OwnedValue}
 };
 
-use crate::models::{DaemonSettings, LsofData, Mode};
+use crate::models::{DaemonSettings, DbusAppMetadata, LsofData, Mode};
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct GpuDevice {
@@ -208,5 +208,27 @@ impl CardwireDbus {
         )
         .await?;
         proxy.call("RefreshGpu", &()).await
+    }
+    pub async fn get_app_policies(&self) -> zbus::Result<HashMap<String, DbusAppMetadata>> {
+        let connection = Connection::system().await?;
+        let proxy = zbus::Proxy::new(
+            &connection,
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.SmartPolicy",
+        )
+        .await?;
+        proxy.call("GetAppPolicies", &()).await
+    }
+    pub async fn set_app_policy(&self, app_id: String, policy: i32) -> zbus::Result<()> {
+        let connection = Connection::system().await?;
+        let proxy = zbus::Proxy::new(
+            &connection,
+            "org.opengamingcollective.cardwire",
+            "/org/opengamingcollective/cardwire",
+            "org.opengamingcollective.cardwire.SmartPolicy",
+        )
+        .await?;
+        proxy.call("SetAppPolicy", &(app_id, policy)).await
     }
 }
