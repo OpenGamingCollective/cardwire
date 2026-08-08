@@ -675,6 +675,17 @@ fn smart_sub() -> Subscription<Message> {
     })
 }
 
+pub fn dbus_sub() -> Subscription<Message> {
+    Subscription::batch([
+        config_sub(),
+        mode_sub(),
+        gpu_sub(),
+        pci_sub(),
+        logger_sub(),
+        smart_sub(),
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -789,15 +800,4 @@ mod tests {
         drop(server_conn);
         sub_handle.abort();
     }
-}
-
-pub fn dbus_sub() -> Subscription<Message> {
-    Subscription::batch([
-        config_sub(),
-        mode_sub(),
-        gpu_sub(),
-        pci_sub(),
-        logger_sub(),
-        smart_sub(),
-    ])
 }

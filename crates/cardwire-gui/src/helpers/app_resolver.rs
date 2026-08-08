@@ -66,6 +66,14 @@ pub fn resolve_app_metadata(app_id: &str, raw: &DbusAppMetadata) -> ResolvedApp 
         }
     }
     candidate_filenames.push(format!("{}.desktop", app_id));
+    candidate_filenames.push(format!("{}.desktop", app_id.to_lowercase()));
+    let mut chars = app_id.chars();
+    if let Some(first) = chars.next() {
+        let capitalized = format!("{}{}.desktop", first.to_uppercase(), chars.as_str());
+        if !candidate_filenames.contains(&capitalized) {
+            candidate_filenames.push(capitalized);
+        }
+    }
 
     'search_desktop: for data_dir in &data_dirs {
         let apps_dir = data_dir.join("applications");
@@ -137,9 +145,27 @@ fn resolve_icon_path(
         if p.is_absolute() && p.exists() {
             return Some(p.to_path_buf());
         }
-        names_to_check.push(name);
+        names_to_check.push(name.to_string());
+        names_to_check.push(name.to_lowercase());
+        let mut chars = name.chars();
+        if let Some(first) = chars.next() {
+            let capitalized = format!("{}{}", first.to_uppercase(), chars.as_str());
+            if !names_to_check.contains(&capitalized) {
+                names_to_check.push(capitalized);
+            }
+        }
     }
-    names_to_check.push(app_id);
+    if !names_to_check.contains(&app_id.to_string()) {
+        names_to_check.push(app_id.to_string());
+        names_to_check.push(app_id.to_lowercase());
+        let mut chars = app_id.chars();
+        if let Some(first) = chars.next() {
+            let capitalized = format!("{}{}", first.to_uppercase(), chars.as_str());
+            if !names_to_check.contains(&capitalized) {
+                names_to_check.push(capitalized);
+            }
+        }
+    }
 
     let extensions = ["png", "svg", "xpm"];
     let icon_subdirs = [
@@ -173,4 +199,123 @@ fn resolve_icon_path(
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simulate_alacritty_lookup() {
+        let raw = DbusAppMetadata {
+            display_name: "Alacritty".to_string(),
+            desktop_file_id: Some("Alacritty".to_string()),
+            icon_name: Some("Alacritty".to_string()),
+            gpu_policy: 0,
+        };
+        let resolved = resolve_app_metadata("alacritty", &raw);
+        println!("\n=== Alacritty (from Daemon metadata) ===");
+        println!("App ID:       {}", resolved.app_id);
+        println!("Display Name: {}", resolved.display_name);
+        println!("Desktop ID:   {:?}", resolved.desktop_file_id);
+        println!("Icon Name:    {:?}", resolved.icon_name);
+        println!("Icon Path:    {:?}", resolved.icon_path);
+        assert_eq!(resolved.display_name, "Alacritty");
+        assert!(resolved.icon_path.is_some());
+    }
+
+    #[test]
+    fn test_simulate_alacritty_fallback_lookup() {
+        let raw = DbusAppMetadata {
+            display_name: "".to_string(),
+            desktop_file_id: None,
+            icon_name: None,
+            gpu_policy: 0,
+        };
+        let resolved = resolve_app_metadata("alacritty", &raw);
+        println!("\n=== Alacritty (from binary app_id fallback) ===");
+        println!("App ID:       {}", resolved.app_id);
+        println!("Display Name: {}", resolved.display_name);
+        println!("Desktop ID:   {:?}", resolved.desktop_file_id);
+        println!("Icon Name:    {:?}", resolved.icon_name);
+        println!("Icon Path:    {:?}", resolved.icon_path);
+        assert_eq!(resolved.display_name, "Alacritty");
+        assert!(resolved.icon_path.is_some());
+    }
+
+    #[test]
+    fn test_simulate_mission_center_lookup() {
+        let raw = DbusAppMetadata {
+            display_name: "Mission Center".to_string(),
+            desktop_file_id: Some("io.missioncenter.MissionCenter".to_string()),
+            icon_name: Some("io.missioncenter.MissionCenter".to_string()),
+            gpu_policy: 0,
+        };
+        let resolved = resolve_app_metadata("missioncenter", &raw);
+        println!("\n=== Mission Center (from Daemon metadata) ===");
+        println!("App ID:       {}", resolved.app_id);
+        println!("Display Name: {}", resolved.display_name);
+        println!("Desktop ID:   {:?}", resolved.desktop_file_id);
+        println!("Icon Name:    {:?}", resolved.icon_name);
+        println!("Icon Path:    {:?}", resolved.icon_path);
+        assert_eq!(resolved.display_name, "Mission Center");
+        assert!(resolved.icon_path.is_some());
+    }
+
+    #[test]
+    fn test_simulate_mission_center_flatpak_or_app_id_lookup() {
+        let raw = DbusAppMetadata {
+            display_name: "".to_string(),
+            desktop_file_id: None,
+            icon_name: None,
+            gpu_policy: 0,
+        };
+        let resolved = resolve_app_metadata("io.missioncenter.MissionCenter", &raw);
+        println!("\n=== Mission Center (from Flatpak/App ID fallback) ===");
+        println!("App ID:       {}", resolved.app_id);
+        println!("Display Name: {}", resolved.display_name);
+        println!("Desktop ID:   {:?}", resolved.desktop_file_id);
+        println!("Icon Name:    {:?}", resolved.icon_name);
+        println!("Icon Path:    {:?}", resolved.icon_path);
+        assert_eq!(resolved.display_name, "Mission Center");
+        assert!(resolved.icon_path.is_some());
+    }
+
+    #[test]
+    fn test_simulate_blender_lookup() {
+        let raw = DbusAppMetadata {
+            display_name: "Blender".to_string(),
+            desktop_file_id: Some("org.blender.Blender".to_string()),
+            icon_name: Some("org.blender.Blender".to_string()),
+            gpu_policy: 0,
+        };
+        let resolved = resolve_app_metadata("blender", &raw);
+        println!("\n=== Blender (from Daemon metadata) ===");
+        println!("App ID:       {}", resolved.app_id);
+        println!("Display Name: {}", resolved.display_name);
+        println!("Desktop ID:   {:?}", resolved.desktop_file_id);
+        println!("Icon Name:    {:?}", resolved.icon_name);
+        println!("Icon Path:    {:?}", resolved.icon_path);
+        assert_eq!(resolved.display_name, "Blender");
+        assert!(resolved.icon_path.is_some());
+    }
+
+    #[test]
+    fn test_simulate_blender_flatpak_app_id_lookup() {
+        let raw = DbusAppMetadata {
+            display_name: "".to_string(),
+            desktop_file_id: None,
+            icon_name: None,
+            gpu_policy: 0,
+        };
+        let resolved = resolve_app_metadata("org.blender.Blender", &raw);
+        println!("\n=== Blender (from Flatpak App ID) ===");
+        println!("App ID:       {}", resolved.app_id);
+        println!("Display Name: {}", resolved.display_name);
+        println!("Desktop ID:   {:?}", resolved.desktop_file_id);
+        println!("Icon Name:    {:?}", resolved.icon_name);
+        println!("Icon Path:    {:?}", resolved.icon_path);
+        assert_eq!(resolved.display_name, "Blender");
+        assert!(resolved.icon_path.is_some());
+    }
 }
