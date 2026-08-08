@@ -232,6 +232,10 @@ impl GpuInterface {
 
     #[zbus(property)]
     pub async fn block(&self) -> fdo::Result<bool> {
+        let mode = self.mode_state.read().await.mode();
+        if mode == Modes::Smart && (self.device.is_default() && !self.device.is_discrete()) {
+            return Ok(false);
+        }
         self.gpu_blocked().await
     }
 
