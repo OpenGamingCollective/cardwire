@@ -608,6 +608,54 @@ trait CardwireSmartPolicy {
     fn new_app_added(&self, new_app: (String, crate::models::DbusAppMetadata)) -> zbus::Result<()>;
 }
 
+async fn run_smart_sub(connection: &Connection, output: &mut Sender<Message>) {
+    let proxy = match CardwireSmartPolicyProxy::new(connection).await {
+        Ok(p) => p,
+        Err(e) => {
+            warn!("Failed to create D-Bus SmartPolicy proxy: {}", e);
+            let _ = output
+                .send(Message::FetchedAppPolicies(Err(e.to_string())))
+                .await;
+            return;
+        }
+    };
+
+    let mut new_app_stream = match proxy.receive_new_app_added().await {
+        Ok(stream) => stream,
+        Err(err) => {
+            warn!("Failed to subscribe to D-Bus new_app_added signal: {}", err);
+            let _ = output
+                .send(Message::FetchedAppPolicies(Err(err.to_string())))
+                .await;
+            return;
+        }
+    };
+
+    match proxy.get_app_policies().await {
+        Ok(policies) => {
+            let _ = output.send(Message::FetchedAppPolicies(Ok(policies))).await;
+        }
+        Err(err) => {
+            let _ = output
+                .send(Message::FetchedAppPolicies(Err(err.to_string())))
+                .await;
+        }
+    }
+
+    while let Some(signal) = new_app_stream.next().await {
+        if let Ok(args) = signal.args() {
+            let new_app = args.new_app().clone();
+            let _ = output.send(Message::NewAppDiscovered(new_app)).await;
+        }
+    }
+
+    let _ = output
+        .send(Message::FetchedAppPolicies(Err(
+            "Cardwire daemon disconnected".to_string(),
+        )))
+        .await;
+}
+
 fn smart_sub() -> Subscription<Message> {
     Subscription::run_with("cardwire_smart_subscription", |_id| {
         stream::channel(100, |mut output: Sender<Message>| async move {
@@ -622,53 +670,125 @@ fn smart_sub() -> Subscription<Message> {
                 }
             };
 
-            let proxy = match CardwireSmartPolicyProxy::new(&connection).await {
-                Ok(p) => p,
-                Err(e) => {
-                    warn!("Failed to create D-Bus SmartPolicy proxy: {}", e);
-                    let _ = output
-                        .send(Message::FetchedAppPolicies(Err(e.to_string())))
-                        .await;
-                    return;
-                }
-            };
-
-            match proxy.get_app_policies().await {
-                Ok(policies) => {
-                    let _ = output.send(Message::FetchedAppPolicies(Ok(policies))).await;
-                }
-                Err(err) => {
-                    let _ = output
-                        .send(Message::FetchedAppPolicies(Err(err.to_string())))
-                        .await;
-                }
-            }
-
-            let mut new_app_stream = match proxy.receive_new_app_added().await {
-                Ok(stream) => stream,
-                Err(err) => {
-                    warn!("Failed to subscribe to D-Bus new_app_added signal: {}", err);
-                    let _ = output
-                        .send(Message::FetchedAppPolicies(Err(err.to_string())))
-                        .await;
-                    return;
-                }
-            };
-
-            while let Some(signal) = new_app_stream.next().await {
-                if let Ok(args) = signal.args() {
-                    let new_app = args.new_app().clone();
-                    let _ = output.send(Message::NewAppDiscovered(new_app)).await;
-                }
-            }
-
-            let _ = output
-                .send(Message::FetchedAppPolicies(Err(
-                    "Cardwire daemon disconnected".to_string(),
-                )))
-                .await;
+            run_smart_sub(&connection, &mut output).await;
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::mpsc;
+    use zbus::interface;
+
+    struct TestSmartPolicyServer {
+        snapshot_policies: HashMap<String, crate::models::DbusAppMetadata>,
+        on_get_policies_called: Option<mpsc::Sender<()>>,
+    }
+
+    #[interface(name = "org.opengamingcollective.cardwire.SmartPolicy")]
+    impl TestSmartPolicyServer {
+        async fn get_app_policies(
+            &mut self,
+        ) -> zbus::fdo::Result<HashMap<String, crate::models::DbusAppMetadata>> {
+            if let Some(tx) = self.on_get_policies_called.take() {
+                let _ = tx.send(()).await;
+            }
+            Ok(self.snapshot_policies.clone())
+        }
+
+        #[zbus(signal)]
+        async fn new_app_added(
+            signal_emitter: &zbus::object_server::SignalEmitter<'_>,
+            new_app: (String, crate::models::DbusAppMetadata),
+        ) -> zbus::Result<()>;
+    }
+
+    #[tokio::test]
+    async fn test_smart_sub_handles_app_persisted_between_stream_registration_and_snapshot() {
+        let (p0, p1) = tokio::net::UnixStream::pair().expect("failed to create unix stream pair");
+
+        let (notify_tx, mut notify_rx) = mpsc::channel::<()>(1);
+
+        let server_obj = TestSmartPolicyServer {
+            snapshot_policies: HashMap::from([(
+                "app1".to_string(),
+                crate::models::DbusAppMetadata {
+                    display_name: "App One".to_string(),
+                    desktop_file_id: None,
+                    icon_name: None,
+                    gpu_policy: 0,
+                },
+            )]),
+            on_get_policies_called: Some(notify_tx),
+        };
+
+        let server_conn = zbus::connection::Builder::unix_stream(p0)
+            .serve_at("/org/opengamingcollective/cardwire", server_obj)
+            .unwrap()
+            .build()
+            .await
+            .unwrap();
+
+        let client_conn = zbus::connection::Builder::unix_stream(p1)
+            .build()
+            .await
+            .unwrap();
+
+        let (mut sender, mut receiver) = iced::futures::channel::mpsc::channel(100);
+
+        let server_conn_clone = server_conn.clone();
+        let sub_handle = tokio::spawn(async move {
+            run_smart_sub(&client_conn, &mut sender).await;
+        });
+
+        // Wait until get_app_policies is invoked (which proves stream registration has completed)
+        notify_rx
+            .recv()
+            .await
+            .expect("get_app_policies was not called");
+
+        // Emit signal during snapshot handling (simulating app persisted right after stream setup)
+        let iface_ref = server_conn_clone
+            .object_server()
+            .interface::<_, TestSmartPolicyServer>("/org/opengamingcollective/cardwire")
+            .await
+            .unwrap();
+
+        let emitter = iface_ref.signal_emitter().to_owned();
+        let new_app_meta = crate::models::DbusAppMetadata {
+            display_name: "App Two (Interleaved)".to_string(),
+            desktop_file_id: Some("app2.desktop".to_string()),
+            icon_name: Some("app2-icon".to_string()),
+            gpu_policy: 0,
+        };
+
+        TestSmartPolicyServer::new_app_added(&emitter, ("app2".to_string(), new_app_meta.clone()))
+            .await
+            .unwrap();
+
+        // Check received messages in order
+        let first_msg = receiver.next().await.expect("expected snapshot message");
+        match first_msg {
+            Message::FetchedAppPolicies(Ok(policies)) => {
+                assert!(policies.contains_key("app1"));
+                assert!(!policies.contains_key("app2"));
+            }
+            other => panic!("expected FetchedAppPolicies(Ok), got {:?}", other),
+        }
+
+        let second_msg = receiver.next().await.expect("expected signal message");
+        match second_msg {
+            Message::NewAppDiscovered((id, meta)) => {
+                assert_eq!(id, "app2");
+                assert_eq!(meta.display_name, "App Two (Interleaved)");
+            }
+            other => panic!("expected NewAppDiscovered, got {:?}", other),
+        }
+
+        drop(server_conn);
+        sub_handle.abort();
+    }
 }
 
 pub fn dbus_sub() -> Subscription<Message> {
