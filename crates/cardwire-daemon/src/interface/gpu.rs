@@ -1,7 +1,7 @@
 //! DBUS Interface for single gpu interaction
 
 use std::{
-    collections::{BTreeMap, HashMap}, fs, sync::Arc
+    collections::{BTreeMap, HashMap}, fs, sync::{Arc, OnceLock}
 };
 
 use crate::{
@@ -29,6 +29,7 @@ impl<T, E: std::fmt::Display> FdoResultExt<T> for Result<T, E> {
 pub struct GpuInterface {
     pub id: u32,
     pub device: Arc<GpuDevice>,
+    pub env: Arc<OnceLock<Vec<String>>>,
     blocker: Arc<RwLock<EbpfBlocker>>,
     pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
@@ -39,6 +40,7 @@ impl GpuInterface {
     pub fn build(
         id: u32,
         device: GpuDevice,
+        env: Vec<String>,
         blocker: Arc<RwLock<EbpfBlocker>>,
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
         gpu_state: Arc<RwLock<CardwireGpuState>>,
@@ -47,6 +49,7 @@ impl GpuInterface {
         Ok(Self {
             id,
             device: Arc::new(device),
+            env: Arc::new(OnceLock::from(env)),
             blocker,
             pci_list,
             gpu_state,
@@ -284,4 +287,12 @@ impl GpuInterface {
 
     #[zbus(signal)]
     pub async fn power_state_changed(emitter: &SignalEmitter<'_>, state: &str) -> zbus::Result<()>;
+
+    #[zbus(property)]
+    pub async fn env(&self) -> Vec<String> {
+        match self.env.get() {
+            Some(v) => v.clone(),
+            None => Vec::new(),
+        }
+    }
 }

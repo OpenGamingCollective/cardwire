@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        gpu::GpuEnumerator, pci::{self, DbusPciDevice, PciDevice}
+        env::compute_switcheroo_env, gpu::GpuEnumerator, pci::{self, DbusPciDevice, PciDevice}
     }, interface::SwitcherooInterface, tasks::watch_power_state
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
@@ -91,10 +91,21 @@ impl DebugInterface {
             // until the new list is complete
             let gpu_enumator = GpuEnumerator::build();
             let new_gpu_list = gpu_enumator.enumerate(&new_pci_list);
+            let gpu_count = new_gpu_list.len();
             for (id, device) in new_gpu_list {
+                let gpu_env = compute_switcheroo_env(
+                    gpu_count,
+                    device.is_default(),
+                    device.is_discrete(),
+                    id as u32,
+                    device.gpu_vendor(),
+                    device.pci().pci_address(),
+                );
+
                 let gpu = GpuInterface::build(
                     id as u32,
                     device,
+                    gpu_env,
                     Arc::clone(&self.blocker),
                     Arc::clone(&self.pci_list),
                     Arc::clone(&self.gpu_state),
