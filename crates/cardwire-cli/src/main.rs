@@ -3,12 +3,11 @@ mod completion;
 mod dbus;
 mod display;
 
-use std::process::Stdio;
+use std::{collections::BTreeMap, process::Stdio};
 
 use args::{Args, CliMode, Commands, ConfigAction, DebugAction, ManagerAction};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
-use zbus::zvariant::{self};
 
 use crate::display::print_devices_pci;
 
@@ -81,46 +80,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(e) => handle_error(e),
                 }
             } else {
-                let mut map = std::collections::BTreeMap::new();
-                let objects = match client.get_managed_objects().await {
-                    Ok(objects) => objects,
-                    Err(e) => handle_error(e.into()),
-                };
-                for (path, interfaces) in objects {
-                    let path_str = path.as_str();
-                    if let Some(id_str) =
-                        path_str.strip_prefix("/org/opengamingcollective/cardwire/Gpu/")
-                        && let Ok(id) = id_str.parse::<u32>()
-                    {
-                        let mut blocked = false;
-                        for (iface, props) in interfaces {
-                            if iface.as_str() == "org.opengamingcollective.cardwire.Gpu"
-                                && let Some(block_val) = props.get("Block")
-                            {
-                                blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
-                            }
-                        }
-                        if let Ok(dbus_dev) = client.get_device(id).await {
-                            let dev = display::GpuDevice {
-                                id,
-                                name: dbus_dev.name,
-                                pci: dbus_dev.pci,
-                                render: dbus_dev.render,
-                                card: dbus_dev.card,
-                                default: dbus_dev.default,
-                                discrete: dbus_dev.discrete,
-                                virtual_gpu: dbus_dev.virtual_gpu,
-                                available: dbus_dev.available,
-                                vendor: dbus_dev.vendor,
-                                driver: dbus_dev.driver,
-                                blocked,
-                                nvidia: dbus_dev.nvidia,
-                                nvidia_minor: dbus_dev.nvidia_minor,
-                            };
-                            map.insert(id as usize, dev);
-                        }
-                    }
-                }
+                let map = get_gpu_list(&client).await;
                 if let Err(e) = display::print_devices(map, json) {
                     handle_error(zbus::Error::FDO(Box::new(zbus::fdo::Error::Failed(
                         e.to_string(),
@@ -267,61 +227,19 @@ async fn main() -> anyhow::Result<()> {
             }
         },
         Commands::Launch { gpu, program } => {
-            let available_gpu = client.get_gpu_switcheroo().await?;
+            let mut available_gpu = get_gpu_list(&client).await;
 
-            #[derive(Debug)]
-            struct SwitcherooGpu {
-                name: String,
-                environment: Vec<String>,
-                default: bool,
-                discrete: bool,
-            }
-
-            let mut switcheroo_list: Vec<SwitcherooGpu> = Vec::new();
-
-            for gpu in available_gpu {
-                let mut parsed_gpu = SwitcherooGpu {
-                    name: String::new(),
-                    environment: Vec::new(),
-                    default: false,
-                    discrete: false,
-                };
-
-                for (key, value) in gpu.iter() {
-                    if *key == "Name" {
-                        if let Ok(s) = value.downcast_ref::<zvariant::Str>() {
-                            parsed_gpu.name = s.as_str().to_string();
-                        }
-                    } else if *key == "Environment" {
-                        if let Ok(arr) = value.downcast_ref::<zvariant::Array>() {
-                            let env_val: zvariant::Value<'_> = arr.into();
-                            if let Ok(env_vec) = env_val.try_into() {
-                                parsed_gpu.environment = env_vec;
-                            }
-                        }
-                    } else if *key == "Default"
-                        && let Ok(b) = value.downcast_ref::<bool>()
-                    {
-                        parsed_gpu.default = b;
-                    } else if *key == "Discrete"
-                        && let Ok(b) = value.downcast_ref::<bool>()
-                    {
-                        parsed_gpu.discrete = b;
-                    }
-                }
-
-                switcheroo_list.push(parsed_gpu);
-            }
+            available_gpu.retain(|_, gpu| gpu.available);
 
             let target_gpu = if let Some(gpu_id) = gpu {
-                switcheroo_list.get(gpu_id as usize)
+                available_gpu.get(&(gpu_id as usize))
             } else {
-                switcheroo_list
-                    .iter()
-                    .find(|g| !g.default && g.discrete)
-                    .or_else(|| switcheroo_list.iter().find(|g| g.discrete))
-                    .or_else(|| switcheroo_list.iter().find(|g| g.default))
-                    .or_else(|| switcheroo_list.first())
+                available_gpu
+                    .values()
+                    .find(|gpu| !gpu.default && gpu.discrete)
+                    .or_else(|| available_gpu.values().find(|gpu| gpu.discrete))
+                    .or_else(|| available_gpu.values().find(|gpu| gpu.default))
+                    .or_else(|| available_gpu.values().next())
             };
 
             if let Some(gpu) = target_gpu {
@@ -331,7 +249,12 @@ async fn main() -> anyhow::Result<()> {
                     command.args(&program[1..]);
                 }
 
-                for chunk in gpu.environment.chunks(2) {
+                let env = client
+                    .get_gpu_env(gpu.id)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to get GPU environment: {e}"))?;
+
+                for chunk in env.chunks(2) {
                     if let [key, value] = chunk {
                         command.env(key, value);
                     }
@@ -357,6 +280,10 @@ async fn main() -> anyhow::Result<()> {
                         ));
                     }
                 };
+            } else {
+                return Err(anyhow::anyhow!(
+                    "No available GPU matched the launch request"
+                ));
             }
         }
         Commands::CompleteGpus => {
@@ -401,4 +328,47 @@ fn handle_error(err: zbus::Error) -> ! {
         _ => eprintln!("{}", err),
     }
     std::process::exit(1)
+}
+
+async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::GpuDevice> {
+    let mut map: BTreeMap<usize, display::GpuDevice> = BTreeMap::new();
+    let objects = match client.get_managed_objects().await {
+        Ok(objects) => objects,
+        Err(e) => handle_error(e.into()),
+    };
+    for (path, interfaces) in objects {
+        let path_str = path.as_str();
+        if let Some(id_str) = path_str.strip_prefix("/org/opengamingcollective/cardwire/Gpu/")
+            && let Ok(id) = id_str.parse::<u32>()
+        {
+            let mut blocked = false;
+            for (iface, props) in interfaces {
+                if iface.as_str() == "org.opengamingcollective.cardwire.Gpu"
+                    && let Some(block_val) = props.get("Block")
+                {
+                    blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
+                }
+            }
+            if let Ok(dbus_dev) = client.get_device(id).await {
+                let dev = display::GpuDevice {
+                    id,
+                    name: dbus_dev.name,
+                    pci: dbus_dev.pci,
+                    render: dbus_dev.render,
+                    card: dbus_dev.card,
+                    default: dbus_dev.default,
+                    discrete: dbus_dev.discrete,
+                    virtual_gpu: dbus_dev.virtual_gpu,
+                    available: dbus_dev.available,
+                    vendor: dbus_dev.vendor,
+                    driver: dbus_dev.driver,
+                    blocked,
+                    nvidia: dbus_dev.nvidia,
+                    nvidia_minor: dbus_dev.nvidia_minor,
+                };
+                map.insert(id as usize, dev);
+            }
+        }
+    }
+    map
 }
