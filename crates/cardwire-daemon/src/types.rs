@@ -94,15 +94,24 @@ impl SystemType {
             Self::Manual
         } else if available_gpus
             .iter()
-            .any(|(_, default, discrete)| *discrete && !*default)
+            .any(|(_, default, discrete)| *default && *discrete)
+            && available_gpus
+                .iter()
+                .any(|(_, default, discrete)| !*discrete && !*default)
         {
-            Self::Laptop
+            // Has a default discrete GPU and a non-default non-discrete GPU
+            Self::Desktop
         } else if available_gpus
             .iter()
-            .any(|(_, default, discrete)| *default && *discrete)
+            .any(|(_, default, discrete)| *discrete && !*default)
+            && available_gpus
+                .iter()
+                .any(|(_, default, discrete)| !*discrete && *default)
         {
-            Self::Desktop
+            // Has a non-default discrete GPU and a default non-discrete GPU
+            Self::Laptop
         } else {
+            // Even if it's a desktop, we treat it as a Manual if it doesn't have the iGPU
             Self::Manual
         }
     }
