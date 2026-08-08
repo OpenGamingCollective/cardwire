@@ -37,7 +37,7 @@ fn open_db() -> Result<Connection> {
     Ok(conn)
 }
 
-#[derive(Debug, Clone, zvariant::Type, serde::Serialize)]
+#[derive(Debug, Clone, zvariant::Type, serde::Serialize, serde::Deserialize)]
 pub struct DbusAppMetadata {
     pub display_name: String,
     pub desktop_file_id: Option<String>,
