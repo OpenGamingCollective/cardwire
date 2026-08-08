@@ -132,10 +132,6 @@ async fn spawn_dbus_api(
     let path = "/org/opengamingcollective/cardwire";
 
     let gpu_interfaces = daemon.inner.gpu_list.read().await;
-    // cardwire.Mode
-    object_server
-        .at(path, daemon.mode_interface.clone())
-        .await?;
     // cardwire.Config
     object_server
         .at(path, daemon.config_interface.clone())
@@ -159,6 +155,11 @@ async fn spawn_dbus_api(
             power_tasks.insert(*id, handle);
         }
     }
+
+    // cardwire.Mode
+    object_server
+        .at(path, daemon.mode_interface.clone())
+        .await?;
     // Cardwire logger
     object_server
         .at(path, daemon.logger_interface.clone())
