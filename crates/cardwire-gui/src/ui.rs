@@ -485,13 +485,9 @@ fn gpu_cards(
                             .size(15)
                             .color(Color::from_rgb(0.72, 0.72, 0.75))
                             .width(width),
-                        text(if gpu.blocked { "Yes" } else { "No" }).size(15).color(
-                            if gpu.blocked {
-                                Color::from_rgb(0.95, 0.3, 0.3)
-                            } else {
-                                Color::from_rgb(0.4, 0.8, 0.4)
-                            }
-                        ),
+                        text(if gpu.blocked { "Yes" } else { "No" })
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92)),
                         horizontal(),
                         power_state_badge(&gpu.power_state),
                     ]
@@ -670,19 +666,24 @@ pub fn logs_page<'a>(
             })
     };
 
-    let terminal = container(scrollable(content).height(Fill))
-        .width(Fill)
-        .height(Fill)
-        .padding(16)
-        .style(|_| container::Style {
-            background: Some(Color::from_rgb(0.07, 0.07, 0.08).into()),
-            border: Border {
-                radius: 8.0.into(),
-                width: 1.0,
-                color: Color::from_rgb(0.2, 0.2, 0.2),
-            },
-            ..Default::default()
-        });
+    let terminal = container(scrollable(content).width(Fill).height(Fill).direction(
+        scrollable::Direction::Both {
+            vertical: Default::default(),
+            horizontal: Default::default(),
+        },
+    ))
+    .width(Fill)
+    .height(Fill)
+    .padding(16)
+    .style(|_| container::Style {
+        background: Some(Color::from_rgb(0.07, 0.07, 0.08).into()),
+        border: Border {
+            radius: 8.0.into(),
+            width: 1.0,
+            color: Color::from_rgb(0.2, 0.2, 0.2),
+        },
+        ..Default::default()
+    });
 
     column![header, terminal]
         .spacing(16)
@@ -738,7 +739,7 @@ pub fn about_page() -> Element<'static, Message> {
     let header = page_header(
         "About Cardwire",
         Some("GPU management and process isolation for Linux"),
-        Some(count_badge(format!("v{}", version))),
+        None,
     );
 
     let info_card = container(
