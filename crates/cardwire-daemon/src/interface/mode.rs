@@ -63,7 +63,7 @@ impl ModeInterface {
 
         // Only emit the signal if save = false, this mean the request comes from internal tasks,
         // mode change request coming from the DBUS API already handle the signal emission
-        if !save && let Some(emitter) = self.signal_emitter.get() {
+        if let Some(emitter) = self.signal_emitter.get() {
             self.mode_changed(emitter).await?;
         }
         Ok(())
