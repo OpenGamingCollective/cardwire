@@ -25,7 +25,8 @@
         let
           tc = (fenixpkgs system).toolchainOf {
             channel = "nightly";
-            sha256 = "sha256-w0X+EGECIpZs67m1KoS/4Ac+q1n/PGzhlOJ+0z/BkO8=";
+            date = "2026-08-08";
+            sha256 = "sha256-lYQxtgBt4zZfd4p7QDOaE26H7qwHwl9Pny1he+Nmn+s=";
           };
         in
         (fenixpkgs system).combine [
