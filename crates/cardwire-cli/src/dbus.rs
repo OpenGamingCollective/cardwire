@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
-use zbus::{Proxy, connection::Connection, zvariant::OwnedValue};
+use zbus::{Proxy, connection::Connection};
 
 use crate::display::PciDevice;
 
@@ -141,6 +141,17 @@ impl<'a> DaemonClient<'a> {
         .await?;
         proxy.call("Lsof", &()).await
     }
+    pub async fn get_gpu_env(&self, id: u32) -> zbus::Result<Vec<String>> {
+        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
+        let proxy = zbus::Proxy::new(
+            self.proxy.connection(),
+            "org.opengamingcollective.cardwire",
+            path.as_str(),
+            "org.opengamingcollective.cardwire.Gpu",
+        )
+        .await?;
+        proxy.call("Env", &()).await
+    }
 
     pub async fn get_auto_apply_gpu_state(&self) -> zbus::Result<bool> {
         let proxy = zbus::Proxy::new(
@@ -270,15 +281,5 @@ impl<'a> DaemonClient<'a> {
         )
         .await?;
         proxy.call("RefreshGpu", &()).await
-    }
-    pub async fn get_gpu_switcheroo(&self) -> zbus::Result<Vec<HashMap<String, OwnedValue>>> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "net.hadess.SwitcherooControl",
-            "/net/hadess/SwitcherooControl",
-            "net.hadess.SwitcherooControl",
-        )
-        .await?;
-        proxy.get_property("GPUs").await
     }
 }
