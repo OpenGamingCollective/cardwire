@@ -12,7 +12,7 @@ use zbus::object_server::SignalEmitter;
 
 use crate::{
     analyzer::{
-        dynamic_analysis::{check_env, get_app_id_wayland_with_retry, get_steam_app_id}, helpers::{comm_to_string, get_real_process_name, is_proc_still_alive}, static_analysis::{self, AppMetadata}
+        dynamic_analysis::{check_env, get_app_id_wayland_with_retry, get_steam_app_id}, helpers::{comm_to_string, get_real_process_name, is_proc_still_alive}, static_analysis::{self, AppMetadata, watch_fdo_folders}
     }, file::GpuPolicy, interface::{LogEntry, LoggerInterfaceSignals}
 };
 #[repr(C)]
@@ -43,6 +43,7 @@ pub struct CardwireAnalyzer {
     forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>>,
     xdg_list: Arc<RwLock<HashMap<String, AppMetadata>>>,
+    xdg_folders: Vec<std::path::PathBuf>,
     db_cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
     pending_discoveries: Arc<Mutex<HashSet<String>>>,
     db_tx: mpsc::Sender<(String, AppMetadata, oneshot::Sender<bool>)>,
@@ -81,7 +82,11 @@ impl CardwireAnalyzer {
         let ebpf_logger: Arc<Mutex<AsyncFd<EbpfLogger<&'static dyn Log>>>> =
             Arc::new(Mutex::new(ebpf_logger));
 
-        let xdg_list = Arc::new(RwLock::new(static_analysis::get_fdo_apps().await?));
+        let xdg_res = static_analysis::get_fdo_apps().await?;
+
+        let xdg_list = Arc::new(RwLock::new(xdg_res.0));
+
+        let xdg_folders: Vec<std::path::PathBuf> = xdg_res.1;
 
         Ok(CardwireAnalyzer {
             exec_ring,
@@ -90,6 +95,7 @@ impl CardwireAnalyzer {
             forced_map,
             ebpf_logger,
             xdg_list,
+            xdg_folders,
             db_cache,
             pending_discoveries: Arc::new(Mutex::new(HashSet::new())),
             db_tx,
@@ -108,6 +114,13 @@ impl CardwireAnalyzer {
         let mut exec_ring = exec_arc.lock().await;
 
         let shared_self = Arc::new(self);
+
+        // Spawn a thread that will watch the xdg folders and update the list when a new app is
+        // installed
+        let cloned_xdg_list = shared_self.xdg_list.clone();
+        let cloned_xdg_folders = shared_self.xdg_folders.clone();
+
+        task::spawn(async move { watch_fdo_folders(cloned_xdg_folders, cloned_xdg_list).await });
 
         // spawn the ebpf-logger in it's own thread
         task::spawn(async move {

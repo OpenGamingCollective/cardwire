@@ -1,9 +1,12 @@
 //! Functions for static analysis, contains:
 //! - FDO desktop entries analysis
 use freedesktop_desktop_entry::{DesktopEntry, get_languages_from_env};
+use inotify::{EventMask, Inotify, StreamExt, WatchDescriptor, WatchMask};
+use log::error;
 use std::{
-    collections::HashMap, fs, path::{Path, PathBuf}
+    collections::HashMap, fs, path::{Path, PathBuf}, sync::Arc
 };
+use tokio::sync::RwLock;
 use xdg::BaseDirectories;
 
 #[derive(Clone, Debug)]
@@ -14,7 +17,7 @@ pub struct AppMetadata {
 }
 
 /// Return a list of fdo apps present in the system
-pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, AppMetadata>> {
+pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, AppMetadata>, Vec<PathBuf>)> {
     let mut app_directories: Vec<PathBuf> = Vec::new();
     // get from ENV
     let xdg_dir = BaseDirectories::new();
@@ -78,66 +81,150 @@ pub async fn get_fdo_apps() -> anyhow::Result<HashMap<String, AppMetadata>> {
                     && let Ok(app_fdo) = DesktopEntry::from_path(&path, Some(&locales))
                     && let Some(name) = app_fdo.name(&locales)
                 {
-                    // Push both lowercase and normal name to the hashmap
-                    // the RPCS3 .desktop contain the name `RPCS3` but the comm is `rpcs3`, so
-                    // we need to lowercase it On the other, Ryujinx
-                    // .desktop's name is `Ryujinx` and the comm is `Ryujinx`, so we also push
-                    // the default name
-                    let display_name = name.to_string();
-
-                    let icon_name = app_fdo.icon().map(|icon| icon.to_string());
-
-                    let desktop_file_id = path
-                        .file_name()
-                        .map(|s| s.to_string_lossy().trim_end_matches(".desktop").to_string());
-
-                    let meta = AppMetadata {
-                        display_name,
-                        desktop_file_id,
-                        icon_name,
-                    };
-
-                    // Push both lowercase and normal name as fallbacks
-                    app_list.insert(name.to_ascii_lowercase(), meta.clone());
-                    app_list.insert(meta.display_name.clone(), meta.clone());
-
-                    // Also insert the flatpak ID, lowercased since lookups are lowercased
-                    if let Some(flatpak_id) = app_fdo.flatpak() {
-                        app_list.insert(flatpak_id.to_ascii_lowercase(), meta.clone());
-                    }
-                    if let Some(exec_str) = app_fdo.exec() {
-                        let exec_parts: Vec<&str> = exec_str.split_whitespace().collect();
-
-                        // Scan all parts for a steam URI before applying the wrapper-binary
-                        // stop condition, so `Exec=steam steam://rungameid/<id>` still maps
-                        // to the steam app metadata
-                        if let Some(uri_part) = exec_parts
-                            .iter()
-                            .find(|part| part.starts_with("steam://rungameid/"))
-                        {
-                            let app_id = uri_part
-                                .trim_start_matches("steam://rungameid/")
-                                .trim_matches('/');
-                            app_list.insert(format!("steam_app_{}", app_id), meta.clone());
-                        } else {
-                            for part in exec_parts {
-                                if part == "env" || part.contains('=') {
-                                    continue;
-                                }
-                                let binary = part.split('/').next_back().unwrap_or(part);
-                                if ["flatpak", "steam", "sh", "bash", "bwrap"].contains(&binary) {
-                                    break;
-                                }
-                                if !binary.is_empty() {
-                                    app_list.insert(binary.to_lowercase(), meta.clone());
-                                }
-                                break;
-                            }
-                        }
-                    }
+                    let new_app_map = parse_fdo_app(&app_fdo, &name, &path);
+                    app_list.extend(new_app_map);
                 }
             }
         }
     }
-    Ok(app_list)
+    Ok((app_list, app_directories))
+}
+
+/// Create a inotify for each folders, watch for changes and update the xdg-list
+pub async fn watch_fdo_folders(
+    xdg_folders: Vec<PathBuf>,
+    xdg_list: Arc<RwLock<HashMap<String, AppMetadata>>>,
+) {
+    if xdg_folders.is_empty() {
+        error!("xdg_folder is empty, exiting notify task...");
+        return;
+    }
+
+    let inotify = match Inotify::init() {
+        Ok(v) => v,
+        Err(err) => {
+            error!("Couldn't init inotify: {}", err);
+            return;
+        }
+    };
+    let mut watched_dirs: HashMap<WatchDescriptor, PathBuf> = HashMap::new();
+    let watch_mask =
+        WatchMask::CREATE | WatchMask::MODIFY | WatchMask::MOVED_TO | WatchMask::CLOSE_WRITE;
+
+    for folder in xdg_folders {
+        match inotify.watches().add(&folder, watch_mask) {
+            Ok(wd) => {
+                watched_dirs.insert(wd, folder);
+            }
+
+            Err(err) => {
+                error!("Cannot watch {}: {err}", folder.display());
+            }
+        }
+    }
+
+    let mut buffer = [0; 4096];
+    let mut stream = match inotify.into_event_stream(&mut buffer) {
+        Ok(s) => s,
+        Err(err) => {
+            error!("Couldn't convert inotify into a stream: {}", err);
+            return;
+        }
+    };
+    let locales = get_languages_from_env();
+
+    loop {
+        while let Some(event_result) = stream.next().await {
+            let event = match event_result {
+                Ok(event) => event,
+                Err(err) => {
+                    error!("Error reading inotify event: {err}");
+                    continue;
+                }
+            };
+
+            let Some(name) = event.name else {
+                if event.mask.contains(EventMask::Q_OVERFLOW) {
+                    error!("inotify queue overflowed");
+                }
+
+                continue;
+            };
+
+            let Some(folder) = watched_dirs.get(&event.wd) else {
+                error!("Received event for unknown watch descriptor");
+                continue;
+            };
+
+            // `name` is relative to the watched directory.
+            let path = folder.join(name);
+
+            if let Some(ext) = path.extension()
+                && ext == "desktop"
+                && let Ok(app_fdo) = DesktopEntry::from_path(&path, Some(&locales))
+                && let Some(name) = app_fdo.name(&locales)
+            {
+                let new_app_map = parse_fdo_app(&app_fdo, &name, &path);
+                let mut xdg_list = xdg_list.write().await;
+                xdg_list.extend(new_app_map);
+            }
+        }
+    }
+}
+
+fn parse_fdo_app(app_fdo: &DesktopEntry, name: &str, path: &Path) -> HashMap<String, AppMetadata> {
+    let mut app_list: HashMap<String, AppMetadata> = HashMap::new();
+
+    let display_name = name.to_string();
+    let icon_name = app_fdo.icon().map(|icon| icon.to_string());
+
+    let desktop_file_id = path
+        .file_name()
+        .map(|s| s.to_string_lossy().trim_end_matches(".desktop").to_string());
+
+    let meta = AppMetadata {
+        display_name,
+        desktop_file_id,
+        icon_name,
+    };
+
+    // Push both lowercase and normal name as fallbacks
+    app_list.insert(name.to_ascii_lowercase(), meta.clone());
+    app_list.insert(meta.display_name.clone(), meta.clone());
+
+    if let Some(flatpak_id) = app_fdo.flatpak() {
+        app_list.insert(flatpak_id.to_ascii_lowercase(), meta.clone());
+    }
+    if let Some(exec_str) = app_fdo.exec() {
+        let exec_parts: Vec<&str> = exec_str.split_whitespace().collect();
+
+        // Scan all parts for a steam URI before applying the wrapper-binary
+        // stop condition, so `Exec=steam steam://rungameid/<id>` still maps
+        // to the steam app metadata
+        if let Some(uri_part) = exec_parts
+            .iter()
+            .find(|part| part.starts_with("steam://rungameid/"))
+        {
+            let app_id = uri_part
+                .trim_start_matches("steam://rungameid/")
+                .trim_matches('/');
+            app_list.insert(format!("steam_app_{}", app_id), meta.clone());
+        } else {
+            for part in exec_parts {
+                if part == "env" || part.contains('=') {
+                    continue;
+                }
+                let binary = part.split('/').next_back().unwrap_or(part);
+                if ["flatpak", "steam", "sh", "bash", "bwrap"].contains(&binary) {
+                    break;
+                }
+                if !binary.is_empty() {
+                    app_list.insert(binary.to_lowercase(), meta.clone());
+                }
+                break;
+            }
+        }
+    }
+
+    app_list
 }

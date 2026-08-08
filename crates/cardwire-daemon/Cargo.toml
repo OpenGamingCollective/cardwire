@@ -28,6 +28,7 @@ aya-log.workspace = true
 vulkano.workspace = true
 khronos-egl.workspace = true
 rusqlite.workspace = true
+inotify.workspace = true
 
 [[bin]]
 name = "cardwired"
