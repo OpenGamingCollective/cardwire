@@ -125,15 +125,16 @@ impl DebugInterface {
                 object_server
                     .at(path.clone(), gpu_interface.as_ref().clone())
                     .await?;
+                let gpu_ref = object_server
+                    .interface::<_, GpuInterface>(path)
+                    .await
+                    .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+                gpu_interface
+                    .signal_emitter
+                    .get_or_init(|| gpu_ref.signal_emitter().to_owned());
                 // spawn power state tasks only for available GPUs
                 if gpu_interface.device.is_available() {
-                    let handle = task::spawn(watch_power_state(
-                        Arc::clone(gpu_interface),
-                        object_server
-                            .interface(path)
-                            .await
-                            .map_err(|err| fdo::Error::Failed(err.to_string()))?,
-                    ));
+                    let handle = task::spawn(watch_power_state(Arc::clone(gpu_interface), gpu_ref));
                     power_tasks.insert(*id, handle);
                 }
             }
