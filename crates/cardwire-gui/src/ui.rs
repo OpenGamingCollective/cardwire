@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use iced::{
     Alignment, Border, Color, Element, Font, Length::{Fill, FillPortion, Fixed}, widget::{
-        button, column, container, pick_list, row, scrollable, space::horizontal, text, toggler
+        button, column, container, pick_list, row, scrollable, space::horizontal, text, text_input, toggler
     }
 };
 use iced_aw::DropDown;
@@ -9,7 +9,9 @@ use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    gui_config::{GuiConfig, PrimaryClickAction}, helpers::GpuDevice, message::Message, models::{LogEntry, LogState, LsofData, MainState, Mode, Page, PciDevice, SettingState}
+    gui_config::{GuiConfig, PrimaryClickAction}, helpers::GpuDevice, message::Message, models::{
+        LogEntry, LogState, LsofData, MainState, Mode, Page, PciDevice, ResolvedApp, SettingState, SmartState
+    }
 };
 
 // Custom macro for box theming, used by cards
@@ -853,4 +855,222 @@ pub fn info_bar(msg: &str) -> Element<'_, Message> {
         ..Default::default()
     })
     .into()
+}
+
+pub fn smart_mode_page<'a>(
+    smart_state: &'a SmartState,
+    current_mode: Option<Mode>,
+) -> Element<'a, Message> {
+    let is_smart = current_mode == Some(Mode::Smart);
+
+    let header = row![
+        text("Smart Mode App Policies")
+            .size(20)
+            .color(Color::from_rgb(0.9, 0.9, 0.9)),
+        horizontal(),
+        text!("{} apps", smart_state.app_policies.len()).color(Color::from_rgb(0.6, 0.6, 0.6)),
+    ]
+    .align_y(Alignment::Center);
+
+    let warning = if !is_smart {
+        let current_mode_str = current_mode.map_or("Unknown".to_string(), |m| m.to_string());
+        Some(
+            container(
+                row![
+                    text("⚠ ").size(20).color(Color::from_rgb(1.0, 0.8, 0.0)),
+                    text!("Warning: Smart Mode is inactive (Current mode: {}). App policies are not enforced.", current_mode_str)
+                        .color(Color::from_rgb(1.0, 0.8, 0.0)),
+                ]
+                .align_y(Alignment::Center)
+                .padding(10),
+            )
+            .style(|_| container::Style {
+                background: Some(Color::from_rgb(0.25, 0.2, 0.05).into()),
+                border: Border {
+                    radius: 8.0.into(),
+                    width: 1.0,
+                    color: Color::from_rgb(0.5, 0.4, 0.1),
+                },
+                ..Default::default()
+            })
+            .width(Fill),
+        )
+    } else {
+        None
+    };
+
+    // Search input & Refresh button
+    let search_bar = text_input("Search app name or binary ID...", &smart_state.search_query)
+        .on_input(Message::UpdateSmartSearch)
+        .padding(8)
+        .width(Fill);
+
+    let refresh_btn = button("Refresh Policies")
+        .on_press(Message::RefreshSmartPolicies)
+        .padding([8, 14]);
+
+    let controls = row![search_bar, refresh_btn]
+        .spacing(12)
+        .align_y(Alignment::Center);
+
+    let query = smart_state.search_query.to_lowercase();
+    let filtered_apps: Vec<(&String, &ResolvedApp)> = smart_state
+        .app_policies
+        .iter()
+        .filter(|(app_id, app)| {
+            if query.is_empty() {
+                true
+            } else {
+                app_id.to_lowercase().contains(&query)
+                    || app.display_name.to_lowercase().contains(&query)
+            }
+        })
+        .collect();
+
+    // App list container
+    let mut app_list_col = column![].spacing(8).width(Fill);
+
+    if filtered_apps.is_empty() {
+        let empty_text = if smart_state.loading {
+            "Loading application policies..."
+        } else if smart_state.app_policies.is_empty() {
+            "No applications detected in Cardwire database yet."
+        } else {
+            "No applications match the search query."
+        };
+        app_list_col = app_list_col.push(
+            container(text!("{}", empty_text).color(Color::from_rgb(0.5, 0.5, 0.5)))
+                .padding(30)
+                .width(Fill)
+                .align_x(Alignment::Center),
+        );
+    } else {
+        for (app_id, app) in filtered_apps {
+            let is_allowed = app.gpu_policy == 1;
+
+            // App badge icon resolution
+            let initial = app
+                .display_name
+                .chars()
+                .next()
+                .unwrap_or('A')
+                .to_uppercase()
+                .to_string();
+
+            let badge_bg = if is_allowed {
+                Color::from_rgb(0.15, 0.35, 0.25)
+            } else {
+                Color::from_rgb(0.35, 0.2, 0.2)
+            };
+
+            let icon_element: Element<'_, Message> =
+                container(text!("{}", initial).color(Color::WHITE))
+                    .width(38)
+                    .height(38)
+                    .align_x(Alignment::Center)
+                    .align_y(Alignment::Center)
+                    .style(move |_| container::Style {
+                        background: Some(badge_bg.into()),
+                        border: Border {
+                            radius: 8.0.into(),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    })
+                    .into();
+
+            // App title & binary ID
+            let text_color = if !is_smart {
+                Color::from_rgb(0.5, 0.5, 0.5)
+            } else {
+                Color::WHITE
+            };
+            let subtext_color = if !is_smart {
+                Color::from_rgb(0.4, 0.4, 0.4)
+            } else {
+                Color::from_rgb(0.6, 0.6, 0.6)
+            };
+
+            let dt_id = app.desktop_file_id.as_deref();
+            let sub_text = if let Some(dt) = dt_id {
+                format!("ID: {} ({}.desktop)", app_id, dt)
+            } else {
+                format!("ID: {}", app_id)
+            };
+
+            let app_info = column![
+                text!("{}", app.display_name).color(text_color),
+                text!("{}", sub_text).color(subtext_color),
+            ]
+            .spacing(2);
+
+            // Policy toggle widget & status label
+            let policy_label = if is_allowed {
+                text("Allowed (dGPU)").color(if is_smart {
+                    Color::from_rgb(0.3, 0.8, 0.4)
+                } else {
+                    Color::from_rgb(0.4, 0.6, 0.4)
+                })
+            } else {
+                text("Blocked (iGPU)").color(if is_smart {
+                    Color::from_rgb(0.8, 0.4, 0.4)
+                } else {
+                    Color::from_rgb(0.6, 0.4, 0.4)
+                })
+            };
+
+            let app_id_owned = app_id.clone();
+            let toggle_widget = if is_smart {
+                toggler(is_allowed).on_toggle(move |val| {
+                    Message::SetAppPolicy(app_id_owned.clone(), if val { 1 } else { 0 })
+                })
+            } else {
+                toggler(is_allowed)
+            };
+
+            let policy_control = row![policy_label, toggle_widget]
+                .spacing(12)
+                .align_y(Alignment::Center);
+
+            let row_content = row![icon_element, app_info, horizontal(), policy_control]
+                .spacing(15)
+                .align_y(Alignment::Center);
+
+            // Greyed out styling when not in Smart mode
+            let card =
+                container(row_content)
+                    .width(Fill)
+                    .padding(14)
+                    .style(move |_: &iced::Theme| {
+                        if !is_smart {
+                            container::Style {
+                                background: Some(Color::from_rgba(0.12, 0.12, 0.12, 0.6).into()),
+                                border: Border {
+                                    radius: 8.0.into(),
+                                    width: 1.0,
+                                    color: Color::from_rgb(0.2, 0.2, 0.2),
+                                },
+                                ..Default::default()
+                            }
+                        } else {
+                            box_theme!()
+                        }
+                    });
+
+            app_list_col = app_list_col.push(card);
+        }
+    }
+
+    let list_scrollable = scrollable(app_list_col).height(Fill);
+
+    let mut content = column![header].spacing(12).width(Fill).height(Fill);
+
+    if let Some(w) = warning {
+        content = content.push(w);
+    }
+
+    content = content.push(controls);
+    content = content.push(list_scrollable);
+
+    content.into()
 }

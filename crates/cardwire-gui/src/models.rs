@@ -156,3 +156,29 @@ pub struct PciDevice {
     pub parent_pci: String,
     pub child_pci: String,
 }
+
+#[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug, Clone)]
+pub struct DbusAppMetadata {
+    pub display_name: String,
+    pub desktop_file_id: Option<String>,
+    pub icon_name: Option<String>,
+    pub gpu_policy: u32,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct ResolvedApp {
+    pub app_id: String,
+    pub display_name: String,
+    pub desktop_file_id: Option<String>,
+    pub icon_name: Option<String>,
+    pub icon_path: Option<std::path::PathBuf>,
+    pub gpu_policy: u32,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct SmartState {
+    pub app_policies: std::collections::BTreeMap<String, ResolvedApp>,
+    pub search_query: String,
+    pub loading: bool,
+}

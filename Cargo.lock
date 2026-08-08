@@ -693,6 +693,7 @@ version = "0.11.1"
 dependencies = [
  "chrono",
  "env_logger",
+ "freedesktop-desktop-entry",
  "iced",
  "iced_aw",
  "ksni",

@@ -34,6 +34,13 @@ pub enum Message {
     RefreshGpuResult(Result<(), String>),
     FetchedLogs(Result<VecDeque<LogEntry>, String>),
     NewLog(LogEntry),
+    FetchedAppPolicies(
+        Result<std::collections::HashMap<String, crate::models::DbusAppMetadata>, String>,
+    ),
+    SetAppPolicy(String, i32),
+    AppPolicyResult(Result<(String, i32), String>),
+    UpdateSmartSearch(String),
+    RefreshSmartPolicies,
     OpenUrl(String),
     ClearError,
     ClearInfo,
