@@ -190,11 +190,20 @@ impl GpuInterface {
                     self.device.name()
                 )));
             }
-            if is_gpu_active(*self.device.card()).await.is_some_and(|v| v) {
-                return Err(fdo::Error::AccessDenied(format!(
-                    "GPU {} is active (monitor IN) and cannot be blocked",
-                    self.device.name()
-                )));
+            match is_gpu_active(*self.device.card()).await {
+                Some(true) => {
+                    return Err(fdo::Error::AccessDenied(format!(
+                        "GPU {} is active (monitor IN) and cannot be blocked",
+                        self.device.name()
+                    )));
+                }
+                None => {
+                    return Err(fdo::Error::Failed(format!(
+                        "could not probe display state of GPU {}; refusing to block",
+                        self.device.name()
+                    )));
+                }
+                Some(false) => {}
             }
             // Now block
             self.block_gpu(self.id).await?;
