@@ -73,35 +73,13 @@ impl ModeInterface {
     /// Apply a mode to GPU blocking and the eBPF map without persisting it
     pub(crate) async fn apply_mode(&self, mode: Modes) -> fdo::Result<()> {
         let gpu_list = self.gpu_list.read().await;
+        let system_type = SystemType::from_gpulist(&gpu_list);
+
         match mode {
             // Integrated and Smart modes only work on hybrid setups with a offload discrete GPU
             // (laptops)
             Modes::Integrated | Modes::Smart => {
-                let available: Vec<(u32, bool, bool, u32)> = gpu_list
-                    .iter()
-                    .filter(|(_, gpu)| gpu.device.is_available())
-                    .map(|(id, gpu)| {
-                        (
-                            *id as u32,
-                            gpu.device.is_discrete(),
-                            gpu.device.is_default(),
-                            *gpu.device.card(),
-                        )
-                    })
-                    .collect();
-
-                if available.len() != 2 {
-                    let error_message = format!(
-                        "Couldn't set mode to {}, the mode requires exactly 2 GPUs",
-                        mode
-                    );
-                    error!("{}", error_message);
-                    return Err(fdo::Error::NotSupported(error_message));
-                }
-
                 // Check if there is an offload discrete GPU (discrete and not the default display)
-                let system_type = SystemType::from_gpulist(&gpu_list);
-
                 if system_type != SystemType::Laptop {
                     let error_message = format!(
                         "Couldn't set mode to {}, Integrated and Smart modes require a offload discrete GPU (not supported on desktops where the discrete GPU is the primary display)",
@@ -135,6 +113,15 @@ impl ModeInterface {
             // If the auto apply is false, return all gpus to unblocked
             // Else apply the gpu_state but still unblock other gpus
             Modes::Manual => {
+                // Manual is only allowed on Desktop or Manual
+                if system_type != SystemType::Manual || system_type != SystemType::Desktop {
+                    let error_message = format!(
+                        "Couldn't set mode to {}, Manual mode is only available on Desktop or system with either 1 GPU or 3+ GPUs",
+                        mode
+                    );
+                    error!("{}", error_message);
+                    return Err(fdo::Error::NotSupported(error_message));
+                }
                 let config = self.config.auto_apply_gpu_state.load(Ordering::Relaxed);
                 let gpu_state = self.gpu_state.read().await;
                 for (id, gpu) in gpu_list.iter().filter(|(_, gpu)| gpu.device.is_available()) {
