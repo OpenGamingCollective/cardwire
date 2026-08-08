@@ -1280,7 +1280,24 @@ pub fn smart_mode_page<'a>(
                 Color::from_rgb(0.35, 0.2, 0.2)
             };
 
-            let icon_element: Element<'_, Message> =
+            let icon_element: Element<'_, Message> = if let Some(ref path) = app.icon_path {
+                let ext = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+                if ext == "svg" {
+                    iced::widget::svg(iced::widget::svg::Handle::from_path(path))
+                        .width(38)
+                        .height(38)
+                        .into()
+                } else {
+                    iced::widget::image(iced::widget::image::Handle::from_path(path))
+                        .width(38)
+                        .height(38)
+                        .into()
+                }
+            } else {
                 container(text!("{}", initial).color(Color::WHITE))
                     .width(38)
                     .height(38)
@@ -1294,7 +1311,8 @@ pub fn smart_mode_page<'a>(
                         },
                         ..Default::default()
                     })
-                    .into();
+                    .into()
+            };
 
             // App title & binary ID
             let text_color = if !is_smart {
