@@ -161,11 +161,16 @@ When an external display is connected to a port wired directly to the dedicated 
 temporarily switch Integrated and Smart modes to Hybrid. It restores the requested mode after the
 display is disconnected.
 
-This feature is disabled by default. Enable or disable it with:
+This feature is disabled by default. To get if external display auto switch is enabled:
+
+```bash
+cardwire config external-display-auto-switch
+```
+
+To enable/disable it:
 
 ```bash
 cardwire config external-display-auto-switch true
-cardwire config external-display-auto-switch false
 ```
 
 ### Auto Apply Gpu State
