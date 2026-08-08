@@ -277,6 +277,25 @@ mod tests {
             },
             _ => panic!("expected Config command"),
         }
+
+        let args =
+            Args::try_parse_from(["cardwire", "config", "external-display-auto-switch", "false"])
+                .unwrap();
+        assert!(matches!(
+            args.command,
+            Commands::Config {
+                action: ConfigAction::ExternalDisplayAutoSwitch { set: Some(false) }
+            }
+        ));
+
+        let args =
+            Args::try_parse_from(["cardwire", "config", "external-display-auto-switch"]).unwrap();
+        assert!(matches!(
+            args.command,
+            Commands::Config {
+                action: ConfigAction::ExternalDisplayAutoSwitch { set: None }
+            }
+        ));
     }
 
     #[test]
