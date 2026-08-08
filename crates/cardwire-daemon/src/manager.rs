@@ -210,21 +210,13 @@ impl DaemonManager {
             }
         };
         let mode = Modes::try_from(mode_to_apply)?;
-        // On first attempt: don't persist (already persisted).
-        // On fallback: persist so the broken mode isn't retried on every boot.
-        let save = if mode_arg.is_some() {
-            Some(true)
-        } else {
-            Some(false)
-        };
-        let res = self
-            .mode_interface
+        // On first attempt: don't save (already persisted)
+        // On fallback: persist so the broken mode isn't retried on every boot
+        let save = mode_arg.is_some();
+        self.mode_interface
             .internal_set_mode(mode, save)
             .await
-            .map_err(anyhow::Error::from);
-        // The internal_set_mode above handles persistence based on `save`.
-        // No separate save_state call needed.
-        res
+            .map_err(anyhow::Error::from)
     }
     pub fn battery_switch_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let auto_switch = Arc::clone(&self.inner.config.battery_auto_switch);

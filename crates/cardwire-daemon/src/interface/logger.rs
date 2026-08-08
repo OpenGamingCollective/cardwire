@@ -18,7 +18,7 @@ pub struct LogEntry {
 #[derive(Clone)]
 pub struct LoggerInterface {
     pub report_logs: Arc<RwLock<VecDeque<LogEntry>>>,
-    // Signal emitter for the blocked-process log, populated once the interface is served
+    // Signal emitter for new logs signal, populated once the interface is served
     pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
 }
 

@@ -77,7 +77,7 @@ impl SwitcherooInterface {
             .count() as u32
     }
 
-    /// Build the GPUs property payload from an already-locked gpu list, see gpus()
+    /// Build the GPUs property payload from a gpu list, see gpus()
     fn gpus_locked(
         gpu_list: &BTreeMap<usize, Arc<GpuInterface>>,
     ) -> Vec<HashMap<&'static str, OwnedValue>> {

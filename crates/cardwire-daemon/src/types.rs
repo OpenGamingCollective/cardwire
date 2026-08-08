@@ -1,20 +1,9 @@
 //! Core domain types shared across the daemon.
-//!
-//! The `Modes` enum encoding (`Integrated=0`, `Hybrid=1`, `Manual=2`, `Smart=3`) is the
-//! contract between the daemon and the eBPF program. The eBPF side defines the same values
-//! as constants in `cardwire-ebpf/src/main.rs`:
-//!
-//! ```c
-//! const INTEGRATED: u8 = 0;
-//! const HYBRID: u8     = 1;
-//! const MANUAL: u8     = 2;
-//! const SMART: u8      = 3;
-//! ```
-//!
-//! When adding a mode, update both sides of this contract.
 
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{collections::BTreeMap, fmt, sync::Arc};
+
+use crate::interface::GpuInterface;
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -83,6 +72,38 @@ impl From<Modes> for u32 {
             Modes::Hybrid => 1,
             Modes::Manual => 2,
             Modes::Smart => 3,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SystemType {
+    Laptop,
+    Desktop,
+    Manual,
+}
+impl SystemType {
+    pub fn from_gpulist(gpu_list: &BTreeMap<usize, Arc<GpuInterface>>) -> Self {
+        let available_gpus: Vec<(usize, bool, bool)> = gpu_list
+            .iter()
+            .filter(|(_, gpu)| gpu.device.is_available())
+            .map(|(id, gpu)| (*id, gpu.device.is_default(), gpu.device.is_discrete()))
+            .collect();
+
+        if available_gpus.len() != 2 {
+            Self::Manual
+        } else if available_gpus
+            .iter()
+            .any(|(_, default, discrete)| *discrete && !*default)
+        {
+            Self::Laptop
+        } else if available_gpus
+            .iter()
+            .any(|(_, default, discrete)| *default && *discrete)
+        {
+            Self::Desktop
+        } else {
+            Self::Manual
         }
     }
 }

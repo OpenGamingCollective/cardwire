@@ -49,7 +49,7 @@ pub async fn watch_battery_status(
                     }
                 }
             };
-            if let Err(e) = mode_interface.internal_set_mode(requested, None).await {
+            if let Err(e) = mode_interface.internal_set_mode(requested, true).await {
                 warn!("failed to switch mode on battery event: {e}");
             }
         }

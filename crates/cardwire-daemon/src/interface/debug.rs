@@ -60,7 +60,7 @@ impl DebugInterface {
     }
     pub async fn refresh_gpu(&self) -> fdo::Result<()> {
         // read a new pci list, if it's different than the current one, refresh the gpus, else do
-        // nothing. The sysfs scan runs without holding any lock.
+        // nothing
         let new_pci_list =
             pci::read_pci_devices().map_err(|err| fdo::Error::Failed(err.to_string()))?;
         let mut pci_list = self.pci_list.write().await;
@@ -88,8 +88,7 @@ impl DebugInterface {
             // Empty the current gpu_interfaces
             gpu_interfaces.clear();
             // Read the new list. The blocking enumeration is intentional: the gpu_list write lock
-            // serializes readers until the new list is complete, and the multi-threaded runtime
-            // absorbs the stall
+            // until the new list is complete
             let gpu_enumator = GpuEnumerator::build();
             let new_gpu_list = gpu_enumator.enumerate(&new_pci_list);
             for (id, device) in new_gpu_list {
@@ -138,13 +137,13 @@ impl DebugInterface {
             };
             if let Err(e) = self
                 .mode_interface
-                .internal_set_mode(requested, Some(false))
+                .internal_set_mode(requested, false)
                 .await
             {
                 warn!("failed to re-apply mode on hotplug, falling back to hybrid: {e}");
                 if let Err(fb) = self
                     .mode_interface
-                    .internal_set_mode(Modes::Hybrid, Some(false))
+                    .internal_set_mode(Modes::Hybrid, false)
                     .await
                 {
                     warn!("failed to fall back to hybrid mode on hotplug: {fb}");

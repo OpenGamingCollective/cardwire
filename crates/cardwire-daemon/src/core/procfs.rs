@@ -40,11 +40,11 @@ pub fn lsof_read(device_path: &str) -> io::Result<Vec<String>> {
                             break;
                         };
                         proc_found.push(comm.trim_ascii_end().to_string());
-                        break;
                     }
                 }
             }
         }
     }
+    proc_found.dedup();
     Ok(proc_found)
 }

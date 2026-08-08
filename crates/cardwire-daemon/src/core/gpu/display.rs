@@ -8,6 +8,7 @@ use udev::{Device, Enumerator};
 ///
 /// Connector ownership is encoded in sysfs names such as `card1-HDMI-A-1`. Internal panels and
 /// virtual connectors are excluded so only physical external outputs keep the card available.
+#[allow(dead_code)]
 pub fn external_display_connected(card: u32) -> io::Result<bool> {
     // These connector types are internal panels or do not represent a physical display output.
     const NON_EXTERNAL: &[&str] = &[

@@ -140,6 +140,7 @@ impl SmartPolicyInterface {
         Ok((status, gpu_id))
     }
 
+    /// Get the list of app inside the internal cardwire database
     pub async fn get_app_policies(&self) -> fdo::Result<HashMap<String, DbusAppMetadata>> {
         let db_clone = self.database.clone();
 
@@ -152,7 +153,8 @@ impl SmartPolicyInterface {
         .map_err(|err| fdo::Error::Failed(err.to_string()))?
     }
 
-    pub async fn set_app_policies(&self, app_id: String, policy: i32) -> Result<(), fdo::Error> {
+    /// Set the policy of an app using the app_id
+    pub async fn set_app_policy(&self, app_id: String, policy: i32) -> Result<(), fdo::Error> {
         let gpu_policy = GpuPolicy::try_from_i32(policy)
             .ok_or_else(|| fdo::Error::InvalidArgs(format!("invalid policy: {}", policy)))?;
 

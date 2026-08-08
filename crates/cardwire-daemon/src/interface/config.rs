@@ -125,10 +125,10 @@ impl ConfigInterface {
     }
     /// Save the daemon's configuration to cardwire.toml
     pub async fn save_to_file(&self) -> fdo::Result<()> {
-        // Serialize saves so concurrent setters can't interleave writes and the final file
-        // always reflects the last stored state
+        // Lock the guard to prevent concurrent saves
         let _save_guard = self.config.save_lock.lock().await;
-        // Include monitor-owned settings whenever any D-Bus property rewrites the whole file.
+
+        // Load the current in-memory config into a CardwireConfig struct
         let config = CardwireConfig::new(
             self.config.auto_apply_gpu_state.load(Ordering::Relaxed),
             self.config
@@ -141,6 +141,9 @@ impl ConfigInterface {
                 .external_display_auto_switch
                 .load(Ordering::Relaxed),
         );
+
+        // Save to file, if the file is read-only, only warn and return OK, this happen on nixos
+        // because of the immutable nature of the distribution
         match config.save_config().await {
             Ok(_) => Ok(()),
             Err(err) => match err.kind() {

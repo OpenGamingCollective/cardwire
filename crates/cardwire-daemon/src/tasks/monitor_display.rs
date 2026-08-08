@@ -83,12 +83,12 @@ async fn reconcile_gpu(
 
             if active && blocked {
                 // The dGPU must drive the display: unblock it by switching to Hybrid.
-                let _ = mode.internal_set_mode(Modes::Hybrid, Some(false)).await;
+                let _ = mode.internal_set_mode(Modes::Hybrid, false).await;
             } else if !active && !blocked {
                 // The override is in effect and the display is gone: restore the persisted mode
                 // from disk, since mode() now reports the applied override.
                 if let Ok(persisted) = CardwireModeState::build() {
-                    let _ = mode.internal_set_mode(persisted.mode(), Some(false)).await;
+                    let _ = mode.internal_set_mode(persisted.mode(), false).await;
                 }
             }
         }
@@ -99,10 +99,11 @@ async fn reconcile_gpu(
             let Some((_, gpu)) = find_gpu_by_card(card, &gpu_list_read) else {
                 return;
             };
+            let gpu = Arc::clone(gpu);
+            drop(gpu_list_read);
             if active && gpu.gpu_blocked().await.unwrap_or(false) {
                 // Unblocking does not touch the GPU list, clone and drop the guard first.
-                let gpu = Arc::clone(gpu);
-                drop(gpu_list_read);
+
                 let _ = gpu.unblock_gpu().await;
             }
         }

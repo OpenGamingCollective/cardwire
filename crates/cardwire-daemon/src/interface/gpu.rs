@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     core::{
-        gpu::{DbusGpuDevice, GpuDevice, external_display_connected}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
+        gpu::{DbusGpuDevice, GpuDevice, is_gpu_active}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
@@ -176,6 +176,12 @@ impl GpuInterface {
             ));
         }
         drop(mode);
+        if !self.device.is_available() {
+            return Err(fdo::Error::AccessDenied(format!(
+                "GPU {} is not available and cannot be blocked",
+                self.device.name()
+            )));
+        }
         if block {
             // Don't block if default
             if self.device.is_default() {
@@ -184,28 +190,11 @@ impl GpuInterface {
                     self.device.name()
                 )));
             }
-            if !self.device.is_available() {
+            if is_gpu_active(*self.device.card()).await.is_some_and(|v| v) {
                 return Err(fdo::Error::AccessDenied(format!(
-                    "GPU {} is not available and cannot be blocked",
+                    "GPU {} is active (monitor IN) and cannot be blocked",
                     self.device.name()
                 )));
-            }
-            // Refuse to block a GPU that is currently driving a connected display, the display
-            // would go black. On read errors, fail safely instead of blocking on incomplete data.
-            match external_display_connected(*self.device.card()) {
-                Ok(true) => {
-                    return Err(fdo::Error::AccessDenied(format!(
-                        "GPU {} is driving a connected display and cannot be blocked",
-                        self.device.name()
-                    )));
-                }
-                Err(err) => {
-                    return Err(fdo::Error::AccessDenied(format!(
-                        "could not verify the display state of GPU {}, refusing to block: {err}",
-                        self.device.name()
-                    )));
-                }
-                Ok(false) => {}
             }
             // Now block
             self.block_gpu(self.id).await?;
