@@ -231,31 +231,32 @@ impl GpuInterface {
     pub async fn block(&self) -> fdo::Result<bool> {
         self.gpu_blocked().await
     }
+
+    /// perform a lsof on the GPU nodes
     pub async fn lsof(&self) -> fdo::Result<HashMap<String, Vec<String>>> {
         let card_path = format!("/dev/dri/card{}", self.device.card());
         let render_path = format!("/dev/dri/renderD{}", self.device.render());
         let mut proc_map: HashMap<String, Vec<String>> = HashMap::new();
 
-        let (card, render) = tokio::try_join!(
-            async { procfs::lsof_read(&card_path).map_err(|e| fdo::Error::IOError(e.to_string())) },
-            async {
-                procfs::lsof_read(&render_path).map_err(|e| fdo::Error::IOError(e.to_string()))
-            },
-        )?;
+        async fn read_lsof(path: String) -> fdo::Result<Vec<String>> {
+            tokio::task::spawn_blocking(move || procfs::lsof_read(&path))
+                .await
+                .map_err(|e| fdo::Error::Failed(e.to_string()))?
+                .map_err(|e| fdo::Error::Failed(e.to_string()))
+        }
+
+        let (card, render) =
+            tokio::try_join!(read_lsof(card_path.clone()), read_lsof(render_path.clone()),)?;
         proc_map.insert(card_path, card);
         proc_map.insert(render_path, render);
 
         if let Some(minor) = self.device.nvidia_minor() {
             let nvidia_path = format!("/dev/nvidia{}", minor);
             let nvidiactl_path = "/dev/nvidiactl".to_string();
+
             let (nvidia, nvidiactl) = tokio::try_join!(
-                async {
-                    procfs::lsof_read(&nvidia_path).map_err(|e| fdo::Error::IOError(e.to_string()))
-                },
-                async {
-                    procfs::lsof_read(&nvidiactl_path)
-                        .map_err(|e| fdo::Error::IOError(e.to_string()))
-                },
+                read_lsof(nvidia_path.clone()),
+                read_lsof(nvidiactl_path.clone()),
             )?;
             proc_map.insert(nvidia_path, nvidia);
             proc_map.insert(nvidiactl_path, nvidiactl);
