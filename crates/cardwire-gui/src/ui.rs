@@ -142,7 +142,7 @@ pub fn main_page<'a>(
     gpu_list: &'a BTreeMap<usize, GpuDevice>,
 ) -> Element<'a, Message> {
     column![
-        mode_element(main_state.current_mode),
+        mode_element(main_state.current_mode, &main_state.available_modes),
         gpu_cards(gpu_list, main_state.open_gpu_menu, main_state.current_mode)
     ]
     .spacing(20)
@@ -150,10 +150,18 @@ pub fn main_page<'a>(
 }
 
 // A pick list containing a list of modes
-fn mode_element(current_mode: Option<Mode>) -> Element<'static, Message> {
+fn mode_element<'a>(
+    current_mode: Option<Mode>,
+    available_modes: &'a [Mode],
+) -> Element<'a, Message> {
+    let modes = if available_modes.is_empty() {
+        Mode::VARIANTS
+    } else {
+        available_modes
+    };
     row![
         text!("Mode: "),
-        pick_list(Mode::VARIANTS, current_mode, Message::SetMode)
+        pick_list(modes, current_mode, Message::SetMode)
     ]
     .spacing(10)
     .align_y(Alignment::Center)
@@ -609,11 +617,14 @@ pub fn advanced_page() -> Element<'static, Message> {
     column![warning, refresh_section].spacing(15).into()
 }
 
-pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Message> {
+pub fn daemon_setting_page<'a>(
+    setting_state: &'a SettingState,
+    available_modes: &'a [Mode],
+) -> Element<'a, Message> {
     let mut col = column![].spacing(10);
     let nvidia_setting = container(
         row![
-            text!("Nvidia Experimental Block"),
+            text!("Experimental NVIDIA PM"),
             horizontal(),
             toggler(setting_state.nvidia_checked).on_toggle(Message::UpdateNvidiaSetting),
         ]
@@ -623,7 +634,7 @@ pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Mes
     .width(Fill);
     let state_setting = container(
         row![
-            text!("Auto Apply GPU-States"),
+            text!("Auto apply GPU state"),
             horizontal(),
             toggler(setting_state.state_checked).on_toggle(Message::UpdateStateSetting),
         ]
@@ -641,12 +652,17 @@ pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Mes
     )
     .style(|_| box_theme!())
     .width(Fill);
+    let modes = if available_modes.is_empty() {
+        Mode::VARIANTS
+    } else {
+        available_modes
+    };
     let battery_mode = container(
         row![
             text!("Mode: "),
             horizontal(),
             pick_list(
-                Mode::VARIANTS,
+                modes,
                 setting_state.battery_mode,
                 Message::UpdateBatteryMode
             ),
@@ -655,7 +671,7 @@ pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Mes
     )
     .style(|_| box_theme!())
     .width(Fill);
-    let gui_settings = gui_setting_section(setting_state.gui_config.clone());
+    let gui_settings = gui_setting_section(setting_state.gui_config.clone(), modes);
     col = col
         .push(nvidia_setting)
         .push(state_setting)
@@ -665,12 +681,12 @@ pub fn daemon_setting_page(setting_state: &SettingState) -> Element<'static, Mes
     col.into()
 }
 
-fn gui_setting_section(config: GuiConfig) -> Element<'static, Message> {
+fn gui_setting_section<'a>(config: GuiConfig, available_modes: &'a [Mode]) -> Element<'a, Message> {
     let start_in_tray_config = config.clone();
     let action_config = config.clone();
     let primary_click_mode_settings =
         (config.primary_click_action == PrimaryClickAction::SwitchMode).then(|| {
-            Mode::VARIANTS.iter().copied().fold(
+            available_modes.iter().copied().fold(
                 column![text("Modes to switch between:").size(16)].spacing(10),
                 |column, mode| {
                     let mode_config = config.clone();

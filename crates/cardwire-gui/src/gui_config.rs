@@ -13,8 +13,8 @@ static TEMPORARY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, VariantArray)]
 #[serde(rename_all = "kebab-case")]
 pub enum PrimaryClickAction {
-    #[default]
     SwitchMode,
+    #[default]
     OpenGui,
 }
 
@@ -42,7 +42,7 @@ impl Default for GuiConfig {
     fn default() -> Self {
         Self {
             start_in_tray: false,
-            primary_click_action: PrimaryClickAction::SwitchMode,
+            primary_click_action: PrimaryClickAction::OpenGui,
             primary_click_modes: default_primary_click_modes(),
         }
     }
@@ -174,7 +174,7 @@ mod tests {
         );
         assert_eq!(
             GuiConfig::default().primary_click_action,
-            PrimaryClickAction::SwitchMode
+            PrimaryClickAction::OpenGui
         );
         assert!(!GuiConfig::default().start_in_tray);
     }

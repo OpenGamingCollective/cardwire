@@ -69,6 +69,7 @@ impl AppState {
             &message,
             Message::AllDevicesFetched(_)
                 | Message::FetchedMode(_)
+                | Message::FetchedAvailableModes(_)
                 | Message::TrayReady(_)
                 | Message::UpdateGpuPowerState(..)
                 | Message::UpdateBlockState(..)
@@ -102,6 +103,15 @@ impl AppState {
                 }
                 Err(err) => {
                     self.error = Some(format!("Error fetching Mode: {}", err));
+                }
+            },
+            // Happen when available modes are received from dbus
+            Message::FetchedAvailableModes(res) => match res {
+                Ok(modes) => {
+                    self.main_state.available_modes = modes;
+                }
+                Err(err) => {
+                    log::warn!("Failed to fetch available modes: {}", err);
                 }
             },
             // Send the new mode to dbus
@@ -364,7 +374,14 @@ impl AppState {
                 );
             }
             Message::RefreshGpuResult(res) => match res {
-                Ok(()) => self.info = Some("GPU list refreshed".to_string()),
+                Ok(()) => {
+                    self.info = Some("GPU list refreshed".to_string());
+                    let conn = self.zbus_conn.clone();
+                    return Task::perform(
+                        async move { conn.get_available_modes().await.map_err(|e| e.to_string()) },
+                        Message::FetchedAvailableModes,
+                    );
+                }
                 Err(err) => self.error = Some(format!("Refresh error: {}", err)),
             },
             // Fetch the initial blocked process logs from dbus
@@ -475,8 +492,11 @@ impl AppState {
             return Task::none();
         };
         let mode = self.main_state.current_mode;
+        let available_modes = self.main_state.available_modes.clone();
         let gpus = self.gpu_list.clone();
-        Task::perform(tray::update(handle, mode, gpus), |_| Message::None)
+        Task::perform(tray::update(handle, mode, available_modes, gpus), |_| {
+            Message::None
+        })
     }
 
     fn open_or_focus_window(&mut self) -> Task<Message> {
@@ -495,7 +515,9 @@ impl AppState {
             Page::Main => ui::main_page(&self.main_state, &self.gpu_list),
             Page::Pci => pci_page(&self.pci_list),
             Page::SmartMode => ui::smart_mode_page(&self.smart_state, self.main_state.current_mode),
-            Page::CardwireSettings => daemon_setting_page(&self.setting_state),
+            Page::CardwireSettings => {
+                daemon_setting_page(&self.setting_state, &self.main_state.available_modes)
+            }
             Page::Logs => ui::logs_page(&self.log_state, &self.gpu_list),
             Page::Advanced => ui::advanced_page(),
             Page::About => ui::about_page(),
