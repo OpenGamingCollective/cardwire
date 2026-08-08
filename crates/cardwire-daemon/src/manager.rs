@@ -274,13 +274,16 @@ impl DaemonManager {
         let db_cache = self.smart_policy_interface.database.cache.clone();
         let tx = self.smart_policy_interface.database.tx.clone();
 
+        let new_app_signal = Arc::clone(&self.smart_policy_interface.new_app_signal);
+
         async move {
-            let cardwire_analyzer = CardwireAnalyzer::build(blocker, logger, signal, db_cache, tx)
-                .await
-                .map_err(|err| {
-                    error!("Failed to build CardwireAnalyzer: {}", err);
-                    err
-                })?;
+            let cardwire_analyzer =
+                CardwireAnalyzer::build(blocker, logger, signal, db_cache, tx, new_app_signal)
+                    .await
+                    .map_err(|err| {
+                        error!("Failed to build CardwireAnalyzer: {}", err);
+                        err
+                    })?;
             let res = cardwire_analyzer.run().await;
             if let Err(ref e) = res {
                 error!("CardwireAnalyzer task failed: {}", e);

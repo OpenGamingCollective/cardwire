@@ -181,6 +181,22 @@ async fn spawn_dbus_api(
     object_server
         .at(path, daemon.smart_policy_interface.clone())
         .await?;
+    match object_server
+        .interface::<_, crate::interface::SmartPolicyInterface>(path)
+        .await
+    {
+        Ok(smart_ref) => {
+            daemon
+                .smart_policy_interface
+                .new_app_signal
+                .get_or_init(|| smart_ref.signal_emitter().to_owned());
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to get the Smart Policy interface ({e}); New App notifications will not be emitted"
+            );
+        }
+    }
 
     drop(power_tasks);
     // drop gpu list to prevent deadlock
