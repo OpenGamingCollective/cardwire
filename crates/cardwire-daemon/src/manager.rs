@@ -2,7 +2,7 @@
 //! startup tasks and background-task futures.
 use crate::{
     analyzer::CardwireAnalyzer, core::{
-        gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self}
+        env::compute_switcheroo_env, gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self}
     }, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
     }, tasks
@@ -50,10 +50,23 @@ impl DaemonManager {
         let blocker = Arc::new(RwLock::new(blocker));
 
         let mut gpu_interfaces_map: BTreeMap<usize, Arc<GpuInterface>> = BTreeMap::new();
+        let gpu_count = gpu_list
+            .iter()
+            .filter(|(_, gpu)| gpu.is_available())
+            .count();
         for (id, device) in gpu_list {
+            let gpu_env = compute_switcheroo_env(
+                gpu_count,
+                device.is_default(),
+                device.is_discrete(),
+                id as u32,
+                device.gpu_vendor(),
+                device.pci().pci_address(),
+            );
             let gpu = GpuInterface::build(
                 id as u32,
                 device,
+                gpu_env,
                 Arc::clone(&blocker),
                 Arc::clone(&pci_list),
                 Arc::clone(&gpu_state),
