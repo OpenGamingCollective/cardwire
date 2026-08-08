@@ -68,6 +68,7 @@ iced_aw = "0.14.1"
 strum = { version = "0.28", features = ["derive"] }
 ksni = "0.3.6"
 chrono = "0.4.45"
+inotify = "0.11.4"
 
 [profile.dev]
 overflow-checks = true
