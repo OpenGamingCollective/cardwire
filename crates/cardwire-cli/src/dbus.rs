@@ -150,7 +150,7 @@ impl<'a> DaemonClient<'a> {
             "org.opengamingcollective.cardwire.Gpu",
         )
         .await?;
-        proxy.call("Env", &()).await
+        proxy.get_property("Env").await
     }
 
     pub async fn get_auto_apply_gpu_state(&self) -> zbus::Result<bool> {
