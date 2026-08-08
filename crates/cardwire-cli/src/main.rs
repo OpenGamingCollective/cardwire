@@ -72,14 +72,15 @@ async fn main() -> anyhow::Result<()> {
             };
         }
         Commands::Get => {
-            let available_modes_str = match client.get_available_modes().await {
-                Ok(modes) => modes
-                    .iter()
-                    .map(|m| m.to_string().to_lowercase())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                Err(_) => "err".to_string(),
+            let available_modes = match client.get_available_modes().await {
+                Ok(modes) => modes,
+                Err(e) => handle_error(e),
             };
+            let available_modes_str = available_modes
+                .iter()
+                .map(|m| m.to_string().to_lowercase())
+                .collect::<Vec<_>>()
+                .join(", ");
             match client.get_mode().await {
                 Ok(response) => {
                     let response: CliMode = match response {
@@ -248,13 +249,16 @@ async fn main() -> anyhow::Result<()> {
                     handle_error(e);
                 } else {
                     println!("GPU list refreshed");
-                    if let Ok(modes) = client.get_available_modes().await {
-                        let modes_str = modes
-                            .iter()
-                            .map(|m| m.to_string().to_lowercase())
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        println!("Available Mode: {}", modes_str);
+                    match client.get_available_modes().await {
+                        Ok(modes) => {
+                            let modes_str = modes
+                                .iter()
+                                .map(|m| m.to_string().to_lowercase())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            println!("Available Mode: {}", modes_str);
+                        }
+                        Err(e) => handle_error(e),
                     }
                 }
             }
