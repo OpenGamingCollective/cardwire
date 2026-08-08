@@ -215,7 +215,7 @@ fn power_state_badge<'a>(power_state: &Option<String>) -> Element<'a, Message> {
                 .into()
             } else {
                 container(
-                    text(format!("Active ({})", trimmed))
+                    text("Unknown")
                         .size(14)
                         .color(Color::from_rgb(0.9, 0.9, 0.9)),
                 )
