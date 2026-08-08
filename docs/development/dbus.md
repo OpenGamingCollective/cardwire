@@ -72,6 +72,13 @@
   - **Type:** `b`
   - **Access:** Read/Write
 
+- **`ExternalDisplayAutoSwitch`**
+  Temporarily switches Integrated and Smart modes to Hybrid when an external display is connected
+  to a dGPU-owned DRM connector. Hybrid and Manual modes are unchanged. The requested mode is
+  restored after disconnect.
+  - **Type:** `b`
+  - **Access:** Read/Write
+
 ### Debug
 
 `org.opengamingcollective.cardwire.Debug`
