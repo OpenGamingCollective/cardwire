@@ -50,7 +50,10 @@ impl DaemonManager {
         let blocker = Arc::new(RwLock::new(blocker));
 
         let mut gpu_interfaces_map: BTreeMap<usize, Arc<GpuInterface>> = BTreeMap::new();
-        let gpu_count = gpu_list.len();
+        let gpu_count = gpu_list
+            .iter()
+            .filter(|(_, gpu)| gpu.is_available())
+            .count();
         for (id, device) in gpu_list {
             let gpu_env = compute_switcheroo_env(
                 gpu_count,

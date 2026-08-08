@@ -91,7 +91,10 @@ impl DebugInterface {
             // until the new list is complete
             let gpu_enumator = GpuEnumerator::build();
             let new_gpu_list = gpu_enumator.enumerate(&new_pci_list);
-            let gpu_count = new_gpu_list.len();
+            let gpu_count = new_gpu_list
+                .iter()
+                .filter(|(_, gpu)| gpu.is_available())
+                .count();
             for (id, device) in new_gpu_list {
                 let gpu_env = compute_switcheroo_env(
                     gpu_count,
