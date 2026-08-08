@@ -212,6 +212,7 @@ impl AppState {
                         PrimaryClickAction::SwitchMode => {
                             return match configured_primary_click_mode(
                                 self.main_state.current_mode,
+                                &self.main_state.available_modes,
                                 &self.setting_state.gui_config,
                             ) {
                                 Ok(mode) => self.update(Message::SetMode(mode)),
@@ -558,10 +559,11 @@ impl AppState {
 
 fn configured_primary_click_mode(
     current: Option<Mode>,
+    available_modes: &[Mode],
     config: &GuiConfig,
 ) -> Result<Mode, String> {
     current
-        .map(|mode| config.next_primary_click_mode(mode))
+        .map(|mode| config.next_primary_click_mode(mode, available_modes))
         .ok_or_else(|| "Cardwire daemon is unavailable".to_string())
 }
 
@@ -576,14 +578,15 @@ mod tests {
     #[test]
     fn primary_click_uses_the_configured_modes() {
         assert_eq!(
-            configured_primary_click_mode(Some(Mode::Integrated), &GuiConfig::default()).unwrap(),
+            configured_primary_click_mode(Some(Mode::Integrated), &[], &GuiConfig::default())
+                .unwrap(),
             Mode::Hybrid
         );
     }
 
     #[test]
     fn primary_click_rejects_an_offline_daemon() {
-        assert!(configured_primary_click_mode(None, &GuiConfig::default()).is_err());
+        assert!(configured_primary_click_mode(None, &[], &GuiConfig::default()).is_err());
     }
 
     #[test]
