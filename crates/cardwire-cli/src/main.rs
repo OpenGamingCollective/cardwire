@@ -280,6 +280,10 @@ async fn main() -> anyhow::Result<()> {
                         ));
                     }
                 };
+            } else {
+                return Err(anyhow::anyhow!(
+                    "No available GPU matched the launch request"
+                ));
             }
         }
         Commands::CompleteGpus => {
