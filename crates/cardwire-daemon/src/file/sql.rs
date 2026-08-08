@@ -45,6 +45,17 @@ pub struct DbusAppMetadata {
     pub gpu_policy: u32,
 }
 
+impl DbusAppMetadata {
+    pub fn from_app_metadata(meta: &AppMetadata, gpu_policy: u32) -> Self {
+        Self {
+            display_name: meta.display_name.clone(),
+            desktop_file_id: meta.desktop_file_id.clone(),
+            icon_name: meta.icon_name.clone(),
+            gpu_policy,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CardwireDatabase {
     pub cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,

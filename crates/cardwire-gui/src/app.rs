@@ -411,6 +411,10 @@ impl AppState {
                     self.error = Some(format!("Error fetching app policies: {}", err));
                 }
             },
+            Message::NewAppDiscovered((app_id, meta)) => {
+                let resolved = crate::helpers::resolve_app_metadata(&app_id, &meta);
+                self.smart_state.app_policies.insert(app_id, resolved);
+            }
             Message::SetAppPolicy(app_id, policy) => {
                 let conn = self.zbus_conn.clone();
                 let app_id_clone = app_id.clone();

@@ -66,6 +66,14 @@ pub fn resolve_app_metadata(app_id: &str, raw: &DbusAppMetadata) -> ResolvedApp 
         }
     }
     candidate_filenames.push(format!("{}.desktop", app_id));
+    candidate_filenames.push(format!("{}.desktop", app_id.to_lowercase()));
+    let mut chars = app_id.chars();
+    if let Some(first) = chars.next() {
+        let capitalized = format!("{}{}.desktop", first.to_uppercase(), chars.as_str());
+        if !candidate_filenames.contains(&capitalized) {
+            candidate_filenames.push(capitalized);
+        }
+    }
 
     'search_desktop: for data_dir in &data_dirs {
         let apps_dir = data_dir.join("applications");
@@ -137,9 +145,27 @@ fn resolve_icon_path(
         if p.is_absolute() && p.exists() {
             return Some(p.to_path_buf());
         }
-        names_to_check.push(name);
+        names_to_check.push(name.to_string());
+        names_to_check.push(name.to_lowercase());
+        let mut chars = name.chars();
+        if let Some(first) = chars.next() {
+            let capitalized = format!("{}{}", first.to_uppercase(), chars.as_str());
+            if !names_to_check.contains(&capitalized) {
+                names_to_check.push(capitalized);
+            }
+        }
     }
-    names_to_check.push(app_id);
+    if !names_to_check.contains(&app_id.to_string()) {
+        names_to_check.push(app_id.to_string());
+        names_to_check.push(app_id.to_lowercase());
+        let mut chars = app_id.chars();
+        if let Some(first) = chars.next() {
+            let capitalized = format!("{}{}", first.to_uppercase(), chars.as_str());
+            if !names_to_check.contains(&capitalized) {
+                names_to_check.push(capitalized);
+            }
+        }
+    }
 
     let extensions = ["png", "svg", "xpm"];
     let icon_subdirs = [
