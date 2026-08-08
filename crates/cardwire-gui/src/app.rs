@@ -27,6 +27,14 @@ pub struct AppState {
     tray_available: bool,
 }
 
+fn default_window_settings() -> window::Settings {
+    window::Settings {
+        size: iced::Size::new(1150.0, 800.0),
+        min_size: Some(iced::Size::new(850.0, 600.0)),
+        ..window::Settings::default()
+    }
+}
+
 impl AppState {
     pub fn new() -> (Self, Task<Message>) {
         let (gui_config, error) = match GuiConfig::load() {
@@ -39,7 +47,7 @@ impl AppState {
         let (window_id, open_window) = if gui_config.start_in_tray {
             (None, Task::none())
         } else {
-            let (id, task) = window::open(window::Settings::default());
+            let (id, task) = window::open(default_window_settings());
             (Some(id), task.discard())
         };
         let state = AppState {
@@ -399,7 +407,22 @@ impl AppState {
                 Ok(policies) => {
                     let mut map = BTreeMap::new();
                     for (app_id, meta) in policies {
+                        if app_id.contains("xdg-desktop-portal")
+                            || meta
+                                .desktop_file_id
+                                .as_deref()
+                                .is_some_and(|d| d.contains("xdg-desktop-portal"))
+                        {
+                            continue;
+                        }
                         let resolved = crate::helpers::resolve_app_metadata(&app_id, &meta);
+                        if resolved
+                            .desktop_file_id
+                            .as_deref()
+                            .is_some_and(|d| d.contains("xdg-desktop-portal"))
+                        {
+                            continue;
+                        }
                         map.insert(app_id, resolved);
                     }
                     self.smart_state.app_policies = map;
@@ -412,8 +435,21 @@ impl AppState {
                 }
             },
             Message::NewAppDiscovered((app_id, meta)) => {
-                let resolved = crate::helpers::resolve_app_metadata(&app_id, &meta);
-                self.smart_state.app_policies.insert(app_id, resolved);
+                if !app_id.contains("xdg-desktop-portal")
+                    && !meta
+                        .desktop_file_id
+                        .as_deref()
+                        .is_some_and(|d| d.contains("xdg-desktop-portal"))
+                {
+                    let resolved = crate::helpers::resolve_app_metadata(&app_id, &meta);
+                    if !resolved
+                        .desktop_file_id
+                        .as_deref()
+                        .is_some_and(|d| d.contains("xdg-desktop-portal"))
+                    {
+                        self.smart_state.app_policies.insert(app_id, resolved);
+                    }
+                }
             }
             Message::SetAppPolicy(app_id, policy) => {
                 let conn = self.zbus_conn.clone();
@@ -508,7 +544,7 @@ impl AppState {
         if let Some(id) = self.window_id {
             window::gain_focus(id)
         } else {
-            let (id, task) = window::open(window::Settings::default());
+            let (id, task) = window::open(default_window_settings());
             self.window_id = Some(id);
             task.discard()
         }

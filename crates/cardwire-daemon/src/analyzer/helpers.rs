@@ -72,6 +72,26 @@ pub fn parse_cmdline_name(cmdline_bytes: &[u8]) -> Option<String> {
         }
     }
 
+    // Electron apps, the real app name is in the .asar path argument
+    if base_name == "electron" || base_name.ends_with("-electron") {
+        for arg in args.iter().skip(1) {
+            if arg.starts_with('-') {
+                continue;
+            }
+            if arg.ends_with(".asar") || arg.contains("resources/app") {
+                let path = Path::new(arg);
+                for component in path.components().rev() {
+                    let part = component.as_os_str().to_string_lossy();
+                    if part == "app.asar" || part == "resources" || part == "app" || part == "share"
+                    {
+                        continue;
+                    }
+                    return Some(part.to_string());
+                }
+            }
+        }
+    }
+
     // Fix for discord or other apps:
     if base_name.contains("--") {
         return base_name.split_whitespace().next().map(|s| s.to_string());
@@ -82,6 +102,18 @@ pub fn parse_cmdline_name(cmdline_bytes: &[u8]) -> Option<String> {
 
 pub fn is_proc_still_alive(pid: u32) -> bool {
     Path::new(&format!("/proc/{}", pid)).exists()
+}
+
+/// Unwrap NixOS-style wrapper names into lookups, eg:
+/// ".discord-wrapped" -> ["discord-wrapped", "discord"]
+/// "steamwebhelper"   -> ["steamwebhelper"]
+pub fn normalized_candidates(name: &str) -> Vec<String> {
+    let trimmed = name.trim_start_matches('.');
+    let mut candidates = vec![trimmed.to_string()];
+    if let Some(rest) = trimmed.strip_suffix("-wrapped") {
+        candidates.push(rest.to_string());
+    }
+    candidates
 }
 
 /// Decode the 16-byte kernel comm into a String, trimming trailing NULs
@@ -166,5 +198,42 @@ mod tests {
     fn test_is_proc_still_alive() {
         assert!(is_proc_still_alive(std::process::id()));
         assert!(!is_proc_still_alive(0));
+    }
+
+    #[test]
+    fn test_parse_cmdline_name_extracts_electron_app_from_asar() {
+        // NixOS-style Obsidian wrapped in electron
+        let cmdline_bytes = b"/nix/store/abc-electron-41.10.3/libexec/electron/electron\0/nix/store/xyz-obsidian-1.12.7/share/obsidian/app.asar\0--ozone-platform=wayland";
+        assert_eq!(
+            parse_cmdline_name(cmdline_bytes),
+            Some("obsidian".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_cmdline_name_electron_without_asar_falls_back() {
+        // Plain electron without .asar argument
+        let cmdline_bytes = b"/usr/bin/electron\0--no-sandbox";
+        assert_eq!(
+            parse_cmdline_name(cmdline_bytes),
+            Some("electron".to_string())
+        );
+    }
+
+    #[test]
+    fn test_normalized_candidates_unwraps_nix_wrapper() {
+        assert_eq!(
+            normalized_candidates(".discord-wrapped"),
+            vec!["discord-wrapped".to_string(), "discord".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_normalized_candidates_plain_name_unchanged() {
+        assert_eq!(
+            normalized_candidates("steamwebhelper"),
+            vec!["steamwebhelper".to_string()]
+        );
+        assert_eq!(normalized_candidates("steam"), vec!["steam".to_string()]);
     }
 }

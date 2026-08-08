@@ -100,11 +100,56 @@ pub fn resolve_app_metadata(app_id: &str, raw: &DbusAppMetadata) -> ResolvedApp 
         }
     }
 
+    let mut resolved_desktop_id = raw.desktop_file_id.clone();
+
+    // If it's a Steam app (e.g. "steam_app_1070560"), scan desktop files for steam://rungameid/<id>
+    if resolved_name.is_none()
+        && let Some(steam_id) = app_id.strip_prefix("steam_app_")
+    {
+        let rungame_uri = format!("steam://rungameid/{}", steam_id);
+        'search_steam: for data_dir in &data_dirs {
+            let apps_dir = data_dir.join("applications");
+            if let Ok(entries) = std::fs::read_dir(&apps_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(ext) = path.extension()
+                        && ext == "desktop"
+                        && let Ok(entry_fdo) = DesktopEntry::from_path(&path, Some(&locales))
+                        && let Some(exec) = entry_fdo.exec()
+                        && exec.contains(&rungame_uri)
+                    {
+                        if let Some(name) = entry_fdo.name(&locales) {
+                            let name_str = name.to_string();
+                            if !name_str.trim().is_empty() {
+                                resolved_name = Some(name_str);
+                            }
+                        }
+                        if resolved_icon_name.is_none()
+                            && let Some(icon) = entry_fdo.icon()
+                        {
+                            resolved_icon_name = Some(icon.to_string());
+                        }
+                        if resolved_desktop_id.is_none() {
+                            resolved_desktop_id = path.file_name().map(|s| {
+                                s.to_string_lossy().trim_end_matches(".desktop").to_string()
+                            });
+                        }
+                        if resolved_name.is_some() {
+                            break 'search_steam;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Determine display name
     let display_name = if let Some(name) = resolved_name {
         name
-    } else if !raw.display_name.trim().is_empty() {
+    } else if !raw.display_name.trim().is_empty() && !raw.display_name.starts_with("Steam Game ") {
         raw.display_name.clone()
+    } else if let Some(steam_id) = app_id.strip_prefix("steam_app_") {
+        format!("Steam Game {}", steam_id)
     } else {
         app_id
             .split(&['-', '_'][..])
@@ -124,7 +169,7 @@ pub fn resolve_app_metadata(app_id: &str, raw: &DbusAppMetadata) -> ResolvedApp 
     ResolvedApp {
         app_id: app_id.to_string(),
         display_name,
-        desktop_file_id: raw.desktop_file_id.clone(),
+        desktop_file_id: resolved_desktop_id,
         icon_name: resolved_icon_name,
         icon_path,
         gpu_policy: raw.gpu_policy,
@@ -199,4 +244,35 @@ fn resolve_icon_path(
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_app_metadata_steam_fallback() {
+        let raw = DbusAppMetadata {
+            display_name: "".to_string(),
+            desktop_file_id: None,
+            icon_name: None,
+            gpu_policy: 0,
+        };
+        let resolved = resolve_app_metadata("steam_app_1070560", &raw);
+        assert_eq!(resolved.app_id, "steam_app_1070560");
+        assert_eq!(resolved.display_name, "Steam Game 1070560");
+    }
+
+    #[test]
+    fn test_resolve_app_metadata_generic_name() {
+        let raw = DbusAppMetadata {
+            display_name: "blender".to_string(),
+            desktop_file_id: None,
+            icon_name: None,
+            gpu_policy: 1,
+        };
+        let resolved = resolve_app_metadata("blender", &raw);
+        assert_eq!(resolved.app_id, "blender");
+        assert_eq!(resolved.gpu_policy, 1);
+    }
 }

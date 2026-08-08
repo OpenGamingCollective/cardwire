@@ -12,7 +12,9 @@ use zbus::object_server::SignalEmitter;
 
 use crate::{
     analyzer::{
-        dynamic_analysis::{check_env, get_app_id_wayland_with_retry, get_steam_app_id}, helpers::{comm_to_string, get_real_process_name, is_proc_still_alive}, static_analysis::{self, AppMetadata, watch_fdo_folders}
+        dynamic_analysis::{check_env, get_app_id_wayland_with_retry, get_steam_app_id}, helpers::{
+            comm_to_string, get_real_process_name, is_proc_still_alive, normalized_candidates
+        }, static_analysis::{self, AppMetadata, watch_fdo_folders}
     }, file::{DbusAppMetadata, GpuPolicy}, interface::{LogEntry, LoggerInterfaceSignals, SmartPolicyInterface}
 };
 #[repr(C)]
@@ -304,6 +306,9 @@ impl CardwireAnalyzer {
         // Check the database now, we can take our time since if we reached it, the app would've
         // been blocked
         let mut lookup_name = comm.to_lowercase();
+        if lookup_name.contains("xdg-desktop-portal") {
+            return None;
+        }
         if let Some(steam_app) = get_steam_app_id(&environ) {
             lookup_name = steam_app;
         }
@@ -321,10 +326,22 @@ impl CardwireAnalyzer {
 
         {
             let xdg_list = self.xdg_list.read().await;
-            if let Some(meta) = xdg_list.get(&lookup_name) {
+            for candidate in normalized_candidates(&lookup_name) {
+                if let Some(meta) = xdg_list.get(&candidate) {
+                    let meta = meta.clone();
+                    drop(xdg_list);
+                    self.discover_app(&lookup_name, meta).await;
+                    return Some((false, PidType::Allowed, 0));
+                }
+            }
+            if let Some((_key, meta)) = xdg_list
+                .iter()
+                .find(|(key, _)| key.len() >= 3 && lookup_name.starts_with(key.as_str()))
+            {
                 let meta = meta.clone();
                 drop(xdg_list);
                 self.discover_app(&lookup_name, meta).await;
+                return Some((false, PidType::Allowed, 0));
             }
         }
         // Fallback for steam games
@@ -354,6 +371,12 @@ impl CardwireAnalyzer {
         }
 
         let dbus_meta = DbusAppMetadata::from_app_metadata(&meta, GpuPolicy::Blocked as u32);
+        // Mirror in the cache regardless of the outcome, the app is blocked by default
+        // and this prevents re-discovering it on every new process spawn
+        self.db_cache
+            .write()
+            .await
+            .insert(lookup_name.to_string(), GpuPolicy::Blocked);
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         let res = self
             .db_tx
@@ -362,11 +385,6 @@ impl CardwireAnalyzer {
         match res {
             Ok(_) => match reply_rx.await {
                 Ok(true) => {
-                    // Mirror in the cache
-                    self.db_cache
-                        .write()
-                        .await
-                        .insert(lookup_name.to_string(), GpuPolicy::Blocked);
                     if let Some(emitter) = self.new_app_signal.get()
                         && let Err(e) = SmartPolicyInterface::new_app_added(
                             emitter,
@@ -381,9 +399,8 @@ impl CardwireAnalyzer {
                         lookup_name
                     );
                 }
-                Ok(false) => {
-                    error!("Couldn't write {} to the database", lookup_name)
-                }
+                // Duplicate entry or write failure, nothing to do
+                Ok(false) => {}
                 Err(err) => {
                     error!("DB worker dropped the reply for {}: {}", lookup_name, err)
                 }

@@ -121,35 +121,189 @@ fn page_btn_style(theme: &iced::Theme, selected: bool, status: button::Status) -
     }
 }
 
+// Styling used for text inputs to avoid white border on hover
+fn search_input_style(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
+    let mut style = text_input::default(theme, status);
+    if status == text_input::Status::Hovered {
+        let active = text_input::default(theme, text_input::Status::Active);
+        style.border = active.border;
+    }
+    style
+}
+
+// Standardized page header component for all pages
+pub fn page_header<'a>(
+    title: &'a str,
+    subtitle: Option<&'a str>,
+    action: Option<Element<'a, Message>>,
+) -> Element<'a, Message> {
+    let mut title_col = column![
+        text(title)
+            .size(24)
+            .color(Color::from_rgb(0.96, 0.96, 0.96)),
+    ];
+
+    if let Some(sub) = subtitle {
+        title_col = title_col.push(text(sub).size(14).color(Color::from_rgb(0.72, 0.72, 0.75)));
+    }
+
+    let mut header_row = row![title_col.spacing(4)].align_y(Alignment::Center);
+
+    if let Some(act) = action {
+        header_row = header_row.push(horizontal()).push(act);
+    }
+
+    header_row.width(Fill).into()
+}
+
+pub fn count_badge<'a>(label: impl Into<String>) -> Element<'a, Message> {
+    container(
+        text(label.into())
+            .size(14)
+            .color(Color::from_rgb(0.9, 0.9, 0.9)),
+    )
+    .padding([6, 14])
+    .style(|_| container::Style {
+        background: Some(Color::from_rgb(0.2, 0.2, 0.22).into()),
+        border: Border {
+            radius: 4.0.into(),
+            width: 1.0,
+            color: Color::from_rgb(0.32, 0.32, 0.35),
+        },
+        ..Default::default()
+    })
+    .into()
+}
+
+fn power_state_badge<'a>(power_state: &Option<String>) -> Element<'a, Message> {
+    match power_state {
+        Some(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.eq_ignore_ascii_case("d0") {
+                container(
+                    text(format!("Active ({})", trimmed))
+                        .size(14)
+                        .color(Color::from_rgb(0.4, 0.95, 0.55)),
+                )
+                .padding([5, 12])
+                .style(|_| container::Style {
+                    background: Some(Color::from_rgb(0.1, 0.28, 0.16).into()),
+                    border: Border {
+                        radius: 6.0.into(),
+                        width: 1.0,
+                        color: Color::from_rgb(0.22, 0.55, 0.32),
+                    },
+                    ..Default::default()
+                })
+                .into()
+            } else if trimmed.to_lowercase().starts_with("d3") {
+                container(
+                    text(format!("Inactive ({})", trimmed))
+                        .size(14)
+                        .color(Color::from_rgb(0.7, 0.8, 0.98)),
+                )
+                .padding([5, 12])
+                .style(|_| container::Style {
+                    background: Some(Color::from_rgb(0.14, 0.2, 0.3).into()),
+                    border: Border {
+                        radius: 6.0.into(),
+                        width: 1.0,
+                        color: Color::from_rgb(0.28, 0.42, 0.6),
+                    },
+                    ..Default::default()
+                })
+                .into()
+            } else {
+                container(
+                    text("Unknown")
+                        .size(14)
+                        .color(Color::from_rgb(0.9, 0.9, 0.9)),
+                )
+                .padding([5, 12])
+                .style(|_| container::Style {
+                    background: Some(Color::from_rgb(0.2, 0.2, 0.22).into()),
+                    border: Border {
+                        radius: 6.0.into(),
+                        width: 1.0,
+                        color: Color::from_rgb(0.35, 0.35, 0.38),
+                    },
+                    ..Default::default()
+                })
+                .into()
+            }
+        }
+        None => text("N/A").color(Color::from_rgb(0.5, 0.5, 0.5)).into(),
+    }
+}
+
+pub fn warning_banner<'a>(msg: impl Into<String>) -> Element<'a, Message> {
+    container(
+        row![
+            text("⚠ ").size(20).color(Color::from_rgb(1.0, 0.8, 0.0)),
+            text(msg.into())
+                .size(15)
+                .color(Color::from_rgb(1.0, 0.85, 0.2)),
+        ]
+        .spacing(8)
+        .align_y(Alignment::Center)
+        .padding(12),
+    )
+    .style(|_| container::Style {
+        background: Some(Color::from_rgb(0.25, 0.2, 0.05).into()),
+        border: Border {
+            radius: 8.0.into(),
+            width: 1.0,
+            color: Color::from_rgb(0.5, 0.4, 0.1),
+        },
+        ..Default::default()
+    })
+    .width(Fill)
+    .into()
+}
+
 // Iter over the Page enum and make a button for each variants, Used to navigate around the GUI
 pub fn page_bar(current_page: Page) -> Element<'static, Message> {
     let buttons = Page::iter().fold(column![].spacing(10), |col, page| {
         let selected = page == current_page;
         col.push(
-            button(text!("{}", page))
+            button(text!("{}", page).size(15))
                 .on_press(Message::SwitchPage(page))
                 .width(Fill)
-                .padding([8, 12])
+                .padding([10, 14])
                 .style(move |theme, status| page_btn_style(theme, selected, status)),
         )
     });
     buttons.into()
 }
 
-// The main page contain the mode and the GPU Cards
+// The main page contains the mode selection and connected GPU Cards
 pub fn main_page<'a>(
     main_state: &'a MainState,
     gpu_list: &'a BTreeMap<usize, GpuDevice>,
 ) -> Element<'a, Message> {
-    column![
-        mode_element(main_state.current_mode, &main_state.available_modes),
-        gpu_cards(gpu_list, main_state.open_gpu_menu, main_state.current_mode)
-    ]
-    .spacing(20)
-    .into()
+    let header = page_header(
+        "System Overview",
+        Some("Manage active Cardwire mode and inspect connected hardware"),
+        Some(count_badge(if gpu_list.len() == 1 {
+            "1 GPU".to_string()
+        } else {
+            format!("{} GPUs", gpu_list.len())
+        })),
+    );
+
+    let mode_card = mode_element(main_state.current_mode, &main_state.available_modes);
+    let gpus = gpu_cards(gpu_list, main_state.open_gpu_menu, main_state.current_mode);
+
+    let content = column![mode_card, gpus].spacing(20);
+
+    column![header, scrollable(content).height(Fill)]
+        .spacing(16)
+        .width(Fill)
+        .height(Fill)
+        .into()
 }
 
-// A pick list containing a list of modes
+// A structured card containing the Cardwire mode selector
 fn mode_element<'a>(
     current_mode: Option<Mode>,
     available_modes: &'a [Mode],
@@ -159,13 +313,28 @@ fn mode_element<'a>(
     } else {
         available_modes
     };
-    row![
-        text!("Mode: "),
-        pick_list(modes, current_mode, Message::SetMode)
+
+    let mode_info = column![
+        text("Cardwire Mode")
+            .size(17)
+            .color(Color::from_rgb(0.95, 0.95, 0.95)),
+        text("Select how applications route to available graphics processors.")
+            .size(14)
+            .color(Color::from_rgb(0.72, 0.72, 0.75)),
     ]
-    .spacing(10)
-    .align_y(Alignment::Center)
-    .into()
+    .spacing(3);
+
+    let picker = pick_list(modes, current_mode, Message::SetMode);
+
+    let card_content = row![mode_info, horizontal(), picker]
+        .align_y(Alignment::Center)
+        .spacing(12);
+
+    container(card_content)
+        .style(|_| box_theme!())
+        .width(Fill)
+        .padding(18)
+        .into()
 }
 
 fn gpu_cards(
@@ -253,90 +422,113 @@ fn gpu_cards(
                 .width(Fixed(120.0))
             ]
             .into();
+
+            let width = 110;
             let details = if is_available {
                 column![
                     row![
                         text("Discrete: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
-                            .width(80),
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
+                            .width(width),
                         text(gpu.discrete)
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
                     row![
                         text("Vendor: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
-                            .width(80),
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
+                            .width(width),
                         text(gpu.vendor.clone())
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
                     row![
                         text("Driver: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
-                            .width(80),
-                        text(gpu.driver.clone()),
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
+                            .width(width),
+                        text(gpu.driver.clone())
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92)),
                     ],
                     row![
                         text("PCI: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
-                            .width(80),
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
+                            .width(width),
                         text(&gpu.pci)
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
                     row![
                         text("Nodes: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
-                            .width(80),
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
+                            .width(width),
                         text(format!("card{} / renderD{}", gpu.card, gpu.render))
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
                     row![
                         text("Virtual: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
-                            .width(80),
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
+                            .width(width),
                         text(gpu.virtual_gpu)
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
                     row![
                         text("Blocked: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
-                            .width(80),
-                        text(gpu.blocked),
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
+                            .width(width),
+                        text(if gpu.blocked { "Yes" } else { "No" })
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92)),
                         horizontal(),
-                        match &gpu.power_state {
-                            Some(power_state) => {
-                                match power_state.trim() {
-                                    "D0" => text!("D0").color(Color::from_rgb(1.0, 0.0, 0.0)),
-                                    "D3cold" => {
-                                        text!("D3Cold").color(Color::from_rgb(0.0, 1.0, 0.0))
-                                    }
-                                    _ => text!("{}", power_state),
-                                }
-                            }
-                            None => text("err"),
-                        }
+                        power_state_badge(&gpu.power_state),
                     ]
+                    .align_y(Alignment::Center),
                 ]
                 .spacing(8)
             } else {
                 column![
                     row![
                         text("Vendor: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
-                            .width(80),
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
+                            .width(width),
                         text(gpu.vendor.clone())
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
                     row![
                         text("Driver: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
-                            .width(80),
-                        text(gpu.driver.clone()),
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
+                            .width(width),
+                        text(gpu.driver.clone())
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92)),
                     ],
                     row![
                         text("PCI: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
-                            .width(80),
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
+                            .width(width),
                         text(&gpu.pci)
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
                     row![
                         text("Available: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
-                            .width(80),
-                        text(gpu.available).color(Color::from_rgb(
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
+                            .width(width),
+                        text(gpu.available).size(15).color(Color::from_rgb(
                             239.0 / 255.0,
                             68.0 / 255.0,
                             68.0 / 255.0
@@ -453,18 +645,15 @@ pub fn logs_page<'a>(
     log_state: &'a LogState,
     gpu_list: &'a BTreeMap<usize, GpuDevice>,
 ) -> Element<'a, Message> {
-    let header = row![
-        text("Blocked Process Logs")
-            .size(20)
-            .color(Color::from_rgb(0.9, 0.9, 0.9)),
-        horizontal(),
-        text!("{} entries", log_state.logs.len()).color(Color::from_rgb(0.6, 0.6, 0.6)),
-    ]
-    .align_y(Alignment::Center);
+    let header = page_header(
+        "Blocked Process Logs",
+        Some("Real-time log of processes attempting unauthorized GPU access"),
+        Some(count_badge(format!("{} entries", log_state.logs.len()))),
+    );
 
     let content = if log_state.logs.is_empty() {
         column![
-            text("No blocked process logs yet")
+            text("No blocked process logs recorded yet")
                 .color(Color::from_rgb(0.5, 0.5, 0.5))
                 .font(Font::MONOSPACE)
         ]
@@ -477,21 +666,30 @@ pub fn logs_page<'a>(
             })
     };
 
-    let terminal = container(scrollable(content))
+    let terminal = container(scrollable(content).width(Fill).height(Fill).direction(
+        scrollable::Direction::Both {
+            vertical: Default::default(),
+            horizontal: Default::default(),
+        },
+    ))
+    .width(Fill)
+    .height(Fill)
+    .padding(16)
+    .style(|_| container::Style {
+        background: Some(Color::from_rgb(0.07, 0.07, 0.08).into()),
+        border: Border {
+            radius: 8.0.into(),
+            width: 1.0,
+            color: Color::from_rgb(0.2, 0.2, 0.2),
+        },
+        ..Default::default()
+    });
+
+    column![header, terminal]
+        .spacing(16)
         .width(Fill)
         .height(Fill)
-        .padding(16)
-        .style(|_| container::Style {
-            background: Some(Color::from_rgb(0.07, 0.07, 0.08).into()),
-            border: Border {
-                radius: 8.0.into(),
-                width: 1.0,
-                color: Color::from_rgb(0.2, 0.2, 0.2),
-            },
-            ..Default::default()
-        });
-
-    column![header, terminal].spacing(12).into()
+        .into()
 }
 
 // One color-coded log line, the gpu id is replaced by the gpu name when known
@@ -538,147 +736,211 @@ fn log_line<'a>(
 
 pub fn about_page() -> Element<'static, Message> {
     let version = env!("CARGO_PKG_VERSION");
-    let content = column![
-        text("Cardwire").size(40),
-        text!("Version {}", version)
-            .size(18)
-            .color(Color::from_rgb(0.6, 0.6, 0.6)),
-        row![
-            text("Author: ").color(Color::from_rgb(0.6, 0.6, 0.6)),
-            text("luytan")
-        ],
-        row![
-            text("Other contributors: ").color(Color::from_rgb(0.6, 0.6, 0.6)),
-            text("SeawolfTony")
-        ],
-        row![
-            text("License: ").color(Color::from_rgb(0.6, 0.6, 0.6)),
-            text("GPL-3.0")
-        ],
-        row![
-            text("Repository: ").color(Color::from_rgb(0.6, 0.6, 0.6)),
-            button(
-                text("github.com/OpenGamingCollective/cardwire")
-                    .color(Color::from_rgb(0.4, 0.6, 1.0))
-            )
-            .style(link_btn_style)
-            .padding(0)
-            .on_press(Message::OpenUrl(
-                "https://github.com/OpenGamingCollective/cardwire".to_string()
-            ))
-        ],
-    ]
-    .spacing(10);
+    let header = page_header(
+        "About Cardwire",
+        Some("GPU management and process isolation for Linux"),
+        None,
+    );
 
-    container(content)
-        .style(|_| box_theme!())
-        .width(Fill)
-        .padding(20)
-        .into()
-}
-
-pub fn advanced_page() -> Element<'static, Message> {
-    let warning = container(
-        row![
-            text("⚠ ").size(20).color(Color::from_rgb(1.0, 0.8, 0.0)),
-            text("Warning: These actions are for advanced users.")
-                .color(Color::from_rgb(1.0, 0.8, 0.0)),
-        ]
-        .align_y(Alignment::Center)
-        .padding(10),
-    )
-    .style(|_| container::Style {
-        background: Some(Color::from_rgb(0.25, 0.2, 0.05).into()),
-        border: Border {
-            radius: 8.0.into(),
-            width: 1.0,
-            color: Color::from_rgb(0.5, 0.4, 0.1),
-        },
-        ..Default::default()
-    })
-    .width(Fill);
-
-    //Send refresh_gpu to dbus, automatic GUI gpu_list refreshing isn't implemented yet
-    let refresh_section = container(
+    let info_card = container(
         column![
-            text("Refresh GPU List").size(20),
-            text("Re-scan PCI devices and update the internal GPU list.")
-                .color(Color::from_rgb(0.6, 0.6, 0.6)),
-            button("Refresh GPU")
-                .on_press(Message::RefreshGpu)
-                .padding([8, 16])
+            row![
+                text("Cardwire")
+                    .size(24)
+                    .color(Color::from_rgb(0.96, 0.96, 0.96)),
+                horizontal(),
+                count_badge(format!("Version {}", version)),
+            ]
+            .align_y(Alignment::Center),
+            text("Dynamic GPU management, power control, and per-process hardware isolation.")
+                .size(14)
+                .color(Color::from_rgb(0.75, 0.75, 0.75)),
+            column![
+                row![
+                    text("Author:")
+                        .size(15)
+                        .color(Color::from_rgb(0.72, 0.72, 0.75))
+                        .width(150),
+                    text("luytan")
+                        .size(15)
+                        .color(Color::from_rgb(0.92, 0.92, 0.92)),
+                ],
+                row![
+                    text("Other Contributors:")
+                        .size(15)
+                        .color(Color::from_rgb(0.72, 0.72, 0.75))
+                        .width(150),
+                    text("SeawolfTony")
+                        .size(15)
+                        .color(Color::from_rgb(0.92, 0.92, 0.92)),
+                ],
+                row![
+                    text("License:")
+                        .size(15)
+                        .color(Color::from_rgb(0.72, 0.72, 0.75))
+                        .width(150),
+                    text("GPL-3.0")
+                        .size(15)
+                        .color(Color::from_rgb(0.92, 0.92, 0.92)),
+                ],
+                row![
+                    text("Repository:")
+                        .size(15)
+                        .color(Color::from_rgb(0.72, 0.72, 0.75))
+                        .width(150),
+                    button(
+                        text("github.com/OpenGamingCollective/cardwire")
+                            .size(15)
+                            .color(Color::from_rgb(0.45, 0.68, 1.0))
+                    )
+                    .style(link_btn_style)
+                    .padding(0)
+                    .on_press(Message::OpenUrl(
+                        "https://github.com/OpenGamingCollective/cardwire".to_string()
+                    )),
+                ],
+            ]
+            .spacing(10),
         ]
-        .spacing(10),
+        .spacing(16),
     )
     .style(|_| box_theme!())
     .width(Fill)
     .padding(20);
 
-    column![warning, refresh_section].spacing(15).into()
+    let content = column![info_card].spacing(16);
+
+    column![header, scrollable(content).height(Fill)]
+        .spacing(16)
+        .width(Fill)
+        .height(Fill)
+        .into()
+}
+
+pub fn advanced_page() -> Element<'static, Message> {
+    let header = page_header(
+        "Advanced Controls",
+        Some("Low-level operations and maintenance actions"),
+        None,
+    );
+
+    let warning = warning_banner(
+        "Warning: These actions are intended for advanced users and troubleshooting.",
+    );
+
+    let refresh_section = container(
+        column![
+            text("Hardware & Rescan")
+                .size(18)
+                .color(Color::from_rgb(0.92, 0.92, 0.92)),
+            text("Re-scan PCI devices and update the internal GPU device list in the daemon.")
+                .size(14)
+                .color(Color::from_rgb(0.72, 0.72, 0.75)),
+            button(text("Refresh GPU List").size(15))
+                .on_press(Message::RefreshGpu)
+                .padding([10, 18])
+        ]
+        .spacing(14),
+    )
+    .style(|_| box_theme!())
+    .width(Fill)
+    .padding(20);
+
+    let content = column![warning, refresh_section].spacing(16);
+
+    column![header, scrollable(content).height(Fill)]
+        .spacing(16)
+        .width(Fill)
+        .height(Fill)
+        .into()
 }
 
 pub fn daemon_setting_page<'a>(
     setting_state: &'a SettingState,
     available_modes: &'a [Mode],
 ) -> Element<'a, Message> {
-    let mut col = column![].spacing(10);
-    let nvidia_setting = container(
-        row![
-            text!("Experimental NVIDIA PM"),
-            horizontal(),
-            toggler(setting_state.nvidia_checked).on_toggle(Message::UpdateNvidiaSetting),
-        ]
-        .padding(10),
-    )
-    .style(|_| box_theme!())
-    .width(Fill);
-    let state_setting = container(
-        row![
-            text!("Auto apply GPU state"),
-            horizontal(),
-            toggler(setting_state.state_checked).on_toggle(Message::UpdateStateSetting),
-        ]
-        .padding(10),
-    )
-    .style(|_| box_theme!())
-    .width(Fill);
-    let battery_setting = container(
-        row![
-            text!("Switch Mode on battery"),
-            horizontal(),
-            toggler(setting_state.battery_checked).on_toggle(Message::UpdateBatterySetting),
-        ]
-        .padding(10),
-    )
-    .style(|_| box_theme!())
-    .width(Fill);
+    let header = page_header(
+        "Settings",
+        Some("Configure Cardwire daemon behavior, power management, and GUI options"),
+        None,
+    );
+
     let modes = if available_modes.is_empty() {
         Mode::VARIANTS
     } else {
         available_modes
     };
-    let battery_mode = container(
-        row![
-            text!("Mode: "),
-            horizontal(),
-            pick_list(
-                modes,
-                setting_state.battery_mode,
-                Message::UpdateBatteryMode
-            ),
+
+    let daemon_section = container(
+        column![
+            text("Daemon & Power Management").size(18).color(Color::from_rgb(0.92, 0.92, 0.92)),
+            text("Manage kernel and runtime power management policies.")
+                .size(14)
+                .color(Color::from_rgb(0.72, 0.72, 0.75)),
+            row![
+                column![
+                    text("Experimental NVIDIA block").size(15).color(Color::from_rgb(0.95, 0.95, 0.95)),
+                    text("Block shared NVIDIA device files (/dev/nvidiactl) to prevent unwanted GPU wakeups.")
+                        .size(14)
+                        .color(Color::from_rgb(0.72, 0.72, 0.75)),
+                ],
+                horizontal(),
+                toggler(setting_state.nvidia_checked).on_toggle(Message::UpdateNvidiaSetting),
+            ]
+            .align_y(Alignment::Center),
+            row![
+                column![
+                    text("Auto apply GPU state").size(15).color(Color::from_rgb(0.95, 0.95, 0.95)),
+                    text("Automatically restore configured GPU power and block states upon daemon startup.")
+                        .size(14)
+                        .color(Color::from_rgb(0.72, 0.72, 0.75)),
+                ],
+                horizontal(),
+                toggler(setting_state.state_checked).on_toggle(Message::UpdateStateSetting),
+            ]
+            .align_y(Alignment::Center),
+            row![
+                column![
+                    text("Switch mode on battery").size(15).color(Color::from_rgb(0.95, 0.95, 0.95)),
+                    text("Automatically switch to a designated power-saving mode when on battery.")
+                        .size(14)
+                        .color(Color::from_rgb(0.72, 0.72, 0.75)),
+                ],
+                horizontal(),
+                toggler(setting_state.battery_checked).on_toggle(Message::UpdateBatterySetting),
+            ]
+            .align_y(Alignment::Center),
+            row![
+                column![
+                    text("Battery target mode").size(15).color(Color::from_rgb(0.95, 0.95, 0.95)),
+                    text("Cardwire mode to activate when disconnected from AC power.")
+                        .size(14)
+                        .color(Color::from_rgb(0.72, 0.72, 0.75)),
+                ],
+                horizontal(),
+                pick_list(
+                    modes,
+                    setting_state.battery_mode,
+                    Message::UpdateBatteryMode
+                ),
+            ]
+            .align_y(Alignment::Center),
         ]
-        .padding(10),
+        .spacing(16),
     )
     .style(|_| box_theme!())
-    .width(Fill);
-    let gui_settings = gui_setting_section(setting_state.gui_config.clone(), modes);
-    col = col
-        .push(nvidia_setting)
-        .push(state_setting)
-        .push(battery_setting)
-        .push(battery_mode)
-        .push(gui_settings);
-    col.into()
+    .width(Fill)
+    .padding(20);
+
+    let gui_section = gui_setting_section(setting_state.gui_config.clone(), modes);
+
+    let content = column![daemon_section, gui_section].spacing(16);
+
+    column![header, scrollable(content).height(Fill)]
+        .spacing(16)
+        .width(Fill)
+        .height(Fill)
+        .into()
 }
 
 fn gui_setting_section<'a>(config: GuiConfig, available_modes: &'a [Mode]) -> Element<'a, Message> {
@@ -687,7 +949,12 @@ fn gui_setting_section<'a>(config: GuiConfig, available_modes: &'a [Mode]) -> El
     let primary_click_mode_settings =
         (config.primary_click_action == PrimaryClickAction::SwitchMode).then(|| {
             available_modes.iter().copied().fold(
-                column![text("Modes to switch between:").size(16)].spacing(10),
+                column![
+                    text("Modes to switch between:")
+                        .size(15)
+                        .color(Color::from_rgb(0.9, 0.9, 0.9))
+                ]
+                .spacing(10),
                 |column, mode| {
                     let mode_config = config.clone();
                     let enabled = config.primary_click_modes.contains(&mode);
@@ -695,7 +962,7 @@ fn gui_setting_section<'a>(config: GuiConfig, available_modes: &'a [Mode]) -> El
 
                     column.push(
                         row![
-                            text(mode.to_string()).width(Fixed(130.0)),
+                            text(mode.to_string()).size(15).width(Fixed(130.0)),
                             toggler(enabled).on_toggle_maybe(can_disable.then_some(
                                 move |enabled| {
                                     Message::UpdateGuiConfig(
@@ -710,15 +977,20 @@ fn gui_setting_section<'a>(config: GuiConfig, available_modes: &'a [Mode]) -> El
             )
         });
     let mut content = column![
-        text("GUI Settings").size(20),
-        text("Configure Cardwire's startup and tray icon behavior.")
-            .color(Color::from_rgb(0.6, 0.6, 0.6)),
+        text("GUI & Tray Settings")
+            .size(18)
+            .color(Color::from_rgb(0.92, 0.92, 0.92)),
+        text("Configure Cardwire's startup and system tray icon behavior.")
+            .size(14)
+            .color(Color::from_rgb(0.72, 0.72, 0.75)),
         row![
             column![
-                text("Start in tray"),
-                text("Do not open the GUI when Cardwire starts. Takes effect next launch.")
-                    .size(13)
-                    .color(Color::from_rgb(0.6, 0.6, 0.6)),
+                text("Start in tray")
+                    .size(15)
+                    .color(Color::from_rgb(0.95, 0.95, 0.95)),
+                text("Do not open the GUI window when Cardwire starts. Takes effect next launch.")
+                    .size(14)
+                    .color(Color::from_rgb(0.72, 0.72, 0.75)),
             ],
             horizontal(),
             toggler(config.start_in_tray).on_toggle(move |start_in_tray| {
@@ -730,7 +1002,15 @@ fn gui_setting_section<'a>(config: GuiConfig, available_modes: &'a [Mode]) -> El
         ]
         .align_y(Alignment::Center),
         row![
-            text("Primary click:").width(Fixed(130.0)),
+            column![
+                text("Primary click action")
+                    .size(15)
+                    .color(Color::from_rgb(0.95, 0.95, 0.95)),
+                text("Action triggered when clicking the system tray icon.")
+                    .size(14)
+                    .color(Color::from_rgb(0.72, 0.72, 0.75)),
+            ],
+            horizontal(),
             pick_list(
                 PrimaryClickAction::VARIANTS,
                 Some(config.primary_click_action),
@@ -742,7 +1022,7 @@ fn gui_setting_section<'a>(config: GuiConfig, available_modes: &'a [Mode]) -> El
         ]
         .align_y(Alignment::Center),
     ]
-    .spacing(10);
+    .spacing(16);
 
     if let Some(settings) = primary_click_mode_settings {
         content = content.push(settings);
@@ -756,88 +1036,126 @@ fn gui_setting_section<'a>(config: GuiConfig, available_modes: &'a [Mode]) -> El
 }
 
 pub fn pci_page<'a>(pci_list: &'a BTreeMap<String, PciDevice>) -> Element<'a, Message> {
+    let copy_btn = button("Copy to Clipboard")
+        .on_press(Message::PciListToClipboard())
+        .padding([6, 12]);
+
+    let header = page_header(
+        "PCI Devices",
+        Some("Inspect detected PCI hardware devices, active drivers, and IOMMU groupings"),
+        Some(
+            row![copy_btn, count_badge(format!("{} devices", pci_list.len()))]
+                .spacing(10)
+                .align_y(Alignment::Center)
+                .into(),
+        ),
+    );
+
     let cards = scrollable(
         pci_list
             .iter()
-            .fold(column![].spacing(15), |col, (pci_id, device)| {
-                let title_color = Color::from_rgb(0.9, 0.9, 0.9);
+            .fold(column![].spacing(14), |col, (pci_id, device)| {
+                let title_color = Color::from_rgb(0.92, 0.92, 0.92);
 
-                let header: iced::Element<'_, Message> = row![
+                let card_header: iced::Element<'_, Message> = row![
                     text!("{}", device.device_name)
-                        .size(20)
+                        .size(18)
                         .color(title_color)
                         .width(FillPortion(1)),
                 ]
                 .into();
-                let width = 150;
+                let width = 140;
                 let details = column![
                     row![
-                        text("PCI: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                        text("PCI ID: ")
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
                             .width(width),
                         text!("{}", pci_id)
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
                     row![
                         text("IOMMU group: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
                             .width(width),
                         text!("{}", device.iommu_group)
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
                     row![
                         text("Vendor: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
                             .width(width),
                         text!("{}", device.vendor_name)
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
                     row![
                         text("Driver: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
                             .width(width),
                         match device.driver.is_empty() {
-                            true => text("N/A"),
-                            false => text!("{}", device.driver),
+                            true => text("N/A").size(15).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                            false => text!("{}", device.driver)
+                                .size(15)
+                                .color(Color::from_rgb(0.92, 0.92, 0.92)),
                         }
                     ],
                     row![
                         text("Class: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
                             .width(width),
                         text!("{}", device.class)
+                            .size(15)
+                            .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
                     row![
                         text("Parent Device: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
                             .width(width),
                         match device.parent_pci.is_empty() {
-                            true => text("N/A"),
-                            false => text!("{}", device.parent_pci),
+                            true => text("N/A").size(15).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                            false => text!("{}", device.parent_pci)
+                                .size(15)
+                                .color(Color::from_rgb(0.92, 0.92, 0.92)),
                         }
                     ],
                     row![
                         text("Child Device: ")
-                            .color(Color::from_rgb(0.6, 0.6, 0.6))
+                            .size(15)
+                            .color(Color::from_rgb(0.72, 0.72, 0.75))
                             .width(width),
                         match device.child_pci.is_empty() {
-                            true => text!("N/A"),
-                            false => text!("{}", device.child_pci),
+                            true => text!("N/A").size(15).color(Color::from_rgb(0.5, 0.5, 0.5)),
+                            false => text!("{}", device.child_pci)
+                                .size(15)
+                                .color(Color::from_rgb(0.92, 0.92, 0.92)),
                         }
                     ]
                 ]
                 .spacing(8);
 
-                let card = container(column![header, details].spacing(10))
+                let card = container(column![card_header, details].spacing(10))
                     .width(Fill)
-                    .padding(20)
+                    .padding(18)
                     .style(|_| box_theme!());
 
                 col.push(card)
             }),
-    );
-    let title = row![
-        text!("List of PCI Devices").size(30).center().width(Fill),
-        button("Copy to Clipboard").on_press(Message::PciListToClipboard())
-    ];
-    column![title, cards].spacing(15).into()
+    )
+    .height(Fill);
+
+    column![header, cards]
+        .spacing(16)
+        .width(Fill)
+        .height(Fill)
+        .into()
 }
 
 pub fn error_bar(msg: &str) -> Element<'_, Message> {
@@ -879,38 +1197,21 @@ pub fn smart_mode_page<'a>(
 ) -> Element<'a, Message> {
     let is_smart = current_mode == Some(Mode::Smart);
 
-    let header = row![
-        text("Smart Mode App Policies")
-            .size(20)
-            .color(Color::from_rgb(0.9, 0.9, 0.9)),
-        horizontal(),
-        text!("{} apps", smart_state.app_policies.len()).color(Color::from_rgb(0.6, 0.6, 0.6)),
-    ]
-    .align_y(Alignment::Center);
+    let header = page_header(
+        "Smart Mode Policies",
+        Some("Configure dynamic per-application GPU routing and isolation rules"),
+        Some(count_badge(format!(
+            "{} apps",
+            smart_state.app_policies.len()
+        ))),
+    );
 
     let warning = if !is_smart {
         let current_mode_str = current_mode.map_or("Unknown".to_string(), |m| m.to_string());
-        Some(
-            container(
-                row![
-                    text("⚠ ").size(20).color(Color::from_rgb(1.0, 0.8, 0.0)),
-                    text!("Warning: Smart Mode is inactive (Current mode: {}). App policies are not enforced.", current_mode_str)
-                        .color(Color::from_rgb(1.0, 0.8, 0.0)),
-                ]
-                .align_y(Alignment::Center)
-                .padding(10),
-            )
-            .style(|_| container::Style {
-                background: Some(Color::from_rgb(0.25, 0.2, 0.05).into()),
-                border: Border {
-                    radius: 8.0.into(),
-                    width: 1.0,
-                    color: Color::from_rgb(0.5, 0.4, 0.1),
-                },
-                ..Default::default()
-            })
-            .width(Fill),
-        )
+        Some(warning_banner(format!(
+            "Warning: Smart Mode is inactive (Current mode: {}). App policies are not enforced.",
+            current_mode_str
+        )))
     } else {
         None
     };
@@ -918,6 +1219,7 @@ pub fn smart_mode_page<'a>(
     // Search input & Refresh button
     let search_bar = text_input("Search app name or binary ID...", &smart_state.search_query)
         .on_input(Message::UpdateSmartSearch)
+        .style(search_input_style)
         .padding(8)
         .width(Fill);
 
@@ -979,7 +1281,24 @@ pub fn smart_mode_page<'a>(
                 Color::from_rgb(0.35, 0.2, 0.2)
             };
 
-            let icon_element: Element<'_, Message> =
+            let icon_element: Element<'_, Message> = if let Some(ref path) = app.icon_path {
+                let ext = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+                if ext == "svg" {
+                    iced::widget::svg(iced::widget::svg::Handle::from_path(path))
+                        .width(38)
+                        .height(38)
+                        .into()
+                } else {
+                    iced::widget::image(iced::widget::image::Handle::from_path(path))
+                        .width(38)
+                        .height(38)
+                        .into()
+                }
+            } else {
                 container(text!("{}", initial).color(Color::WHITE))
                     .width(38)
                     .height(38)
@@ -993,18 +1312,19 @@ pub fn smart_mode_page<'a>(
                         },
                         ..Default::default()
                     })
-                    .into();
+                    .into()
+            };
 
             // App title & binary ID
             let text_color = if !is_smart {
-                Color::from_rgb(0.5, 0.5, 0.5)
+                Color::from_rgb(0.6, 0.6, 0.6)
             } else {
                 Color::WHITE
             };
             let subtext_color = if !is_smart {
-                Color::from_rgb(0.4, 0.4, 0.4)
+                Color::from_rgb(0.5, 0.5, 0.5)
             } else {
-                Color::from_rgb(0.6, 0.6, 0.6)
+                Color::from_rgb(0.72, 0.72, 0.75)
             };
 
             let dt_id = app.desktop_file_id.as_deref();
@@ -1015,23 +1335,23 @@ pub fn smart_mode_page<'a>(
             };
 
             let app_info = column![
-                text!("{}", app.display_name).color(text_color),
-                text!("{}", sub_text).color(subtext_color),
+                text!("{}", app.display_name).size(16).color(text_color),
+                text!("{}", sub_text).size(13).color(subtext_color),
             ]
             .spacing(2);
 
             // Policy toggle widget & status label
             let policy_label = if is_allowed {
-                text("Allowed (dGPU)").color(if is_smart {
-                    Color::from_rgb(0.3, 0.8, 0.4)
+                text("Allowed (dGPU)").size(15).color(if is_smart {
+                    Color::from_rgb(0.35, 0.85, 0.45)
                 } else {
-                    Color::from_rgb(0.4, 0.6, 0.4)
+                    Color::from_rgb(0.4, 0.65, 0.4)
                 })
             } else {
-                text("Blocked (iGPU)").color(if is_smart {
-                    Color::from_rgb(0.8, 0.4, 0.4)
+                text("Blocked (iGPU)").size(15).color(if is_smart {
+                    Color::from_rgb(0.9, 0.4, 0.4)
                 } else {
-                    Color::from_rgb(0.6, 0.4, 0.4)
+                    Color::from_rgb(0.65, 0.4, 0.4)
                 })
             };
 
@@ -1079,7 +1399,7 @@ pub fn smart_mode_page<'a>(
 
     let list_scrollable = scrollable(app_list_col).height(Fill);
 
-    let mut content = column![header].spacing(12).width(Fill).height(Fill);
+    let mut content = column![header].spacing(16).width(Fill).height(Fill);
 
     if let Some(w) = warning {
         content = content.push(w);

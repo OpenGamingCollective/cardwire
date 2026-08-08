@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{STATE_PATH, analyzer::AppMetadata};
 use log::error;
-use rusqlite::{Connection, Result};
+use rusqlite::{Connection, OptionalExtension, Result};
 use tokio::sync::{RwLock, mpsc, oneshot};
 use zbus::zvariant;
 
@@ -95,6 +95,24 @@ impl CardwireDatabase {
         tokio::task::spawn_blocking(move || {
             let conn = conn;
             while let Some((binary_name, meta, reply)) = rx.blocking_recv() {
+                if let Some(desktop_file_id) = meta.desktop_file_id.as_deref()
+                    && conn
+                        .query_row(
+                            "SELECT 1 FROM app_policies
+                             WHERE desktop_file_id IS NOT NULL
+                               AND desktop_file_id = ?1
+                               AND binary_name != ?2
+                             LIMIT 1",
+                            rusqlite::params![desktop_file_id, binary_name],
+                            |_| Ok(()),
+                        )
+                        .optional()
+                        .unwrap_or(None)
+                        .is_some()
+                {
+                    let _ = reply.send(false);
+                    continue;
+                }
                 let res = conn.execute(
                     "INSERT INTO app_policies (binary_name, display_name, desktop_file_id, icon_name, policy)
                      VALUES (?1, ?2, ?3, ?4, 0)
