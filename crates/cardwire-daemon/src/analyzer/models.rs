@@ -22,6 +22,7 @@ use crate::{
 pub struct ExecEvent {
     pub pid: u32,
     pub mode: u8,
+    pub _padding: [u8; 3],
 }
 
 #[repr(C)]

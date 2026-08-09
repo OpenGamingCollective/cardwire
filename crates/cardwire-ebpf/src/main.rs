@@ -470,7 +470,11 @@ unsafe fn try_tracepoint_sched_process_exec(ctx: TracePointContext) -> Result<i3
         let mode_u8 = if is_smart { 3 } else { 2 }; // 3 is Smart, 2 is Manual
 
         // We just send the event to userspace
-        let event: ExecEvent = ExecEvent { pid, mode: mode_u8 };
+        let event: ExecEvent = ExecEvent {
+            pid,
+            mode: mode_u8,
+            _padding: [0; 3],
+        };
 
         // Now submit the event
         ring_buf.write(event);

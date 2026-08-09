@@ -13,28 +13,32 @@ use crate::vmlinux::task_struct;
 /// Verify if the inode is inside CW_BLOCKED_INO or not
 #[inline(always)]
 pub unsafe fn is_inode_blocked(inode: u64) -> bool {
-    let mut blocked: bool = false;
+    let mut tracked: bool = false;
     let mut ino_gpu_id: u32 = 0;
+    let mut blocked: bool = false;
 
     'inode_check: {
         // Check if the inode is in the blocked list
         if let Some(v) = unsafe { CW_BLOCKED_INO.get(inode) } {
-            blocked = true;
-            ino_gpu_id = *v;
+            tracked = true;
+            ino_gpu_id = v.gpu_id;
+            blocked = v.blocked == 1;
             break 'inode_check;
         }
         // We didn't match any inode, try with nvidia inodes
         if unsafe { is_nvidia_setting_enabled() }
             && let Some(v) = unsafe { CW_EXP_BLK_INO.get(inode) }
         {
-            blocked = true;
+            tracked = true;
             ino_gpu_id = *v;
+            // Nvidia experimental inodes are considered globally blocked for now if in map
+            blocked = true;
             break 'inode_check;
         }
     }
 
     'end: {
-        if !blocked {
+        if !tracked {
             // exit and return success
             break 'end;
         }
@@ -51,8 +55,8 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
 
         let comm = bpf_get_current_comm().unwrap_or([0u8; 16]);
 
-        if *mode == INTEGRATED {
-            // if integrated, just report the event and block
+        if *mode == INTEGRATED && blocked {
+            // if integrated, block and report
             report_event(pid, ino_gpu_id, comm);
             return true;
         }
@@ -75,9 +79,13 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
                 }
             }
 
-            // Default manual mode behavior: block access to blocked inodes
-            report_event(pid, ino_gpu_id, comm);
-            return true;
+            // Normal process behavior: block access if its blocked
+            if blocked {
+                report_event(pid, ino_gpu_id, comm);
+                return true;
+            } else {
+                break 'end;
+            }
         }
 
         // 0 = iGPU
