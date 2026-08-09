@@ -293,7 +293,7 @@ async fn main() -> anyhow::Result<()> {
                         "the daemon reports it as unavailable for launching"
                     };
                     return Err(anyhow::anyhow!(
-                        "GPU {} ({}) cannot be launched on: {reason}; switch to Smart mode or unblock it",
+                        "GPU {} ({}) cannot be launched on: {reason};",
                         gpu.id,
                         gpu.name
                     ));
