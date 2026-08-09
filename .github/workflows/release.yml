@@ -46,8 +46,7 @@ jobs:
       - name: Build cardwire
         run: |
           cargo install cargo-deb
-          cargo build --release --locked
-          cargo deb --no-build
+          cargo deb -- --locked --config profile.release.lto=false
 
       - name: Find deb filename
         id: deb
