@@ -927,7 +927,7 @@ pub fn daemon_setting_page<'a>(
                     text("External display auto-switch")
                         .size(15)
                         .color(Color::from_rgb(0.95, 0.95, 0.95)),
-                    text("Use Hybrid for dGPU-owned displays while in Integrated or Smart mode.")
+                    text("Switch to Hybrid mode when a dGPU-owned display is connected while in Integrated or Smart mode.")
                         .size(14)
                         .color(Color::from_rgb(0.72, 0.72, 0.75)),
                 ],
