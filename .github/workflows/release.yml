@@ -18,7 +18,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config
+          sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config libxcb1-dev
 
       - name: Install gcc-multilib
         if: matrix.os == 'ubuntu-24.04'
