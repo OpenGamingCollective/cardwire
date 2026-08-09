@@ -231,14 +231,17 @@ fn config_sub() -> Subscription<Message> {
                 }
                 Err(e) => warn!("Failed to fetch battery_auto_switch_mode: {}", e),
             }
-            if let Ok(state) = proxy.external_display_auto_switch().await {
-                let _ = output
-                    .send(Message::FetchedSetting(Ok((
-                        DaemonSettings::ExternalDisplayAutoSwitch,
-                        Some(state),
-                        None,
-                    ))))
-                    .await;
+            match proxy.external_display_auto_switch().await {
+                Ok(state) => {
+                    let _ = output
+                        .send(Message::FetchedSetting(Ok((
+                            DaemonSettings::ExternalDisplayAutoSwitch,
+                            Some(state),
+                            None,
+                        ))))
+                        .await;
+                }
+                Err(e) => warn!("Failed to fetch external_display_auto_switch: {}", e),
             }
             loop {
                 select! {
