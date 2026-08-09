@@ -4,6 +4,7 @@ mod display;
 mod egl;
 mod enumerator;
 mod models;
+mod nvidia;
 mod vulkan;
 
 pub use default_gpu::check_default_drm_class;
@@ -11,3 +12,4 @@ pub use default_gpu::check_default_drm_class;
 pub use display::{external_display_connected, is_gpu_active, send_drm_uevent};
 pub use enumerator::GpuEnumerator;
 pub use models::{DbusGpuDevice, GpuDevice, GpuVendor, PowerState};
+pub use nvidia::restart_nvidia_powerd;

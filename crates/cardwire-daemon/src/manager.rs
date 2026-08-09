@@ -126,11 +126,11 @@ impl DaemonManager {
         // This one can fail on asus laptop when switching to integrated using the kernel attribute
         if let Err(err) = self.apply_mode_at_startup(None).await {
             error!(
-                "failed to apply mode at startup: {}, switching to manual...",
+                "failed to apply mode at startup: {}, switching to hybrid...",
                 err
             );
-            // 2 = manual
-            self.apply_mode_at_startup(Some(2)).await?
+            self.apply_mode_at_startup(Some(Modes::Hybrid.into()))
+                .await?
         };
 
         Ok(())
@@ -259,8 +259,9 @@ impl DaemonManager {
     ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let mode = self.mode_interface.clone();
         let gpu_list = Arc::clone(&self.inner.gpu_list);
+        let external_display_switch = Arc::clone(&self.inner.config.external_display_auto_switch);
         async move {
-            let res = tasks::monitor_display_changes(mode, gpu_list).await;
+            let res = tasks::monitor_display_changes(mode, gpu_list, external_display_switch).await;
             if let Err(ref e) = res {
                 error!("monitor_display task failed: {}", e);
             }
