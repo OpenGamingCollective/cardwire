@@ -1,5 +1,16 @@
 # Smart
 
+## Goal and integration
+
+Cardwire owns its per-application policy. It does not depend on desktop environment heuristics like `PrefersNonDefaultGPU` or on `DRI_PRIME`, `__NV_PRIME_RENDER_OFFLOAD` or SteamAppId being present in the app environment. Those auto-approval inputs were dropped in 0.12.0 and replaced by the internal application list, which makes cardwire self-sufficient while staying compatible with desktop environments through the [Switcheroo shim](dbus/switcheroo.md).
+
+Third parties that want to integrate with cardwire get three surfaces:
+
+- **Per-process**: the `CARDWIRE_*` environment variables and `RequestProcessAccess` are equivalent ways to route a process to a GPU. Set the env vars on the process before launch, call `RequestProcessAccess` with the pid right after spawning it, or apply it to a process that is already running (Caution, App often scan for GPUs at launch). Both insert the pid into the same eBPF maps. The per-GPU environment can be fetched from the `Env` property of the [Gpu interface](dbus/gpu.md).
+- **Management**: the [SmartPolicy D-Bus interface](dbus/smart-policy.md) lists known applications (`GetAppPolicies`), changes their persistent policy (`SetAppPolicy`) and announces discoveries (`NewAppAdded`).
+
+One caveat applies to both routes: the eBPF program clears both pid maps at every exec, so a process that execs again after being classified starts from a clean slate and is re-evaluated.
+
 ## Introduction
 
 Having an integrated and hybrid mode is good, but what if we could have the best of both worlds?
@@ -22,9 +33,13 @@ The userspace of Smart mode acts as the brain. It is responsible for making the 
 - **`dynamic_analysis.rs`**: A set of helper functions used to analyze a process in real-time. By reading `/proc/<pid>/environ` and `/proc/<pid>/cmdline`, it checks for explicitly requested GPUs (like `CARDWIRE_ALLOW=1`, `CARDWIRE_FORCE_DGPU=1`, `CARDWIRE_FORCE_GPU=<gpu_id>`) or implicit signs like Steam games (`SteamAppId`, the `0` and `769` ids are excluded).
 - **`static_analysis.rs`**: A set of helper functions that analyze system data when the daemon starts. It scans the XDG data directories and watches them with inotify so new apps are picked up at install time. Every discovered app is blocked by default until the user allows it. The `xdg-desktop-portal` process is always blocked.
 
+#### Notes
+
+Technically, it's a pure race condition between the cardwire analyzer and the process, cardwire scans and allow a process in ~60-100 microseconds, from my testing, no process initialized its render before cardwire allowed it
+
 ## Complete Execution Flow
 
-Here is a comprehensive breakdown of how the Kernel and Userspace interact in real-time when an application launches:
+Here is a comprehensive breakdown of how the Kernel and Userspace interact in real-time when an application launches: (Please zoom on it)
 
 ```mermaid
 sequenceDiagram
@@ -74,6 +89,6 @@ Smart mode is only available on laptops (`SystemType::Laptop`). Per-application 
 
 The policy for a process can be overridden at runtime through the `org.opengamingcollective.cardwire.SmartPolicy` D-Bus interface (`RequestProcessAccess`, `GetProcessStatus`, `GetAppPolicies`, `SetAppPolicy`). Note that `GetProcessStatus` returns an empty string (not `"Default"`) for unclassified processes.
 
-For now there are no plan to adapt the Per-Application policy for non-laptops system, unless the demand is present
+For now there is no plan to adapt the per-application policy for non-laptop systems, unless the demand is present.
 
 Force_GPU can be used on all systems with the Manual mode.

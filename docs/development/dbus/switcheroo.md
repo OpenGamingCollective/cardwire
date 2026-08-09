@@ -1,12 +1,13 @@
-# Switcheroo Shim
+# Switcheroo Control
 
-Cardwire implements a compatibility shim for the `net.hadess.SwitcherooControl` D-Bus interface. This allows desktop environments (like GNOME(gio-launch-desktop) and KDE) to natively offer "Launch using Discrete Graphics Card" options in their application menus without needing any Cardwire-specific plugins.
-
-_(Having our own integration would've been better tbh)_
+Cardwire implements a compatibility shim for the `net.hadess.SwitcherooControl` D-Bus interface. This allows desktop environments to natively offer "Launch using Discrete Graphics Card" options in their application menus without needing any Cardwire-specific plugins.
 
 ## Service
 
 - **Interface:** `net.hadess.SwitcherooControl`
+- **Object path:** `/net/hadess/SwitcherooControl`
+
+The shim is served on a second D-Bus connection with `replace_existing_names(true)`, so it takes the name over from an installed upstream switcheroo-control service. Failure to serve it is non-fatal, the daemon logs a warning and keeps running.
 
 ---
 
@@ -15,6 +16,7 @@ _(Having our own integration would've been better tbh)_
 ### `HasDualGpu`
 
 Indicates whether the system has exactly two GPUs.
+
 - **Type:** `b` (boolean)
 - **Access:** Read
 
@@ -23,6 +25,7 @@ Blocked GPUs are excluded from the count, except in Smart mode where the blocked
 ### `NumGPUs`
 
 The number of GPUs detected on the system.
+
 - **Type:** `u` (uint32)
 - **Access:** Read
 
@@ -31,6 +34,7 @@ Same rules as `HasDualGpu`: blocked GPUs are excluded, except in Smart mode.
 ### `GPUs`
 
 A list of all available GPUs and their configurations.
+
 - **Type:** `aa{sv}` (Array of dictionaries mapping strings to variants)
 - **Access:** Read
 - **Dictionary Keys:**
@@ -54,8 +58,9 @@ The `Environment` property provides the exact environment variables the desktop 
 This is provided when the user selects a **Discrete GPU** on a 2-GPU system where the discrete GPU is not the default one. On systems with 3 or more GPUs, the routing variable is `CARDWIRE_FORCE_GPU=<gpu_id>` instead.
 
 When Cardwire detects this environment variable during the application's launch in Smart Mode, it does two things:
+
 1. **Unblocks the dGPU**: The eBPF hooks allow the application to access the discrete GPU's device files.
-2. **Hides the iGPU**: It actively intercepts and blocks the application from seeing the integrated GPU. 
+2. **Hides the iGPU**: It actively intercepts and blocks the application from seeing the integrated GPU.
 
 Hiding the iGPU ensures that the application is forced to use the discrete GPU, preventing issues where an application might get confused by seeing two GPUs and accidentally select the weaker one.
 
@@ -73,8 +78,5 @@ Depending on the GPU vendor, the environment also carries the offload variables 
 - **AMD**: `DRI_PRIME=pci-0000_xx_xx_x`, `VK_LOADER_DRIVERS_SELECT=*radeon*`
 - **Intel**: `DRI_PRIME`, `VK_LOADER_DRIVERS_SELECT=*intel*`
 
----
-
-## Cardwire integration
-
-The same environment is exposed per GPU as the `Env` property of the `org.opengamingcollective.cardwire.Gpu` D-Bus interface, and the `cardwire launch` CLI command fetches it to start a program on the GPU of your choice. Desktop environments do not need to call the shim at all when cardwire's own interfaces are used.
+> [!CAUTION]
+> These ENV were inherited from switcheroo-control old API, if they are obsolete/non-necessary they may get dropped in a future cardwire release
