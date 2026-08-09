@@ -476,24 +476,29 @@ mod tests {
     fn test_event_deserialization_from_valid_bytes() {
         let item: Vec<u8> = vec![
             0x01, 0x00, 0x00, 0x00, // pid = 1
+            0x03, 0x00, 0x00, 0x00, // mode = 3 (Smart)
         ];
         assert!(item.len() >= std::mem::size_of::<ExecEvent>());
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
         assert_eq!(event.pid, 1);
+        assert_eq!(event.mode, 3);
     }
 
     #[test]
     fn test_event_deserialization_rejects_undersized_buffer() {
-        let item: Vec<u8> = vec![0x01, 0x00, 0x00]; // 3 bytes, Event needs 4
+        let item: Vec<u8> = vec![0x01, 0x00, 0x00]; // 3 bytes, Event needs 8
         assert!(item.len() < std::mem::size_of::<ExecEvent>());
     }
 
     #[test]
     fn test_event_deserialization_with_large_pid() {
         // pid = 0xFFFFFFFF (u32::MAX)
-        let item: Vec<u8> = vec![0xFF, 0xFF, 0xFF, 0xFF];
+        let item: Vec<u8> = vec![
+            0xFF, 0xFF, 0xFF, 0xFF, 0x02, 0x00, 0x00, 0x00, // mode = 2 (Manual)
+        ];
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
         assert_eq!(event.pid, u32::MAX);
+        assert_eq!(event.mode, 2);
     }
 
     // ── ReportEvent ──────────────────────────────────────────────────
