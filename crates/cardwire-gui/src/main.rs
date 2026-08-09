@@ -1,4 +1,5 @@
 mod app;
+mod gtk_font;
 mod gui_config;
 mod helpers;
 mod message;
@@ -27,5 +28,6 @@ fn main() -> iced::Result {
         .title(AppState::title)
         .theme(iced::Theme::Dark)
         .subscription(AppState::subscription)
+        .default_font(gtk_font::default_font())
         .run()
 }
