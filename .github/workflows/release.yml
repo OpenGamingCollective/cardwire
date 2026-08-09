@@ -31,8 +31,9 @@ jobs:
 
 
       - name: Install Nightly Rust (for aya-ebpf)
-        uses: dtolnay/rust-toolchain@nightly-2026-08-04
+        uses: dtolnay/rust-toolchain@nightly
         with:
+          toolchain: nightly-2026-08-04
           components: rust-src
 
       - name: Install Stable Rust
@@ -65,73 +66,41 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: archlinux:latest
-      env:
-        AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # ssh
       - name: Install dependencies
         run: |
-          pacman -Sy openssh git base-devel pacman-contrib --noconfirm
-      - name: Setup ssh
+          pacman -Sy git base-devel pacman-contrib --noconfirm
+      - name: Prepare PKGBUILD
         run: |
-          mkdir -p /root/.ssh
-          echo "$AUR_SSH_KEY" > /root/.ssh/aur_key
-          chmod 600 /root/.ssh/aur_key
-          ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
-          cat << EOF > /root/.ssh/config
-          Host aur.archlinux.org
-            IdentityFile /root/.ssh/aur_key
-            User aur
-            StrictHostKeyChecking no
-          EOF
-      - name: Clone AUR repository
-        run: |
-          git clone ssh://aur@aur.archlinux.org/cardwire.git aur-repo
-      - name: Copy new PKGBUILD to aur repo
-        run: |
+          mkdir /build
+          cp packages/arch-linux/cardwire-PKGBUILD /build/PKGBUILD
           VERSION="${GITHUB_REF#refs/tags/v}"
-          cp packages/arch-linux/cardwire-PKGBUILD aur-repo/PKGBUILD
-          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" aur-repo/PKGBUILD
-      - name: Update PKGBUILD and SRCINFO
-        working-directory: aur-repo
-        run: |
+          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" /build/PKGBUILD
           useradd -m builder
           echo 'builder ALL=(ALL) NOPASSWD: /usr/bin/pacman' > /etc/sudoers.d/builder-pacman
           chmod 0440 /etc/sudoers.d/builder-pacman
-          chown -R builder:builder .
+          chown -R builder:builder /build
+          cd /build
           su builder -c "updpkgsums"
-          su builder -c "makepkg --printsrcinfo > .SRCINFO"
-      - name: Commit and push to AUR
-        working-directory: aur-repo
+      - name: Build package
+        working-directory: /build
         run: |
-          chown -R root:root .
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          VERSION=$(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)
-          git add PKGBUILD
-          git add .SRCINFO
-          git commit -m "chore: update cardwire to v${VERSION}"
-          git push
-      - name: Build tar zst
-        working-directory: aur-repo
-        run: |
-          chown -R builder:builder .
           su builder -c "makepkg -s --noconfirm"
 
       - name: Find pkg filename
         id: pkg
-        working-directory: aur-repo
+        working-directory: /build
         run: |
-          PKG_FILE=$(basename *.pkg.tar.zst)
+          PKG_FILE=$(basename ./*.pkg.tar.zst)
           echo "name=${PKG_FILE}" >> "$GITHUB_OUTPUT"
 
       - name: Upload pkg
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.pkg.outputs.name }}
-          path: "aur-repo/*.pkg.tar.zst"
+          path: "/build/*.pkg.tar.zst"
           if-no-files-found: error
 
   Release:
