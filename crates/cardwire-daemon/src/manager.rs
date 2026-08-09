@@ -259,8 +259,9 @@ impl DaemonManager {
     ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let mode = self.mode_interface.clone();
         let gpu_list = Arc::clone(&self.inner.gpu_list);
+        let external_display_switch = Arc::clone(&self.inner.config.external_display_auto_switch);
         async move {
-            let res = tasks::monitor_display_changes(mode, gpu_list).await;
+            let res = tasks::monitor_display_changes(mode, gpu_list, external_display_switch).await;
             if let Err(ref e) = res {
                 error!("monitor_display task failed: {}", e);
             }

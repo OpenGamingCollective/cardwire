@@ -4,7 +4,9 @@
 //! the effective mode is temporarily changed to Hybrid and restored after the display disconnects.
 
 use std::{
-    collections::{BTreeMap, HashSet}, sync::Arc, time::Duration
+    collections::{BTreeMap, HashSet}, sync::{
+        Arc, atomic::{AtomicBool, Ordering}
+    }, time::Duration
 };
 
 use log::warn;
@@ -116,6 +118,7 @@ async fn reconcile_gpu(
 async fn run_display_monitor(
     mode: &ModeInterface,
     gpu_list: &Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
+    external_display_switch: Arc<AtomicBool>,
 ) -> zbus::Result<()> {
     let drm_monitor = udev::MonitorBuilder::new()?.match_subsystem("drm")?;
     let drm_fd = AsyncFd::new(drm_monitor.listen()?)?;
@@ -151,6 +154,9 @@ async fn run_display_monitor(
         };
 
         if topology_event {
+            if !external_display_switch.load(Ordering::Relaxed) {
+                continue;
+            }
             // Connector status can lag behind the event which announced the topology change.
             tokio::time::sleep(DISPLAY_DEBOUNCE).await;
             let cards = std::mem::take(&mut cards_seen);
@@ -165,9 +171,12 @@ async fn run_display_monitor(
 pub async fn monitor_display_changes(
     mode: ModeInterface,
     gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
+    external_display_switch: Arc<AtomicBool>,
 ) -> zbus::Result<()> {
     loop {
-        if let Err(err) = run_display_monitor(&mode, &gpu_list).await {
+        if let Err(err) =
+            run_display_monitor(&mode, &gpu_list, Arc::clone(&external_display_switch)).await
+        {
             warn!(
                 "display monitor exited with error: {err}; retrying in {} seconds",
                 RETRY_INTERVAL.as_secs()
