@@ -1,6 +1,6 @@
 //! Define the mode dbus
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, config::ConfigMemory}, types::SystemType
+    core::gpu::{restart_nvidia_powerd, send_drm_uevent}, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, config::ConfigMemory}, types::SystemType
 };
 use anyhow::Result;
 use aya::maps::Array as AyaArray;
@@ -8,7 +8,9 @@ use log::{error, info, warn};
 use std::{
     collections::BTreeMap, sync::{Arc, OnceLock, atomic::Ordering}
 };
-use tokio::sync::{Mutex, RwLock};
+use tokio::{
+    sync::{Mutex, RwLock}, task
+};
 use zbus::{fdo, interface, object_server::SignalEmitter};
 
 pub use crate::types::Modes;
@@ -70,7 +72,7 @@ impl ModeInterface {
             warn!("failed to emit mode change signal: {err}");
         };
 
-        // Emit block_changed signal after the mode has been applied
+        // Emit block_changed signal after the mode has been applied and send drm uevent
         let gpu_list = self.gpu_list.read().await;
         for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
             let Some(emitter) = gpu.signal_emitter.get() else {
@@ -82,7 +84,14 @@ impl ModeInterface {
                     gpu.device.name()
                 );
             }
+            if let Err(err) = send_drm_uevent(gpu.id).await {
+                warn!("failed to send drm uevent for {}: {err}", gpu.device.name());
+            };
         }
+
+        // and at last, try to restart nvidia-powerd, ignore if error, it will be logged
+        task::spawn(restart_nvidia_powerd());
+
         Ok(())
     }
 
