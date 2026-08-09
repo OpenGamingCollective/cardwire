@@ -81,11 +81,11 @@
 
     with subtest("Test Dynamic Analysis ENV Flags"):
       # CARDWIRE_ALLOW
-      machine.succeed("CARDWIRE_ALLOW=1 : < /dev/dri/renderD129")
-      machine.fail("CARDWIRE_ALLOW=0 : < /dev/dri/renderD129")
+      machine.succeed("CARDWIRE_ALLOW=1 sh -c 'sleep 0.5 && exec 3< /dev/dri/renderD129'")
+      machine.fail("CARDWIRE_ALLOW=0 sh -c 'sleep 0.5 && exec 3< /dev/dri/renderD129'")
       # CARDWIRE_FORCE_DGPU
-      machine.succeed("CARDWIRE_FORCE_DGPU=1 : < /dev/dri/renderD129")
-      machine.fail("CARDWIRE_FORCE_DGPU=0 : < /dev/dri/renderD129")
+      machine.succeed("CARDWIRE_FORCE_DGPU=1 sh -c 'sleep 0.5 && exec 3< /dev/dri/renderD129'")
+      machine.fail("CARDWIRE_FORCE_DGPU=0 sh -c 'sleep 0.5 && exec 3< /dev/dri/renderD129'")
 
     with subtest("Test cardwire launch Environment Injection for GPU 0"):
       env_out = machine.succeed("cardwire launch --gpu 0 env")
