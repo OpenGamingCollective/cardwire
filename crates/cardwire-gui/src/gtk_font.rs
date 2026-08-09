@@ -29,9 +29,9 @@ fn query_gsettings() -> Option<String> {
 
     let deadline = Instant::now() + GSETTINGS_TIMEOUT;
     let status = loop {
-        match child.try_wait().ok()? {
-            Some(status) => break status,
-            None => {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
                 if Instant::now() >= deadline {
                     // murder this so we don't leave a zombie/orphan around.
                     let _ = child.kill();
@@ -39,6 +39,12 @@ fn query_gsettings() -> Option<String> {
                     return None;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            Err(_) => {
+                // something is wrong with the child handle itself
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
             }
         }
     };
@@ -53,11 +59,12 @@ fn query_gsettings() -> Option<String> {
     Some(stdout.trim().trim_matches('\'').to_string())
 }
 
-// needed for font family stripping
+// needed for font family stripping (Pango style/weight/stretch descriptors)
 const STYLE_TOKENS: &[&str] = &[
     "Bold",
     "Italic",
     "Oblique",
+    "Roman",
     "Regular",
     "Light",
     "Medium",
@@ -68,9 +75,18 @@ const STYLE_TOKENS: &[&str] = &[
     "Semi-Bold",
     "Extrabold",
     "Extra-Bold",
-    "Condensed",
+    "Ultrabold",
+    "Ultra-Bold",
     "Extralight",
+    "Extra-Light",
+    "Ultralight",
+    "Ultra-Light",
+    "Condensed",
 ];
+
+fn strip_px_suffix(token: &str) -> &str {
+    token.strip_suffix("px").unwrap_or(token)
+}
 
 fn strip_style_tokens(name: &str) -> String {
     let mut parts: Vec<&str> = name.split_whitespace().collect();
@@ -99,7 +115,7 @@ fn parse_family(gtk_font_name: &str) -> String {
         [] => "Sans".to_string(),
         [name] => name.to_string(),
         [.., last] => {
-            let family = if last.parse::<f32>().is_ok() {
+            let family = if strip_px_suffix(last).parse::<f32>().is_ok() {
                 parts[..parts.len() - 1].join(" ")
             } else {
                 gtk_font_name.to_string()
@@ -131,5 +147,25 @@ mod tests {
     #[test]
     fn handles_no_size() {
         assert_eq!(parse_family("Sans"), "Sans");
+    }
+
+    #[test]
+    fn parses_px_size_suffix() {
+        assert_eq!(parse_family("Ubuntu Bold 12px"), "Ubuntu");
+    }
+
+    #[test]
+    fn strips_ultra_bold() {
+        assert_eq!(parse_family("Cantarell Ultra-Bold 11"), "Cantarell");
+    }
+
+    #[test]
+    fn strips_extra_light() {
+        assert_eq!(parse_family("Roboto Extra-Light 10"), "Roboto");
+    }
+
+    #[test]
+    fn strips_roman() {
+        assert_eq!(parse_family("Times Roman 12"), "Times");
     }
 }
