@@ -31,7 +31,7 @@ jobs:
 
 
       - name: Install Nightly Rust (for aya-ebpf)
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@nightly-2026-08-04
         with:
           components: rust-src
 
