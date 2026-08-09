@@ -16,7 +16,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.11.1"
+version = "0.12.0"
 authors = ["luytan <luytan@khora.me>"]
 repository = "https://github.com/OpenGamingCollective/cardwire"
 edition = "2024"
