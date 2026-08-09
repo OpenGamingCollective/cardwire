@@ -293,10 +293,7 @@ pub fn main_page<'a>(
 
     let mode_card = mode_element(main_state.current_mode, &main_state.available_modes);
     let gpus = gpu_cards(gpu_list, main_state.open_gpu_menu, main_state.current_mode);
-
-    let content = column![mode_card, gpus].spacing(20);
-
-    column![header, scrollable(content).height(Fill)]
+    column![header, mode_card, gpus]
         .spacing(16)
         .width(Fill)
         .height(Fill)
