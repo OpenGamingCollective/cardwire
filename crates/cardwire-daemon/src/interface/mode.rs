@@ -122,7 +122,7 @@ impl ModeInterface {
                         && !gpu.device.is_discrete()
                     {
                         // push default gpu (iGPU) into the blocked inode map for tracking only
-                        gpu.block_gpu(*id as u32).await?;
+                        gpu.unblock_gpu().await?;
                     }
                 }
             }

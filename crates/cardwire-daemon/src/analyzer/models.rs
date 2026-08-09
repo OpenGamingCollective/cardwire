@@ -21,6 +21,8 @@ use crate::{
 #[derive(Debug, Copy, Clone)]
 pub struct ExecEvent {
     pub pid: u32,
+    pub mode: u8,
+    pub _padding: [u8; 3],
 }
 
 #[repr(C)]
@@ -176,7 +178,9 @@ impl CardwireAnalyzer {
             Some(name) => name,
             None => return,
         };
-        if let Some(result) = self.evaluate_app(event.pid, &real_app_name).await
+        if let Some(result) = self
+            .evaluate_app(event.pid, &real_app_name, event.mode)
+            .await
             && result.0
         {
             match result.1 {
@@ -286,7 +290,7 @@ impl CardwireAnalyzer {
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app, the u8 is the
     /// gpu id
-    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, PidType, u32)> {
+    async fn evaluate_app(&self, pid: u32, comm: &str, mode: u8) -> Option<(bool, PidType, u32)> {
         let path = format!("/proc/{}/environ", pid);
         let environ = match fs::read(path) {
             Ok(content) => content,
@@ -301,6 +305,11 @@ impl CardwireAnalyzer {
         }
         if let Some(value) = check_env("CARDWIRE_FORCE_GPU", &environ) {
             return Some((true, PidType::Forced, value));
+        }
+
+        // If manual mode, do not process app discovery or database policies
+        if mode == 2 {
+            return None;
         }
 
         // Check the database now, we can take our time since if we reached it, the app would've
@@ -468,24 +477,29 @@ mod tests {
     fn test_event_deserialization_from_valid_bytes() {
         let item: Vec<u8> = vec![
             0x01, 0x00, 0x00, 0x00, // pid = 1
+            0x03, 0x00, 0x00, 0x00, // mode = 3 (Smart)
         ];
         assert!(item.len() >= std::mem::size_of::<ExecEvent>());
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
         assert_eq!(event.pid, 1);
+        assert_eq!(event.mode, 3);
     }
 
     #[test]
     fn test_event_deserialization_rejects_undersized_buffer() {
-        let item: Vec<u8> = vec![0x01, 0x00, 0x00]; // 3 bytes, Event needs 4
+        let item: Vec<u8> = vec![0x01, 0x00, 0x00]; // 3 bytes, Event needs 8
         assert!(item.len() < std::mem::size_of::<ExecEvent>());
     }
 
     #[test]
     fn test_event_deserialization_with_large_pid() {
         // pid = 0xFFFFFFFF (u32::MAX)
-        let item: Vec<u8> = vec![0xFF, 0xFF, 0xFF, 0xFF];
+        let item: Vec<u8> = vec![
+            0xFF, 0xFF, 0xFF, 0xFF, 0x02, 0x00, 0x00, 0x00, // mode = 2 (Manual)
+        ];
         let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ExecEvent) };
         assert_eq!(event.pid, u32::MAX);
+        assert_eq!(event.mode, 2);
     }
 
     // ── ReportEvent ──────────────────────────────────────────────────

@@ -70,8 +70,9 @@
     with subtest("Check if cardwire found all gpus"):
       t.assertIn("17", machine.succeed("cardwire list | wc -l"), "Must be 17 (15 GPUs + 2 headers)")
 
-    with subtest("Try to switch to integrated and hybrid"):
-      t.assertIn("Couldn't set mode to Integrated, the mode requires exactly 2 GPUs", machine.fail("cardwire set integrated 2>&1"), "Mode has been switched to integrated")
+    with subtest("Try to switch to integrated, smart and hybrid"):
+      t.assertIn("Couldn't set mode to Integrated", machine.fail("cardwire set integrated 2>&1"), "Mode has been switched to integrated")
+      t.assertIn("Couldn't set mode to Smart", machine.fail("cardwire set smart 2>&1"), "Mode has been switched to smart")
       t.assertIn("Mode has been set to Hybrid", machine.succeed("cardwire set hybrid"), "Mode has been switched to hybrid")
 
     with subtest("Set to manual, and block 14 gpus"):
@@ -93,7 +94,7 @@
       machine.succeed(": < /dev/dri/renderD128")
       machine.succeed(": < /dev/dri/card0")
 
-    with subtest("Check gpu_state.json to see if two gpus got blocked"):
+    with subtest("Check gpu_state.json to see if 14 gpus got blocked"):
       t.assertIn("14", machine.succeed("cat /var/lib/cardwire/gpu_state.json|grep true|wc -l"), "Only 13 or less got blocked")
 
 

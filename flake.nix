@@ -42,6 +42,9 @@
       packages = forAllSystems (system: {
         default = (pkgs system).callPackage ./nix { toolchain = toolchainFor system; };
         vm-test = self.checks.${system}.vm-ci-2gpu;
+        vm-test-2gpu = self.checks.${system}.vm-ci-2gpu;
+        vm-test-3gpu = self.checks.${system}.vm-ci-3gpu;
+        vm-test-15gpu = self.checks.${system}.vm-ci-15gpu;
       });
       formatter = forAllSystems (
         system:

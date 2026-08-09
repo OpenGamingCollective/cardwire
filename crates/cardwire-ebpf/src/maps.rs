@@ -26,13 +26,22 @@ pub static CW_MODE: Array<u8> = Array::<u8>::with_max_entries(1, 0);
 #[map]
 pub static CW_SETTINGS: HashMap<u8, bool> = HashMap::<u8, bool>::with_max_entries(255, 0);
 
+#[repr(C, align(8))]
+#[derive(Copy, Clone)]
+pub struct InodeState {
+    pub gpu_id: u32,
+    pub blocked: u8,
+    pub _padding: [u8; 3], // 8-byte alignment
+}
+
 /*
    Map used to store blocked inodes sent from userspace
    Key = Inode
-   Value = associated GPU
+   Value = associated GPU and block state
 */
 #[map]
-pub static CW_BLOCKED_INO: HashMap<u64, u32> = HashMap::<u64, u32>::with_max_entries(4096, 0);
+pub static CW_BLOCKED_INO: HashMap<u64, InodeState> =
+    HashMap::<u64, InodeState>::with_max_entries(4096, 0);
 
 /*
    Map used to store blocked inodes from exp_nvidia
@@ -71,10 +80,12 @@ pub static CW_ALLOWED_COMM: HashMap<[u8; 16], u8> =
 #[map]
 pub static CW_DIRENT: HashMap<u32, u64> = HashMap::<u32, u64>::with_max_entries(1024, 0);
 
-#[repr(align(8))]
+#[repr(C, align(8))]
 #[allow(dead_code)]
 pub struct ExecEvent {
     pub pid: u32,
+    pub mode: u8,
+    pub _padding: [u8; 3],
 }
 
 #[btf_map]

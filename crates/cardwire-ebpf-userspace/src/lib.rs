@@ -23,6 +23,15 @@ pub struct EbpfBlocker {
     pub forced_map: Arc<RwLock<HashMap<aya::maps::MapData, u32, u32>>>,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct InodeState {
+    pub gpu_id: u32,
+    pub blocked: u8,
+    pub _padding: [u8; 3], // 8-byte alignment
+}
+unsafe impl aya::Pod for InodeState {}
+
 impl EbpfBlocker {
     pub fn new() -> CardwireEbpfResult<Self> {
         // quit if bpf is not enabled
@@ -173,47 +182,59 @@ impl EbpfBlocker {
     }
 
     /// Block an inode, value is the associated GPU id
-    pub fn block_inode(&mut self, inode: u64, value: u32) -> CardwireEbpfResult<()> {
-        // Also insert hardcoded values for now
-        let mut inode_map: HashMap<_, u64, u32> = HashMap::try_from(
+    pub fn block_inode(&mut self, inode: u64, gpu_id: u32) -> CardwireEbpfResult<()> {
+        let mut inode_map: HashMap<_, u64, InodeState> = HashMap::try_from(
             self.ebpf
                 .map_mut("CW_BLOCKED_INO")
                 .ok_or_else(|| CardwireEbpfError::missing_map("CW_BLOCKED_INO"))?,
         )
         .map_err(CardwireEbpfError::aya)?;
         inode_map
-            .insert(inode, value, 0)
+            .insert(
+                inode,
+                InodeState {
+                    gpu_id,
+                    blocked: 1,
+                    _padding: [0; 3],
+                },
+                0,
+            )
             .map_err(CardwireEbpfError::aya)?;
         Ok(())
     }
-    pub fn unblock_inode(&mut self, inode: u64) -> CardwireEbpfResult<()> {
-        // Also insert hardcoded values for now
-        let mut inode_map: HashMap<_, u64, u32> = HashMap::try_from(
+
+    pub fn unblock_inode(&mut self, inode: u64, gpu_id: u32) -> CardwireEbpfResult<()> {
+        let mut inode_map: HashMap<_, u64, InodeState> = HashMap::try_from(
             self.ebpf
                 .map_mut("CW_BLOCKED_INO")
                 .ok_or_else(|| CardwireEbpfError::missing_map("CW_BLOCKED_INO"))?,
         )
         .map_err(CardwireEbpfError::aya)?;
-        match inode_map.get(&inode, 0) {
-            // Ok = key found, remove
-            Ok(_) => inode_map.remove(&inode).map_err(CardwireEbpfError::aya),
-            // key not found, skip
-            Err(MapError::KeyNotFound) => Ok(()),
-            Err(err) => Err(CardwireEbpfError::aya(err)),
-        }
+        // Keep the inode in the map for tracking, but set blocked to 0
+        inode_map
+            .insert(
+                inode,
+                InodeState {
+                    gpu_id,
+                    blocked: 0,
+                    _padding: [0; 3],
+                },
+                0,
+            )
+            .map_err(CardwireEbpfError::aya)?;
+        Ok(())
     }
 
-    pub fn is_inode_blocked(&self, inode: u64, value: u32) -> CardwireEbpfResult<bool> {
-        // Also insert hardcoded values for now
-        let inode_map: HashMap<_, u64, u32> = HashMap::try_from(
+    pub fn is_inode_blocked(&self, inode: u64, gpu_id: u32) -> CardwireEbpfResult<bool> {
+        let inode_map: HashMap<_, u64, InodeState> = HashMap::try_from(
             self.ebpf
                 .map("CW_BLOCKED_INO")
                 .ok_or_else(|| CardwireEbpfError::missing_map("CW_BLOCKED_INO"))?,
         )
         .map_err(CardwireEbpfError::aya)?;
+
         match inode_map.get(&inode, 0) {
-            // if value (gpu key associed to inode) = our func value
-            Ok(map_value) => Ok(value == map_value),
+            Ok(state) => Ok(state.gpu_id == gpu_id && state.blocked == 1),
             Err(MapError::KeyNotFound) => Ok(false),
             Err(err) => Err(CardwireEbpfError::aya(err)),
         }
