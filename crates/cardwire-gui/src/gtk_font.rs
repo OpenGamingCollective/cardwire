@@ -18,9 +18,7 @@ pub fn default_font() -> iced::Font {
 const GSETTINGS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 
 fn query_gsettings() -> Option<String> {
-    use std::io::Read;
-    use std::process::Stdio;
-    use std::time::Instant;
+    use std::{io::Read, process::Stdio, time::Instant};
 
     let mut child = std::process::Command::new("gsettings")
         .args(["get", "org.gnome.desktop.interface", "font-name"])
