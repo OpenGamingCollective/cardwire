@@ -126,11 +126,11 @@ impl DaemonManager {
         // This one can fail on asus laptop when switching to integrated using the kernel attribute
         if let Err(err) = self.apply_mode_at_startup(None).await {
             error!(
-                "failed to apply mode at startup: {}, switching to manual...",
+                "failed to apply mode at startup: {}, switching to hybrid...",
                 err
             );
-            // 2 = manual
-            self.apply_mode_at_startup(Some(2)).await?
+            self.apply_mode_at_startup(Some(Modes::Hybrid.into()))
+                .await?
         };
 
         Ok(())
