@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     core::{
-        gpu::{DbusGpuDevice, GpuDevice, is_gpu_active}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
+        gpu::{DbusGpuDevice, GpuDevice, is_gpu_active, send_drm_uevent}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
     }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
@@ -214,19 +214,36 @@ impl GpuInterface {
             self.block_gpu(self.id).await?;
             info!("Set GPU {} block={}", self.device.name(), block);
             // save new state to file
-            let mut gpu_state = self.gpu_state.write().await;
-            if let Err(e) = gpu_state.save_state(&self.device, true).await {
-                warn!("could not save gpu_state to file: {e}");
+            {
+                let mut gpu_state = self.gpu_state.write().await;
+                if let Err(e) = gpu_state.save_state(&self.device, true).await {
+                    warn!("could not save gpu_state to file: {e}");
+                };
+            }
+            if let Err(err) = send_drm_uevent(self.id).await {
+                warn!(
+                    "failed to send drm uevent for {}: {err}",
+                    self.device.name()
+                );
             };
+
             Ok(())
         } else {
             // unblock
             self.unblock_gpu().await?;
             info!("Set GPU {} block={}", self.device.name(), block);
             // save new state to file
-            let mut gpu_state = self.gpu_state.write().await;
-            if let Err(e) = gpu_state.save_state(&self.device, false).await {
-                warn!("could not save gpu_state to file: {e}");
+            {
+                let mut gpu_state = self.gpu_state.write().await;
+                if let Err(e) = gpu_state.save_state(&self.device, false).await {
+                    warn!("could not save gpu_state to file: {e}");
+                };
+            }
+            if let Err(err) = send_drm_uevent(self.id).await {
+                warn!(
+                    "failed to send drm uevent for {}: {err}",
+                    self.device.name()
+                );
             };
             Ok(())
         }
