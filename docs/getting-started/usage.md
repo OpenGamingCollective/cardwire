@@ -16,19 +16,29 @@ For each detected GPU, the command will return:
 - The associated render node (`RENDER`)
 - The associated device node (`CARD`)
 - Whether the GPU has been identified as the default GPU (`DEFAULT`). Default GPUs will remain available when cardwire is set to integrated.
+- Whether the GPU is a discrete GPU (`DISCRETE`)
 - Whether the GPU is currently blocked (`BLOCKED`)
+
+`--json` prints the full device map as JSON.
+`--full` prints the full pci device map as JSON.
 
 Example:
 
 ```bash
 $ cardwire list
-ID  NAME                                         PCI           RENDER      CARD   DEFAULT  BLOCKED
---  -------------------------------------------  ------------  ----------  -----  -------  -------
-0   Rembrandt [Radeon 680M]                      0000:07:00.0  renderD129  card2  (*)      false
-1   Navi 23 [Radeon RX 6650 XT / 6700S / 6800S]  0000:03:00.0  renderD128  card1  ( )      true
+ID  NAME                                         PCI           RENDER      CARD   DEFAULT  DISCRETE  BLOCKED
+--  -------------------------------------------  ------------  ----------  -----  -------  --------  -------
+0   Rembrandt [Radeon 680M]                      0000:07:00.0  renderD129  card2  (*)      ( )       false
+1   Navi 23 [Radeon RX 6650 XT / 6700S / 6800S]  0000:03:00.0  renderD128  card1  ( )      (*)       true
 ```
 
 ## Mode switching
+
+To print the current mode:
+
+```bash
+cardwire get
+```
 
 GPU modes can be switched using the `cardwire set` command.
 
@@ -67,9 +77,12 @@ When launching apps in Smart mode, cardwire checks for the following to allow th
 
 - `CARDWIRE_ALLOW=1` env var (highest priority, unblocks the GPU but doesn't force the app to use it)
 - `CARDWIRE_FORCE_DGPU=1` env var (unblocks the GPU, forces the app to use it, and completely hides the iGPU)
-- Steam games (`SteamAppId=`)
-- Flatpak apps with XDG `PrefersNonDefaultGpu=true` (Only on system that does not implement switcheroo/cardwire)
-- Explicit GPU env vars (`DRI_PRIME=1`, `__NV_PRIME_RENDER_OFFLOAD=1`)
+- `CARDWIRE_FORCE_GPU=<gpu_id>` env var (unblocks a specific GPU and forces the app to use it)
+- Steam games, identified by `SteamAppId`, are discovered into the internal application list and blocked by default until allowed
+- The per-app policies stored in cardwire's internal application list
+
+> [!NOTE]
+> The former auto-approval inputs are deprecated in favor of the internal application list. Steam auto-allow, `PrefersNonDefaultGpu` desktop entries and the automatic approval of GPU environment variables (`DRI_PRIME`, `__NV_PRIME_RENDER_OFFLOAD`) are no longer evaluated.
 
 ```bash
 cardwire set smart
@@ -89,7 +102,7 @@ If more granular control over several GPUs is required, cardwire also allows man
 cardwire set manual
 ```
 
-Once set to manual, GPU states can then be set by ID; to find the correct ID, see [Querying GPUs](#Querying-GPUs).
+Once set to manual, GPU states can then be set by ID. To find the correct ID, see [Querying GPUs](#Querying-GPUs).
 
 To block the GPU with ID `1`:
 
@@ -101,6 +114,37 @@ To unblock:
 
 ```bash
 cardwire gpu 1 --unblock
+```
+
+## Launching apps on a specific GPU
+
+`cardwire launch` starts a program with the right GPU environment set, without switching modes:
+
+```bash
+cardwire launch --gpu 1 nvtop
+cardwire launch glxgears
+```
+
+Without `--gpu`, cardwire picks the best GPU for the job, in this order: a discrete non-default GPU, a discrete GPU, the default GPU, then the first available one. The command fetches the launch environment from the daemon
+
+## System information
+
+To check that the daemon is running:
+
+```bash
+cardwire manager status
+```
+
+To refresh the GPU list held by the daemon (useful after a hotplug event):
+
+```bash
+cardwire debug refresh-gpu
+```
+
+To check the power state of a GPU (for example whether it reached `D3Cold`):
+
+```bash
+cardwire gpu 1 --power
 ```
 
 ## Configuration

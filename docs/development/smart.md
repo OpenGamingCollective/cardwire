@@ -8,9 +8,9 @@ This is what cardwire's smart mode was made for. Cardwire uses a mix of kernel-s
 
 ### Kernel-Space
 
-Using the eBPF program and the `tracepoint/sched/sched_process_exec` hooks, the kernel program notifies `cardwired` when a new process is executed, sending its pid using `cw_exec_events` RING_BUF, once the process is received by `cardwired`, it will be analyzed in real-time and if it's a process that should be allowed, its pid will be inserted into the `cw_allowed_pid` map
+Using the eBPF program and the `tracepoint/sched/sched_process_exec` hooks, the kernel program notifies `cardwired` when a new process is executed, sending its pid using the `CW_EXEC_EVENTS` RING_BUF (in Smart and Manual modes). Once the process is received by `cardwired`, it will be analyzed in real-time and its pid will be inserted into the `CW_ALLOWED_PID` map (value always `0`) or the `CW_FORCED_PID` map (value is the GPU id)
 
-When a process exits, a notification is sent to `cardwired`, cardwired will remove the PID from its map to prevent the map from overflowing
+When a process exits, the kernel's `tracepoint/sched/sched_process_exit` removes the pid from both maps directly, preventing the maps from overflowing.
 
 If you want to dive deeper into the kernel code, take a look at [BPF](bpf.md)
 
@@ -18,9 +18,9 @@ If you want to dive deeper into the kernel code, take a look at [BPF](bpf.md)
 
 The userspace of Smart mode acts as the brain. It is responsible for making the actual decisions about whether a process is allowed to use a GPU. It is divided into three main components:
 
-- **`CardwireAnalyzer`**: A dedicated background task that listens to the `cw_exec_events` and `cw_close_events` ring buffers. When it receives a new PID from the kernel, it invokes the analysis helpers. If the application passes, it populates the `cw_allowed_pid` map with a value of `1` (normal) or `0` (`iGPU`).
-- **`dynamic_analysis.rs`**: A set of helper functions used to analyze a process in real-time. By reading `/proc/<pid>/environ` and `/proc/<pid>/cmdline`, it checks for explicitly requested GPUs (like `CARDWIRE_ALLOW=1`, `CARDWIRE_FORCE_DGPU=1`, `DRI_PRIME=1`) or implicit signs like Steam games (`SteamAppId`) and Flatpak wrappers.
-- **`static_analysis.rs`**: A set of helper functions that analyze system data when the daemon starts. Specifically, it scans the XDG data directories for `.desktop` files containing `PrefersNonDefaultGPU=true` or `X-KDE-RunOnDiscreteGpu=true`, building a whitelist of application names that should automatically be granted dGPU access when they launch.
+- **`CardwireAnalyzer`**: A dedicated background task that listens to the `CW_EXEC_EVENTS` ring buffer (and the `CW_REPORT_EVENTS` ring for blocked-access logging). When it receives a new PID from the kernel, it invokes the analysis helpers. If the application passes, it populates the `CW_ALLOWED_PID` map (value always `0`) or the `CW_FORCED_PID` map (value is the GPU id).
+- **`dynamic_analysis.rs`**: A set of helper functions used to analyze a process in real-time. By reading `/proc/<pid>/environ` and `/proc/<pid>/cmdline`, it checks for explicitly requested GPUs (like `CARDWIRE_ALLOW=1`, `CARDWIRE_FORCE_DGPU=1`, `CARDWIRE_FORCE_GPU=<gpu_id>`) or implicit signs like Steam games (`SteamAppId`, the `0` and `769` ids are excluded).
+- **`static_analysis.rs`**: A set of helper functions that analyze system data when the daemon starts. It scans the XDG data directories and watches them with inotify so new apps are picked up at install time. Every discovered app is blocked by default until the user allows it. The `xdg-desktop-portal` process is always blocked.
 
 ## Complete Execution Flow
 
@@ -40,30 +40,40 @@ sequenceDiagram
 
     Note over Daemon: 2. Real-time Analysis
     Daemon->>Daemon: Read /proc/<pid>/environ & cmdline
-    Daemon->>Daemon: Check env vars, Steam, Flatpak, XDG lists
+    Daemon->>Daemon: Check CARDWIRE_* env vars, Steam, XDG lists, SQLite policies
 
     alt Is Allowed?
         Daemon->>Map: Insert PID into cw_allowed_pid
+    else Is Forced?
+        Daemon->>Map: Insert PID into cw_forced_pid with the GPU id
     else Not Allowed
         Daemon->>Daemon: Do nothing
     end
 
     Note over Proc,Kernel: 3. GPU Access & Directory Listing
     Proc->>Kernel: getdents64 / file_open (/dev/dri/)
-    Kernel->>Map: Check cw_allowed_pid
+    Kernel->>Map: Check cw_allowed_pid and cw_forced_pid
 
-    alt PID not in cw_allowed_pid
+    alt PID not in any map
         Kernel-->>Proc: hide GPU (Return -ENOENT)
         Kernel->>Daemon: Send block event (cw_report_events)
-    else PID in cw_allowed_pid (Value 1 = Normal)
+    else PID in cw_allowed_pid
         Kernel-->>Proc: Allow dGPU and iGPU
-    else PID in cw_allowed_pid (Value 0 = FORCE_DGPU)
-        Kernel-->>Proc: Allow dGPU, Hide iGPU (-ENOENT)
+    else PID in cw_forced_pid (value = GPU id)
+        Kernel-->>Proc: Allow the forced GPU, hide the others (-ENOENT)
     end
 
     Note over Proc,Daemon: 4. Application Exit
     Proc->>Kernel: sched_process_exit
-    Kernel->>Map: Send PID via cw_close_events (RingBuf)
-    Map->Daemon: Listen to cw_close_events and wait for new events
-    Daemon->>Map: Remove PID from cw_allowed_pid
+    Kernel->>Kernel: Remove PID from cw_allowed_pid and cw_forced_pid
 ```
+
+## Application policies
+
+Smart mode is only available on laptops (`SystemType::Laptop`). Per-application policies are stored in the `app_policies` table of the daemon's SQLite database, with two values: `Blocked` and `Allowed`. Known apps are blocked by default until the user allows them, and newly discovered apps are announced through the `NewAppAdded` D-Bus signal.
+
+The policy for a process can be overridden at runtime through the `org.opengamingcollective.cardwire.SmartPolicy` D-Bus interface (`RequestProcessAccess`, `GetProcessStatus`, `GetAppPolicies`, `SetAppPolicy`). Note that `GetProcessStatus` returns an empty string (not `"Default"`) for unclassified processes.
+
+For now there are no plan to adapt the Per-Application policy for non-laptops system, unless the demand is present
+
+Force_GPU can be used on all systems with the Manual mode.

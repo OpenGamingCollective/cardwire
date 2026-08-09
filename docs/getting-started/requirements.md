@@ -71,6 +71,16 @@ zcat /proc/config.gz | grep CONFIG_LSM=
 > Outputs e.g. `lsm=landlock,yama,apparmor,bpf` or `CONFIG_LSM="landlock,lockdown,yama,integrity,apparmor,bpf"`.
 > If it contains 'bpf', bpf is already enabled and usable in your system!
 
+### 3. Verify BPF LSM is active at runtime
+
+The cardwire daemon refuses to start without this. Check the list of active LSMs:
+
+```bash
+cat /sys/kernel/security/lsm
+```
+
+> Must contain `bpf`. If it does, eBPF LSM is ready even if the boot cmdline looks different.
+
 ### Enabling BPF LSM (with GRUB)
 
 If `bpf` is not in your boot cmdline, edit `/etc/default/grub` and append `bpf` to `GRUB_CMDLINE_LINUX_DEFAULT`, keeping all existing entries:
@@ -80,7 +90,7 @@ GRUB_CMDLINE_LINUX_DEFAULT="quiet splash lsm=landlock,lockdown,yama,integrity,ap
 ```
 
 > [!IMPORTANT]
-> Do not set `lsm=bpf` alone — that drops other active security policies. Always append `bpf` to the existing list from the command above.
+> Do not set `lsm=bpf` alone, that drops other active security policies. Always append `bpf` to the existing list from the command above.
 
 Apply and reboot:
 

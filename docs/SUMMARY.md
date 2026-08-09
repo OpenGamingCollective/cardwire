@@ -1,6 +1,7 @@
 # Summary
 
 [Introduction](introduction.md)
+[Release Notes](release-notes.md)
 
 # Getting-Started
 - [Requirements](getting-started/requirements.md)

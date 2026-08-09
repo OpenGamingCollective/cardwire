@@ -41,6 +41,8 @@ A list of all available GPUs and their configurations.
 
 Blocked GPUs are excluded from the list, except in Smart mode: the blocked dGPU is still advertised so desktop environments keep offering the "Launch using Discrete Graphics Card" option, with its normal full `Environment`.
 
+The shim is served on a second D-Bus connection. It manually emits `org.freedesktop.DBus.Properties.PropertiesChanged` whenever the GPU list changes (for example after a hotplug refresh or a mode change).
+
 ---
 
 ## Environment Variables Explained
@@ -49,7 +51,7 @@ The `Environment` property provides the exact environment variables the desktop 
 
 ### `CARDWIRE_FORCE_DGPU=1`
 
-This is provided when the user selects the **Discrete GPU**. 
+This is provided when the user selects a **Discrete GPU** on a 2-GPU system where the discrete GPU is not the default one. On systems with 3 or more GPUs, the routing variable is `CARDWIRE_FORCE_GPU=<gpu_id>` instead.
 
 When Cardwire detects this environment variable during the application's launch in Smart Mode, it does two things:
 1. **Unblocks the dGPU**: The eBPF hooks allow the application to access the discrete GPU's device files.
@@ -57,8 +59,22 @@ When Cardwire detects this environment variable during the application's launch 
 
 Hiding the iGPU ensures that the application is forced to use the discrete GPU, preventing issues where an application might get confused by seeing two GPUs and accidentally select the weaker one.
 
-### `CARDWIRE_ALLOW=0`
+### `CARDWIRE_ALLOW`
 
-This is provided when the user selects the **Default/Integrated GPU**. 
+This is provided when the user selects the **Default GPU**. It is set to `1` when the default GPU is discrete (desktop), and to `0` when the default GPU is the iGPU (laptop).
 
-It explicitly tells Cardwire's Smart Mode to keep the dGPU blocked for this application, ensuring it runs solely on the integrated graphics to save power.
+The analyzer only allows the dGPU when the value is `1`. Any other value falls through to the regular policy checks, it is not an explicit keep-blocked directive.
+
+### Vendor environment variables
+
+Depending on the GPU vendor, the environment also carries the offload variables used by the graphics stacks:
+
+- **NVIDIA**: `__NV_PRIME_RENDER_OFFLOAD=1`, `__GLX_VENDOR_LIBRARY_NAME=nvidia`, `__VK_LAYER_NV_optimus=NVIDIA_only`, `VK_LOADER_DRIVERS_SELECT=*nvidia*,*nouveau*`
+- **AMD**: `DRI_PRIME=pci-0000_xx_xx_x`, `VK_LOADER_DRIVERS_SELECT=*radeon*`
+- **Intel**: `DRI_PRIME`, `VK_LOADER_DRIVERS_SELECT=*intel*`
+
+---
+
+## Cardwire integration
+
+The same environment is exposed per GPU as the `Env` property of the `org.opengamingcollective.cardwire.Gpu` D-Bus interface, and the `cardwire launch` CLI command fetches it to start a program on the GPU of your choice. Desktop environments do not need to call the shim at all when cardwire's own interfaces are used.
