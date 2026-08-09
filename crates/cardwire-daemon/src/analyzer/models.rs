@@ -21,6 +21,7 @@ use crate::{
 #[derive(Debug, Copy, Clone)]
 pub struct ExecEvent {
     pub pid: u32,
+    pub mode: u8,
 }
 
 #[repr(C)]
@@ -176,7 +177,9 @@ impl CardwireAnalyzer {
             Some(name) => name,
             None => return,
         };
-        if let Some(result) = self.evaluate_app(event.pid, &real_app_name).await
+        if let Some(result) = self
+            .evaluate_app(event.pid, &real_app_name, event.mode)
+            .await
             && result.0
         {
             match result.1 {
@@ -286,7 +289,7 @@ impl CardwireAnalyzer {
 
     /// Default app are blocked, try to find if it's a game or a gpu intensive app, the u8 is the
     /// gpu id
-    async fn evaluate_app(&self, pid: u32, comm: &str) -> Option<(bool, PidType, u32)> {
+    async fn evaluate_app(&self, pid: u32, comm: &str, mode: u8) -> Option<(bool, PidType, u32)> {
         let path = format!("/proc/{}/environ", pid);
         let environ = match fs::read(path) {
             Ok(content) => content,
@@ -301,6 +304,11 @@ impl CardwireAnalyzer {
         }
         if let Some(value) = check_env("CARDWIRE_FORCE_GPU", &environ) {
             return Some((true, PidType::Forced, value));
+        }
+
+        // If manual mode, do not process app discovery or database policies
+        if mode == 2 {
+            return None;
         }
 
         // Check the database now, we can take our time since if we reached it, the app would've

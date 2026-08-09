@@ -75,6 +75,7 @@ pub static CW_DIRENT: HashMap<u32, u64> = HashMap::<u32, u64>::with_max_entries(
 #[allow(dead_code)]
 pub struct ExecEvent {
     pub pid: u32,
+    pub mode: u8,
 }
 
 #[btf_map]
