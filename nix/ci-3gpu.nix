@@ -95,6 +95,17 @@
       machine.fail(": < /dev/dri/card2")
 
     with subtest("Test Multi-GPU Launch and ENV Injection"):
+      # Blocked GPUs (in Manual mode) must refuse to launch
+      t.assertIn(
+        "cannot be launched on",
+        machine.fail("cardwire launch --gpu 1 env 2>&1"),
+        "Launch on a blocked GPU did not fail",
+      )
+
+      # Unblock GPUs 1 and 2 before testing the env injection
+      machine.succeed("cardwire gpu 1 --unblock")
+      machine.succeed("cardwire gpu 2 --unblock")
+
       # For GPU 1
       env_out_1 = machine.succeed("cardwire launch --gpu 1 env")
       t.assertIn("CARDWIRE_FORCE_GPU=1", env_out_1, "Missing CARDWIRE_FORCE_GPU=1")
