@@ -209,6 +209,25 @@ impl AppState {
                     },
                 );
             }
+            Message::UpdateExternalDisplaySetting(setting) => {
+                let conn = self.zbus_conn.clone();
+                return Task::perform(
+                    async move {
+                        conn.set_setting(DaemonSettings::ExternalDisplayAutoSwitch, setting, None)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        Ok((
+                            DaemonSettings::ExternalDisplayAutoSwitch,
+                            Some(setting),
+                            None::<Mode>,
+                        ))
+                    },
+                    |res| match res {
+                        Ok(res) => Message::FetchedSetting(Ok(res)),
+                        Err(err) => Message::FetchedSetting(Err(err)),
+                    },
+                );
+            }
             Message::UpdateGuiConfig(config) => return self.save_gui_config(config),
             Message::TrayReady(handle) => {
                 self.tray_handle = Some(handle);
@@ -307,6 +326,11 @@ impl AppState {
                         DaemonSettings::BattAutoSwitchMode => {
                             if let Some(new_mode) = val.2 {
                                 self.setting_state.battery_mode = Some(new_mode)
+                            }
+                        }
+                        DaemonSettings::ExternalDisplayAutoSwitch => {
+                            if let Some(new_val) = val.1 {
+                                self.setting_state.external_display_checked = new_val
                             }
                         }
                     }

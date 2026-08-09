@@ -922,6 +922,20 @@ pub fn daemon_setting_page<'a>(
                 ),
             ]
             .align_y(Alignment::Center),
+            row![
+                column![
+                    text("External display auto-switch")
+                        .size(15)
+                        .color(Color::from_rgb(0.95, 0.95, 0.95)),
+                    text("Switch to Hybrid mode when a dGPU-owned display is connected while in Integrated or Smart mode.")
+                        .size(14)
+                        .color(Color::from_rgb(0.72, 0.72, 0.75)),
+                ],
+                horizontal(),
+                toggler(setting_state.external_display_checked)
+                    .on_toggle(Message::UpdateExternalDisplaySetting),
+            ]
+            .align_y(Alignment::Center),
         ]
         .spacing(16),
     )

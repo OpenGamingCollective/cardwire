@@ -149,6 +149,8 @@ trait CardwireConfig {
     fn battery_auto_switch(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn battery_auto_switch_mode(&self) -> zbus::Result<u32>;
+    #[zbus(property)]
+    fn external_display_auto_switch(&self) -> zbus::Result<bool>;
 }
 
 fn config_sub() -> Subscription<Message> {
@@ -174,6 +176,8 @@ fn config_sub() -> Subscription<Message> {
             let mut config_switch_battery = proxy.receive_battery_auto_switch_changed().await;
             let mut config_switch_battery_mode =
                 proxy.receive_battery_auto_switch_mode_changed().await;
+            let mut config_external_display =
+                proxy.receive_external_display_auto_switch_changed().await;
 
             // Fetch the initial values once so the toggles render the real daemon state on
             // startup, before any change signal arrives
@@ -227,7 +231,18 @@ fn config_sub() -> Subscription<Message> {
                 }
                 Err(e) => warn!("Failed to fetch battery_auto_switch_mode: {}", e),
             }
-
+            match proxy.external_display_auto_switch().await {
+                Ok(state) => {
+                    let _ = output
+                        .send(Message::FetchedSetting(Ok((
+                            DaemonSettings::ExternalDisplayAutoSwitch,
+                            Some(state),
+                            None,
+                        ))))
+                        .await;
+                }
+                Err(e) => warn!("Failed to fetch external_display_auto_switch: {}", e),
+            }
             loop {
                 select! {
                     // Exp nvidia block
@@ -271,6 +286,15 @@ fn config_sub() -> Subscription<Message> {
                                     Some(mode),
                                 )))).await;
                             }
+                        }
+                    },
+                    Some(change) = config_external_display.next() => {
+                        if let Ok(new_state) = change.get().await {
+                            let _ = output.send(Message::FetchedSetting(Ok((
+                                DaemonSettings::ExternalDisplayAutoSwitch,
+                                Some(new_state),
+                                None,
+                            )))).await;
                         }
                     },
                 }
