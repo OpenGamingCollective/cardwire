@@ -220,7 +220,7 @@ impl GpuInterface {
                     warn!("could not save gpu_state to file: {e}");
                 };
             }
-            if let Err(err) = send_drm_uevent(self.id).await {
+            if let Err(err) = send_drm_uevent(*self.device.card()).await {
                 warn!(
                     "failed to send drm uevent for {}: {err}",
                     self.device.name()
@@ -239,7 +239,7 @@ impl GpuInterface {
                     warn!("could not save gpu_state to file: {e}");
                 };
             }
-            if let Err(err) = send_drm_uevent(self.id).await {
+            if let Err(err) = send_drm_uevent(*self.device.card()).await {
                 warn!(
                     "failed to send drm uevent for {}: {err}",
                     self.device.name()

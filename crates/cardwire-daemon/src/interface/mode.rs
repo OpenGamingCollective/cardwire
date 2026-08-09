@@ -84,7 +84,7 @@ impl ModeInterface {
                     gpu.device.name()
                 );
             }
-            if let Err(err) = send_drm_uevent(gpu.id).await {
+            if let Err(err) = send_drm_uevent(*gpu.device.card()).await {
                 warn!("failed to send drm uevent for {}: {err}", gpu.device.name());
             };
         }
