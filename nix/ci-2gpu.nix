@@ -72,5 +72,35 @@
 
     with subtest("Try to block default gpu"):
       t.assertIn("Per GPU block is only available on manual mode", machine.fail("cardwire gpu 0 --block 2>&1"), "Default gpu got blocked")
+
+    with subtest("Smart Mode Base Test"):
+      machine.succeed("cardwire set smart")
+      t.assertIn("smart", machine.succeed("cat /var/lib/cardwire/mode.json"))
+      # In Smart mode, dGPU is blocked by default
+      machine.fail(": < /dev/dri/renderD129")
+
+    with subtest("Test Dynamic Analysis ENV Flags"):
+      # CARDWIRE_ALLOW
+      machine.succeed("CARDWIRE_ALLOW=1 : < /dev/dri/renderD129")
+      machine.fail("CARDWIRE_ALLOW=0 : < /dev/dri/renderD129")
+      # CARDWIRE_FORCE_DGPU
+      machine.succeed("CARDWIRE_FORCE_DGPU=1 : < /dev/dri/renderD129")
+      machine.fail("CARDWIRE_FORCE_DGPU=0 : < /dev/dri/renderD129")
+
+    with subtest("Test cardwire launch Environment Injection for GPU 0"):
+      env_out = machine.succeed("cardwire launch --gpu 0 env")
+      t.assertIn("CARDWIRE_ALLOW=0", env_out, "Missing CARDWIRE_ALLOW=0 for iGPU default")
+
+    with subtest("Test cardwire launch Environment Injection for GPU 1"):
+      env_out = machine.succeed("cardwire launch --gpu 1 env")
+      t.assertIn("CARDWIRE_FORCE_DGPU=1", env_out, "Missing CARDWIRE_FORCE_DGPU=1 for dGPU")
+      t.assertIn("DRI_PRIME=pci", env_out, "Missing DRI_PRIME for dGPU")
+
+    with subtest("Test cardwire launch Default GPU"):
+      # Without --gpu, it should default to the unblocked discrete GPU (GPU 1)
+      env_out = machine.succeed("cardwire launch env")
+      t.assertIn("CARDWIRE_FORCE_DGPU=1", env_out, "Default launch didn't target dGPU (GPU 1)")
+      t.assertIn("DRI_PRIME=pci", env_out, "Default launch didn't set DRI_PRIME")
+
   '';
 }

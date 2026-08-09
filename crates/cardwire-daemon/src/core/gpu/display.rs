@@ -4,23 +4,15 @@ use log::{info, warn};
 use std::{fs, io, path::Path, time::Duration};
 use udev::{Device, Enumerator};
 
+const NON_PHYSICAL: &[&str] = &["Virtual-", "Unknown-", "Writeback-"];
+const INTERNAL_PANELS: &[&str] = &["eDP-", "LVDS-", "DSI-", "DPI-", "SPI-"];
+
 /// Return whether a DRM card currently owns a connected physical external display.
 ///
 /// Connector ownership is encoded in sysfs names such as `card1-HDMI-A-1`. Internal panels and
 /// virtual connectors are excluded so only physical external outputs keep the card available.
 #[allow(dead_code)]
 pub fn external_display_connected(card: u32) -> io::Result<bool> {
-    // These connector types are internal panels or do not represent a physical display output.
-    const NON_EXTERNAL: &[&str] = &[
-        "eDP-",
-        "LVDS-",
-        "DSI-",
-        "DPI-",
-        "SPI-",
-        "Virtual-",
-        "Unknown-",
-        "Writeback-",
-    ];
     let card_prefix = format!("card{card}-");
     // An unreadable status is not proof of a disconnect. Keep the first error while checking
     // whether another connector can still confirm that the card is in use.
@@ -34,7 +26,10 @@ pub fn external_display_connected(card: u32) -> io::Result<bool> {
             continue;
         };
         if connector.is_empty()
-            || NON_EXTERNAL
+            || NON_PHYSICAL
+                .iter()
+                .any(|prefix| connector.starts_with(prefix))
+            || INTERNAL_PANELS
                 .iter()
                 .any(|prefix| connector.starts_with(prefix))
         {
@@ -135,7 +130,11 @@ pub async fn is_gpu_active(card: u32) -> Option<bool> {
         let Some(connector) = name.strip_prefix(&prefix) else {
             continue;
         };
-        if connector.is_empty() {
+        if connector.is_empty()
+            || NON_PHYSICAL
+                .iter()
+                .any(|prefix| connector.starts_with(prefix))
+        {
             continue;
         }
         match tokio::fs::read_to_string(entry.path().join("status")).await {

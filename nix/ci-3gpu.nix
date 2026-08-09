@@ -55,8 +55,9 @@
     with subtest("Ensure cardwire is started and dbus works"):
       machine.wait_until_succeeds("su - john -c 'cardwire help'")
 
-    with subtest("Try to switch to integrated and hybrid"):
-      t.assertIn("Couldn't set mode to Integrated, the mode requires exactly 2 GPUs", machine.fail("cardwire set integrated 2>&1"), "Mode has been switched to integrated")
+    with subtest("Try to switch to integrated, smart and hybrid"):
+      t.assertIn("Couldn't set mode to Integrated", machine.fail("cardwire set integrated 2>&1"), "Mode has been switched to integrated")
+      t.assertIn("Couldn't set mode to Smart", machine.fail("cardwire set smart 2>&1"), "Mode has been switched to smart")
       t.assertIn("Mode has been set to Hybrid", machine.succeed("cardwire set hybrid"), "Mode has been switched to hybrid")
 
     with subtest("Set to manual, and block two gpus"):
@@ -92,6 +93,17 @@
       machine.fail(": < /dev/dri/renderD130")
       machine.fail(": < /dev/dri/card1")
       machine.fail(": < /dev/dri/card2")
+
+    with subtest("Test Multi-GPU Launch and ENV Injection"):
+      # For GPU 1
+      env_out_1 = machine.succeed("cardwire launch --gpu 1 env")
+      t.assertIn("CARDWIRE_FORCE_GPU=1", env_out_1, "Missing CARDWIRE_FORCE_GPU=1")
+      t.assertIn("DRI_PRIME=pci", env_out_1, "Missing DRI_PRIME")
+
+      # For GPU 2
+      env_out_2 = machine.succeed("cardwire launch --gpu 2 env")
+      t.assertIn("CARDWIRE_FORCE_GPU=2", env_out_2, "Missing CARDWIRE_FORCE_GPU=2")
+      t.assertIn("DRI_PRIME=pci", env_out_2, "Missing DRI_PRIME")
   '';
 
 }
