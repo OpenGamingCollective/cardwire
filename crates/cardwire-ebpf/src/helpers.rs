@@ -51,8 +51,31 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
 
         let comm = bpf_get_current_comm().unwrap_or([0u8; 16]);
 
-        if *mode == INTEGRATED || *mode == MANUAL {
-            // if integrated/manual, just report the event and block
+        if *mode == INTEGRATED {
+            // if integrated, just report the event and block
+            report_event(pid, ino_gpu_id, comm);
+            return true;
+        }
+
+        if *mode == MANUAL {
+            let ppid = get_task_ppid().unwrap_or(u32::MAX);
+
+            // Check if the PID or PPID is in the forced map
+            let forced_gpu_id =
+                unsafe { CW_FORCED_PID.get(pid).or_else(|| CW_FORCED_PID.get(ppid)) };
+
+            if let Some(pid_gpu_id) = forced_gpu_id {
+                // If forced GPU ID matches the inode's GPU ID, allow access
+                match *pid_gpu_id == ino_gpu_id {
+                    true => break 'end,
+                    false => {
+                        report_event(pid, ino_gpu_id, comm);
+                        return true;
+                    }
+                }
+            }
+
+            // Default manual mode behavior: block access to blocked inodes
             report_event(pid, ino_gpu_id, comm);
             return true;
         }
@@ -176,6 +199,12 @@ pub unsafe fn is_hybrid() -> Option<bool> {
 #[inline(always)]
 pub unsafe fn is_smart() -> Option<bool> {
     CW_MODE.get(MODE_INDEX).map(|mode| *mode == SMART)
+}
+
+/// Verify if the current device mode is manual, returns None if the map fails
+#[inline(always)]
+pub unsafe fn is_manual() -> Option<bool> {
+    CW_MODE.get(MODE_INDEX).map(|mode| *mode == MANUAL)
 }
 
 #[inline(always)]

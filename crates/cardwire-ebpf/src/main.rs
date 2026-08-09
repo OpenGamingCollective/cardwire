@@ -7,7 +7,9 @@ use aya_ebpf::{
 use aya_log_ebpf::{error, warn};
 
 use crate::{
-    helpers::{is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_smart}, maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent}, vmlinux::{dentry, file, inode, linux_dirent64, path}
+    helpers::{
+        is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_manual, is_smart
+    }, maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent}, vmlinux::{dentry, file, inode, linux_dirent64, path}
 };
 
 #[allow(
@@ -449,11 +451,11 @@ unsafe fn try_tracepoint_sched_process_exec(ctx: TracePointContext) -> Result<i3
         return ReturnCode::SUCCESS;
     }
 
-    // Only proceed if we are in smart mode, events are not used when not in smart mode and it would
-    // slow down the system for no reason
-    if let Some(res) = unsafe { is_smart() }
-        && res
-    {
+    let is_smart = unsafe { is_smart() }.unwrap_or(false);
+    let is_manual = unsafe { is_manual() }.unwrap_or(false);
+
+    // Only proceed if we are in smart or manual mode
+    if is_smart || is_manual {
         // Reserve byte in the ring buf for the event, return if fail
         let mut ring_buf = match CW_EXEC_EVENTS.reserve(0) {
             Some(ring_buf) => ring_buf,
