@@ -127,7 +127,7 @@ cardwire launch glxgears
 
 Without `--gpu`, cardwire picks the best GPU for the job, in this order: a discrete non-default GPU, a discrete GPU, the default GPU, then the first available one. The command fetches the launch environment from the daemon.
 
-Launching on a blocked or unavailable GPU is refused with a clear error, switch to Smart mode or unblock the GPU first:
+Launching on a blocked or unavailable GPU is refused with a clear error, switch to Smart mode or unblock the GPU first.
 
 ## System information
 
