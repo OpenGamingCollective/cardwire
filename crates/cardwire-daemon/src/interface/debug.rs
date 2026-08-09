@@ -113,6 +113,7 @@ impl DebugInterface {
                     Arc::clone(&self.pci_list),
                     Arc::clone(&self.gpu_state),
                     Arc::clone(&self.mode_state),
+                    self.switcheroo.clone(),
                 )
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 

@@ -18,11 +18,15 @@ Indicates whether the system has exactly two GPUs.
 - **Type:** `b` (boolean)
 - **Access:** Read
 
+Blocked GPUs are excluded from the count, except in Smart mode where the blocked dGPU is still advertised (see [`GPUs`](#gpus)).
+
 ### `NumGPUs`
 
 The number of GPUs detected on the system.
 - **Type:** `u` (uint32)
 - **Access:** Read
+
+Same rules as `HasDualGpu`: blocked GPUs are excluded, except in Smart mode.
 
 ### `GPUs`
 
@@ -34,6 +38,8 @@ A list of all available GPUs and their configurations.
   - `Environment`: `as` - An array of environment variable key-value pairs to set when launching an application on this GPU (e.g., `["CARDWIRE_FORCE_DGPU", "1"]`).
   - `Default`: `b` - Whether this is the default display GPU (usually the iGPU).
   - `Discrete`: `b` - Whether this is a discrete GPU.
+
+Blocked GPUs are excluded from the list, except in Smart mode: the blocked dGPU is still advertised so desktop environments keep offering the "Launch using Discrete Graphics Card" option, with its normal full `Environment`.
 
 ---
 

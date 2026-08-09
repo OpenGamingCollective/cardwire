@@ -49,6 +49,11 @@ impl DaemonManager {
         let smart_policy_interface = SmartPolicyInterface::build(&mut blocker, database);
         let blocker = Arc::new(RwLock::new(blocker));
 
+        let gpu_interfaces: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>> =
+            Arc::new(RwLock::new(BTreeMap::new()));
+        let switcheroo_interface =
+            SwitcherooInterface::build(Arc::clone(&gpu_interfaces), Arc::clone(&mode_state));
+
         let mut gpu_interfaces_map: BTreeMap<usize, Arc<GpuInterface>> = BTreeMap::new();
         let gpu_count = gpu_list
             .iter()
@@ -71,11 +76,11 @@ impl DaemonManager {
                 Arc::clone(&pci_list),
                 Arc::clone(&gpu_state),
                 Arc::clone(&mode_state),
+                switcheroo_interface.clone(),
             )?;
             gpu_interfaces_map.insert(id, Arc::new(gpu));
         }
-        let gpu_interfaces: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>> =
-            Arc::new(RwLock::new(gpu_interfaces_map));
+        *gpu_interfaces.write().await = gpu_interfaces_map;
 
         let context = DaemonContext {
             mode_state,
@@ -87,9 +92,8 @@ impl DaemonManager {
             pci_list,
         };
 
-        let mode_interface = ModeInterface::build(&context).await?;
         let logger_interface = LoggerInterface::build();
-        let switcheroo_interface = SwitcherooInterface::build(Arc::clone(&context.gpu_list));
+        let mode_interface = ModeInterface::build(&context, switcheroo_interface.clone()).await?;
 
         Ok(Self {
             mode_interface: mode_interface.clone(),

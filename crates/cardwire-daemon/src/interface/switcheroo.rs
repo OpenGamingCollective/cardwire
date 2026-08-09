@@ -8,18 +8,25 @@ use zbus::{
     interface, object_server::SignalEmitter, zvariant::{self, OwnedValue, Value}
 };
 
-use crate::{core::env::compute_switcheroo_env, interface::GpuInterface};
+use crate::{
+    core::env::compute_switcheroo_env, file::CardwireModeState, interface::GpuInterface, types::Modes
+};
 
 #[derive(Clone)]
 pub struct SwitcherooInterface {
     pub gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
     pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
+    mode_state: Arc<RwLock<CardwireModeState>>,
 }
 impl SwitcherooInterface {
-    pub fn build(gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>) -> Self {
+    pub fn build(
+        gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
+        mode_state: Arc<RwLock<CardwireModeState>>,
+    ) -> Self {
         Self {
             gpu_list,
             signal_emitter: Arc::new(OnceLock::new()),
+            mode_state,
         }
     }
 
@@ -32,10 +39,11 @@ impl SwitcherooInterface {
 
         let (has_dual_gpu, num_gpus, gpus) = {
             let gpu_list = self.gpu_list.read().await;
+            let mode = self.mode_state.read().await.mode();
             (
-                Self::has_dual_gpu_locked(&gpu_list),
-                Self::num_gpus_locked(&gpu_list),
-                Self::gpus_locked(&gpu_list),
+                Self::has_dual_gpu_locked(&gpu_list, mode).await,
+                Self::num_gpus_locked(&gpu_list, mode).await,
+                Self::gpus_locked(&gpu_list, mode).await,
             )
         };
 
@@ -64,31 +72,42 @@ impl SwitcherooInterface {
         }
     }
 
-    /// true if exactly two GPUs are available, see has_dual_gpu()
-    fn has_dual_gpu_locked(gpu_list: &BTreeMap<usize, Arc<GpuInterface>>) -> bool {
-        Self::num_gpus_locked(gpu_list) == 2
-    }
-
-    /// number of available GPUs, see num_gpus()
-    fn num_gpus_locked(gpu_list: &BTreeMap<usize, Arc<GpuInterface>>) -> u32 {
-        gpu_list
-            .values()
-            .filter(|gpu| gpu.device.is_available())
-            .count() as u32
-    }
-
-    /// Build the GPUs property payload from a gpu list, see gpus()
-    fn gpus_locked(
+    /// true if exactly two GPUs are visible, see has_dual_gpu(). A GPU is visible when it is
+    /// available, or blocked in Smart mode
+    async fn has_dual_gpu_locked(
         gpu_list: &BTreeMap<usize, Arc<GpuInterface>>,
+        mode: Modes,
+    ) -> bool {
+        Self::num_gpus_locked(gpu_list, mode).await == 2
+    }
+
+    /// number of visible GPUs, excluding blocked ones outside of Smart mode, see num_gpus()
+    async fn num_gpus_locked(gpu_list: &BTreeMap<usize, Arc<GpuInterface>>, mode: Modes) -> u32 {
+        let mut count = 0;
+        for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
+            if !gpu.gpu_blocked().await.unwrap_or(false) || mode == Modes::Smart {
+                count += 1;
+            }
+        }
+        count
+    }
+
+    /// Build the GPUs property payload from a gpu list, excluding blocked GPUs outside of Smart
+    /// mode, see gpus(). Blocked GPUs in Smart mode are advertised with the full environment
+    async fn gpus_locked(
+        gpu_list: &BTreeMap<usize, Arc<GpuInterface>>,
+        mode: Modes,
     ) -> Vec<HashMap<&'static str, OwnedValue>> {
         let mut vec: Vec<HashMap<&str, OwnedValue>> = Vec::new();
-        let available_gpus: Vec<&Arc<GpuInterface>> = gpu_list
-            .values()
-            .filter(|gpu| gpu.device.is_available())
-            .collect();
-        let gpu_count = available_gpus.len();
+        let mut visible_gpus: Vec<&Arc<GpuInterface>> = Vec::new();
+        for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
+            if !gpu.gpu_blocked().await.unwrap_or(false) || mode == Modes::Smart {
+                visible_gpus.push(gpu);
+            }
+        }
+        let gpu_count = visible_gpus.len();
 
-        for gpu in available_gpus {
+        for gpu in visible_gpus {
             let mut dict = HashMap::new();
 
             // The name (s)
@@ -133,18 +152,21 @@ impl SwitcherooInterface {
     #[zbus(property, name = "HasDualGpu")]
     pub async fn has_dual_gpu(&self) -> bool {
         let gpu_list = self.gpu_list.read().await;
-        Self::has_dual_gpu_locked(&gpu_list)
+        let mode = self.mode_state.read().await.mode();
+        Self::has_dual_gpu_locked(&gpu_list, mode).await
     }
 
     #[zbus(property, name = "NumGPUs")]
     pub async fn num_gpus(&self) -> u32 {
         let gpu_list = self.gpu_list.read().await;
-        Self::num_gpus_locked(&gpu_list)
+        let mode = self.mode_state.read().await.mode();
+        Self::num_gpus_locked(&gpu_list, mode).await
     }
 
     #[zbus(property, name = "GPUs")]
     pub async fn gpus(&self) -> Vec<HashMap<&'static str, OwnedValue>> {
         let gpu_list = self.gpu_list.read().await;
-        Self::gpus_locked(&gpu_list)
+        let mode = self.mode_state.read().await.mode();
+        Self::gpus_locked(&gpu_list, mode).await
     }
 }

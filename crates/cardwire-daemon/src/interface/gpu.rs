@@ -7,7 +7,7 @@ use std::{
 use crate::{
     core::{
         gpu::{DbusGpuDevice, GpuDevice, is_gpu_active, send_drm_uevent}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
-    }, file::{CardwireGpuState, CardwireModeState}, interface::Modes
+    }, file::{CardwireGpuState, CardwireModeState}, interface::{Modes, SwitcherooInterface}
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{info, warn};
@@ -35,9 +35,11 @@ pub struct GpuInterface {
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     mode_state: Arc<RwLock<CardwireModeState>>,
     pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
+    switcheroo_int: SwitcherooInterface,
 }
 
 impl GpuInterface {
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         id: u32,
         device: GpuDevice,
@@ -46,6 +48,7 @@ impl GpuInterface {
         pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
         gpu_state: Arc<RwLock<CardwireGpuState>>,
         mode_state: Arc<RwLock<CardwireModeState>>,
+        switcheroo_int: SwitcherooInterface,
     ) -> anyhow::Result<GpuInterface> {
         Ok(Self {
             id,
@@ -56,6 +59,7 @@ impl GpuInterface {
             gpu_state,
             mode_state,
             signal_emitter: Arc::new(OnceLock::new()),
+            switcheroo_int,
         })
     }
 }
@@ -226,6 +230,8 @@ impl GpuInterface {
                     self.device.name()
                 );
             };
+            // Refresh the switcheroo api
+            self.switcheroo_int.emit_gpu_list_changed().await;
 
             Ok(())
         } else {
@@ -245,6 +251,8 @@ impl GpuInterface {
                     self.device.name()
                 );
             };
+            // Refresh the switcheroo api
+            self.switcheroo_int.emit_gpu_list_changed().await;
             Ok(())
         }
     }

@@ -1,6 +1,6 @@
 //! Define the mode dbus
 use crate::{
-    core::gpu::{restart_nvidia_powerd, send_drm_uevent}, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, config::ConfigMemory}, types::SystemType
+    core::gpu::{restart_nvidia_powerd, send_drm_uevent}, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface, config::ConfigMemory}, types::SystemType
 };
 use anyhow::Result;
 use aya::maps::Array as AyaArray;
@@ -27,10 +27,14 @@ pub struct ModeInterface {
     // Signal emitter for mode changes (used by background tasks), populated once the interface is
     // served
     pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
+    pub switcheroo_int: SwitcherooInterface,
 }
 
 impl ModeInterface {
-    pub async fn build(context: &DaemonContext) -> Result<ModeInterface> {
+    pub async fn build(
+        context: &DaemonContext,
+        switcheroo_int: SwitcherooInterface,
+    ) -> Result<ModeInterface> {
         let mut blocker = context.blocker.write().await;
         let mode_map: aya::maps::Array<aya::maps::MapData, u8> = blocker.get_mode_map()?;
         let mode_map = Arc::new(Mutex::new(mode_map));
@@ -42,6 +46,7 @@ impl ModeInterface {
             mode_map,
             transition: Arc::new(Mutex::new(())),
             signal_emitter: Arc::new(OnceLock::new()),
+            switcheroo_int,
         })
     }
 
@@ -74,6 +79,7 @@ impl ModeInterface {
 
         // Emit block_changed signal after the mode has been applied and send drm uevent
         let gpu_list = self.gpu_list.read().await;
+
         for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
             if let Some(emitter) = gpu.signal_emitter.get()
                 && let Err(err) = gpu.block_changed(emitter).await
@@ -87,6 +93,10 @@ impl ModeInterface {
                 warn!("failed to send drm uevent for {}: {err}", gpu.device.name());
             };
         }
+        // Drop the read lock before refreshing the switcheroo api
+        drop(gpu_list);
+        // Refresh the switcheroo api
+        self.switcheroo_int.emit_gpu_list_changed().await;
 
         // and at last, try to restart nvidia-powerd, ignore if error, it will be logged
         task::spawn(restart_nvidia_powerd());
