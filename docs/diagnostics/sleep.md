@@ -31,7 +31,7 @@ The most important section should be `Runtime D3 status`.
 
 If Runtime D3 status is disabled, your GPU will never sleep.
 
-To enable it, follow this method (only tested on Arch; please adapt it for other distros):
+To enable it, follow this method (only tested on Arch, please adapt it for other distros):
 
 >[!CAUTION]
 > If you lack the knowledge, or you fear you will break your system, you can always make a post on the Discord to get assistance.

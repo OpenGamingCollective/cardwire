@@ -41,7 +41,7 @@ pub struct InodeState {
 */
 #[map]
 pub static CW_BLOCKED_INO: HashMap<u64, InodeState> =
-    HashMap::<u64, InodeState>::with_max_entries(4096, 0);
+    HashMap::<u64, InodeState>::with_max_entries(16384, 0);
 
 /*
    Map used to store blocked inodes from exp_nvidia

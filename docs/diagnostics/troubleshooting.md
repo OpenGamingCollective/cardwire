@@ -27,7 +27,15 @@ gpu_mux_mode:
   current: [(0),1]
 ```
 
-> 0 means that the MUX is enabled, the dGPU **IS** the default GPU in this case
+> 0 means that the MUX is disabled, the dGPU **IS** the default GPU in this case
+
+To enable it:
+
+```bash
+asusctl armoury set gpu_mux_mode 1
+```
+
+> A reboot is required for the change to take effect.
 
 ### Non ROG Laptop
 
@@ -47,7 +55,7 @@ cat /sys/class/drm/*/status
 
 When switching to integrated mode on NVIDIA hardware, you may see errors or failures related to the `nvidia-powerd` service. This is a known quirk caused by the GPU entering `D3Cold` (a deep sleep state) which prevents `nvidia-powerd` from communicating with it.
 
-Service must be restarted:
+Since v0.12.0, cardwired restarts `nvidia-powerd` automatically after every mode change (only when the service is enabled), so this is usually fixed without any action. If the problem persists, restart it manually:
 
 ```bash
 sudo systemctl restart nvidia-powerd.service

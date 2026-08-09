@@ -16,7 +16,7 @@ Furthermore, unlike older managers, **Cardwire never unbinds PCI devices or kern
 | :--------------------- | :----------------------------------------------------------- | :------------------------- | :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------ |
 | **Cardwire**           | **eBPF LSM hooks** block file/device access dynamically.     | **No** (Seamless)          | **No**                 | Actively prevents rogue apps from waking the dGPU. Emulates switcheroo-control for seamless GNOME/KDE integration.                    |
 | **switcheroo-control** | Sets environment variables (e.g. `DRI_PRIME`).               | **No**                     | No                     | The desktop default. Good for launching, but doesn't actively block apps, meaning the dGPU can still be woken up by background tasks. |
-| **supergfxctl**        | Modprobe blacklisting, udev rules, stopping display manager. | **Yes** (Prone to crashes) | Logout (often)         | Deprecated. The predecessor to Cardwire; inflexible and often required restarting the graphical session.                              |
+| **supergfxctl**        | Modprobe blacklisting, udev rules, stopping display manager. | **Yes** (Prone to crashes) | Logout (often)         | Deprecated. The predecessor to Cardwire, inflexible and often required restarting the graphical session.                              |
 | **optimus-manager**    | Generates specific Xorg configurations.                      | **Yes**                    | Logout                 | Built heavily around X11, making it problematic for modern Wayland compositors.                                                       |
 | **envycontrol**        | Modprobe blacklisting and udev rules.                        | **Yes**                    | Reboot                 | Very reliable but inflexible, as it requires a full system restart to apply any mode changes.                                         |
 
@@ -28,9 +28,9 @@ Cardwire provides several GPU management modes:
 
 - **Hybrid mode** -- Removes the blocks, letting the system function normally with both integrated and dedicated GPUs available.
 
-- **Manual mode** -- Allows users to manually block or unblock individual GPUs by ID for granular control.
+- **Manual mode** -- Allows users to manually block or unblock individual GPUs by ID for granular control. It is only available on desktop systems and never blocks the default GPU.
 
-- **Smart mode** -- Like integrated mode it blocks the dGPU by default, but uses eBPF to analyze each application at launch and selectively allow GPU access for approved applications.
+- **Smart mode** -- Like integrated mode it blocks the dGPU by default, but a userspace analyzer inspects each application at launch and selectively allows GPU access for approved applications. It is only available on laptops.
 
 Switching between modes is fast and does not require reboots or logouts.
 

@@ -1,157 +1,31 @@
-# DBUS
+# DBus Interfaces
+
+Cardwire exposes several D-Bus interfaces on the system bus, one page per interface in this section.
 
 ## Service
 
 - **Bus Name:** `org.opengamingcollective.cardwire`
 
 > [!NOTE]
-> Cardwire also implements the SwitcherooControl interface for desktop environment integration. See [switcheroo.md](switcheroo.md) for details.
-
----
+> Cardwire also implements the SwitcherooControl interface for desktop environment integration. See [switcheroo.md](dbus/switcheroo.md) for details.
 
 ## Object Path
 
 `/org/opengamingcollective/cardwire`
 
-### Manager
+GPU objects live at `/org/opengamingcollective/cardwire/Gpu/{id}` and are exposed through the standard `org.freedesktop.DBus.ObjectManager` interface at the root path. Watch `InterfacesAdded` and `InterfacesRemoved` to track GPU hotplug.
 
-`org.opengamingcollective.cardwire.Manager`
+## Interfaces
 
-**Methods:**
+- [Manager](dbus/manager.md) -- daemon liveness probe
+- [Mode](dbus/mode.md) -- mode switching and available modes
+- [Config](dbus/config.md) -- daemon settings
+- [Gpu](dbus/gpu.md) -- per-GPU state, device info, environment, power state
+- [Logger](dbus/logger.md) -- blocked GPU access attempts
+- [SmartPolicy](dbus/smart-policy.md) -- per-application GPU policies
+- [Debug](dbus/debug.md) -- PCI devices and GPU list refresh
+- [Switcheroo Control](dbus/switcheroo.md) -- compatibility shim for desktop environments
 
-- **`RefreshGpu`**
-  Refresh the internal GPU list from the system (Not implemented yet)
-  - **Inputs:** None
-  - **Outputs:** None
+## Notes
 
-- **`Status`**
-  Simple dbus method to check if the daemon is alive
-  - **Inputs:** None
-  - **Outputs:** None
-
-### Mode
-
-`org.opengamingcollective.cardwire.Mode`
-
-**Properties:**
-
-- **`Mode`**
-  Controls the Cardwire's Mode
-  - **Type:** `u`
-  - **Access:** Read/Write
-  - **Emits:** `PropertiesChanged` on change
-  - **Values:**
-    - `0` Integrated: Block the dGPU. Requires exactly 2 GPUs
-    - `1` Hybrid: Unblock the dGPU. Requires exactly 2 GPUs
-    - `2` Manual: Allow per-GPU blocking via individual GPU objects. Applies saved GPU state on mode change if `auto_apply_gpu_state` is enabled
-    - `3` Smart: Block the dGPU by default but dynamically allow access per-application using eBPF. Requires exactly 2 GPUs
-
-### Config
-
-`org.opengamingcollective.cardwire.Config`
-
-**Properties:**
-
-- **`AutoApplyGpuState`**
-  Automatically applies the saved block/unblock states to GPUs
-  - **Type:** `b`
-  - **Access:** Read/Write
-
-- **`BatteryAutoSwitch`**
-  Controls whether the daemon automatically switches modes when switching to battery power
-  - **Type:** `b`
-  - **Access:** Read/Write
-
-- **`BatteryAutoSwitchMode`**
-  Controls which mode the daemon automatically switches
-  - **Type:** `u`
-  - **Access:** Read/Write
-
-- **`ExperimentalNvidiaBlock`**
-  Toggles the experimental blocking for NVIDIA GPU, only works if the system has exactly 1 Nvidia GPU
-  - **Type:** `b`
-  - **Access:** Read/Write
-
-- **`ExternalDisplayAutoSwitch`**
-  Temporarily switches Integrated and Smart modes to Hybrid when an external display is connected
-  to a dGPU-owned DRM connector. Hybrid and Manual modes are unchanged. The requested mode is
-  restored after disconnect.
-  - **Type:** `b`
-  - **Access:** Read/Write
-
-### Debug
-
-`org.opengamingcollective.cardwire.Debug`
-
-**Methods:**
-
-- **`GetPciDevices`**
-  Get a dictionary of all detected PCI devices.
-  - **Inputs:** None
-  - **Outputs:**
-    - (out): `a{s(sssssssss)}` -- A dictionary mapping PCI addresses to a struct containing:
-      - `iommu_group`: `s` - IOMMU group number (empty string if none)
-      - `vendor_id`: `s` - PCI vendor ID (empty string if unknown)
-      - `device_id`: `s` - PCI device ID (empty string if unknown)
-      - `vendor_name`: `s` - Vendor name (empty string if unknown)
-      - `device_name`: `s` - Device name (empty string if unknown)
-      - `driver`: `s` - Kernel driver in use (empty string if unknown)
-      - `class`: `s` - PCI class (empty string if unknown)
-      - `parent_pci`: `s` - Parent PCI address (empty string if unknown)
-      - `child_pci`: `s` - Child PCI address (empty string if unknown)
-
-### Gpu
-
-`/org/opengamingcollective/cardwire/Gpu/{id}`
-
-Represents a single GPU device, where `{id}` is the numeric identifier of the GPU (0 is always the default one). These objects can be dynamically discovered by calling `GetManagedObjects` on the standard `org.freedesktop.DBus.ObjectManager` interface located at the root path (`/org/opengamingcollective/cardwire`)
-
-**Properties:**
-
-- **`Block`**
-  Set or get the block state for this specific GPU. Only writable when `Mode` is set to `Manual`. The default gpu cannot be blocked.
-  - **Type:** `b`
-  - **Access:** Read/Write
-
-- **`Env`**
-  Environment variables to set when launching an application on this GPU (e.g., `["CARDWIRE_FORCE_DGPU", "1", "__NV_PRIME_RENDER_OFFLOAD", "1"]`).
-  - **Type:** `as`
-  - **Access:** Read
-
-- **`Launchable`**
-  Whether this GPU can be targeted by an offload launch in the current mode: `true` when the GPU is available and not blocked, or blocked in `Smart` mode (where the smart policy can grant per-process access). On desktops and multi-GPU systems (`Manual`/`Hybrid` modes) blocked GPUs are never launchable. The daemon stays the single source of truth
-  - **Type:** `b`
-  - **Access:** Read
-
-**Methods:**
-
-- **`GetDevice`**
-  Get the detailed informations of this GPU
-  - **Inputs:** None
-  - **Outputs:**
-    - (out): `(ssuubbs)` -- A struct containing:
-      - `name`: `s` - GPU name
-      - `pci`: `s` - PCI address
-      - `render`: `u` - DRM render node minor number
-      - `card`: `u` - DRM card node minor number
-      - `default`: `b` - Whether this is the default display GPU
-      - `nvidia`: `b` - Whether the GPU is an NVIDIA device
-      - `nvidia_minor`: `s` - NVIDIA driver minor number (empty string if not applicable)
-
-- **`PowerState`**
-  Get the current power state of the GPU
-  - **Inputs:** None
-  - **Outputs:**
-    - (out): `s` -- The power state (e.g., "D0", "D3cold")
-
-- **`Lsof`**
-  Read file descriptors to find which applications have currently opened the GPU
-  - **Inputs:** None
-  - **Outputs:**
-    - (out): `a{sas}` -- A dictionary mapping file paths (like `/dev/dri/card0`) to an array of process names
-
-**Signals:**
-
-- **`PowerStateChanged`**
-  Emitted when the power state of the GPU changes
-  - **Parameters:** `s` (string) -- The new power state
+- `Option<T>` serializes as `a<T>` (empty or one-element array), not as a variant. This comes from the `option-as-array` zbus feature
