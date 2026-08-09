@@ -9,7 +9,7 @@ use zbus::{
 };
 
 use crate::{
-    core::env::compute_switcheroo_env, file::CardwireModeState, interface::GpuInterface, types::Modes
+    core::env::{compute_switcheroo_env, is_gpu_launchable}, file::CardwireModeState, interface::GpuInterface, types::Modes
 };
 
 #[derive(Clone)]
@@ -84,8 +84,12 @@ impl SwitcherooInterface {
     /// number of visible GPUs, excluding blocked ones outside of Smart mode, see num_gpus()
     async fn num_gpus_locked(gpu_list: &BTreeMap<usize, Arc<GpuInterface>>, mode: Modes) -> u32 {
         let mut count = 0;
-        for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
-            if !gpu.gpu_blocked().await.unwrap_or(false) || mode == Modes::Smart {
+        for gpu in gpu_list.values() {
+            if is_gpu_launchable(
+                gpu.device.is_available(),
+                gpu.gpu_blocked().await.unwrap_or(true),
+                mode,
+            ) {
                 count += 1;
             }
         }
@@ -100,8 +104,12 @@ impl SwitcherooInterface {
     ) -> Vec<HashMap<&'static str, OwnedValue>> {
         let mut vec: Vec<HashMap<&str, OwnedValue>> = Vec::new();
         let mut visible_gpus: Vec<&Arc<GpuInterface>> = Vec::new();
-        for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
-            if !gpu.gpu_blocked().await.unwrap_or(false) || mode == Modes::Smart {
+        for gpu in gpu_list.values() {
+            if is_gpu_launchable(
+                gpu.device.is_available(),
+                gpu.gpu_blocked().await.unwrap_or(true),
+                mode,
+            ) {
                 visible_gpus.push(gpu);
             }
         }

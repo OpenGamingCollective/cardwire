@@ -22,6 +22,7 @@ pub struct GpuDevice {
     pub vendor: String,
     pub driver: String,
     pub blocked: bool,
+    pub launchable: bool,
     pub nvidia: bool,
     pub nvidia_minor: String,
 }
@@ -163,6 +164,7 @@ mod tests {
             vendor: vendor.to_string(),
             driver: driver.to_string(),
             blocked,
+            launchable: !blocked && available,
             nvidia: false,
             nvidia_minor: String::new(),
         }

@@ -113,6 +113,16 @@ Represents a single GPU device, where `{id}` is the numeric identifier of the GP
   - **Type:** `b`
   - **Access:** Read/Write
 
+- **`Env`**
+  Environment variables to set when launching an application on this GPU (e.g., `["CARDWIRE_FORCE_DGPU", "1", "__NV_PRIME_RENDER_OFFLOAD", "1"]`).
+  - **Type:** `as`
+  - **Access:** Read
+
+- **`Launchable`**
+  Whether this GPU can be targeted by an offload launch in the current mode: `true` when the GPU is available and not blocked, or blocked in `Smart` mode (where the smart policy can grant per-process access). On desktops and multi-GPU systems (`Manual`/`Hybrid` modes) blocked GPUs are never launchable. The daemon stays the single source of truth
+  - **Type:** `b`
+  - **Access:** Read
+
 **Methods:**
 
 - **`GetDevice`**

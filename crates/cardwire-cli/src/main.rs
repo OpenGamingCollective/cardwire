@@ -283,14 +283,34 @@ async fn main() -> anyhow::Result<()> {
             available_gpu.retain(|_, gpu| gpu.available);
 
             let target_gpu = if let Some(gpu_id) = gpu {
-                available_gpu.get(&(gpu_id as usize))
+                let target = available_gpu.get(&(gpu_id as usize));
+                if let Some(gpu) = target
+                    && !gpu.launchable
+                {
+                    let reason = if gpu.blocked {
+                        "it is blocked in the current mode"
+                    } else {
+                        "the daemon reports it as unavailable for launching"
+                    };
+                    return Err(anyhow::anyhow!(
+                        "GPU {} ({}) cannot be launched on: {reason}; switch to Smart mode or unblock it",
+                        gpu.id,
+                        gpu.name
+                    ));
+                }
+                target
             } else {
-                available_gpu
-                    .values()
-                    .find(|gpu| !gpu.default && gpu.discrete)
-                    .or_else(|| available_gpu.values().find(|gpu| gpu.discrete))
-                    .or_else(|| available_gpu.values().find(|gpu| gpu.default))
-                    .or_else(|| available_gpu.values().next())
+                let mut candidates: Vec<(&usize, &display::GpuDevice)> =
+                    available_gpu.iter().collect();
+                candidates.sort_by_key(|(_, gpu)| match (gpu.default, gpu.discrete) {
+                    (false, true) => 0,
+                    (_, true) => 1,
+                    (true, _) => 2,
+                    _ => 3,
+                });
+                candidates
+                    .into_iter()
+                    .find_map(|(_, gpu)| gpu.launchable.then_some(gpu))
             };
 
             if let Some(gpu) = target_gpu {
@@ -397,11 +417,15 @@ async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::
             && let Ok(id) = id_str.parse::<u32>()
         {
             let mut blocked = false;
+            let mut launchable = false;
             for (iface, props) in interfaces {
-                if iface.as_str() == "org.opengamingcollective.cardwire.Gpu"
-                    && let Some(block_val) = props.get("Block")
-                {
-                    blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
+                if iface.as_str() == "org.opengamingcollective.cardwire.Gpu" {
+                    if let Some(block_val) = props.get("Block") {
+                        blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
+                    }
+                    if let Some(launchable_val) = props.get("Launchable") {
+                        launchable = launchable_val.downcast_ref::<bool>().unwrap_or(false);
+                    }
                 }
             }
             if let Ok(dbus_dev) = client.get_device(id).await {
@@ -418,6 +442,7 @@ async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::
                     vendor: dbus_dev.vendor,
                     driver: dbus_dev.driver,
                     blocked,
+                    launchable,
                     nvidia: dbus_dev.nvidia,
                     nvidia_minor: dbus_dev.nvidia_minor,
                 };

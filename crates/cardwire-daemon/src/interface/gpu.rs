@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     core::{
-        gpu::{DbusGpuDevice, GpuDevice, is_gpu_active, send_drm_uevent}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
+        env::is_gpu_launchable, gpu::{DbusGpuDevice, GpuDevice, is_gpu_active, send_drm_uevent}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
     }, file::{CardwireGpuState, CardwireModeState}, interface::{Modes, SwitcherooInterface}
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
@@ -321,5 +321,17 @@ impl GpuInterface {
             Some(v) => v.clone(),
             None => Vec::new(),
         }
+    }
+
+    /// Whether this GPU can be targeted by an offload launch in the current mode: available and
+    /// not blocked, or blocked in Smart mode where the smart policy can grant per-process access
+    #[zbus(property)]
+    pub async fn launchable(&self) -> bool {
+        let mode = self.mode_state.read().await.mode();
+        is_gpu_launchable(
+            self.device.is_available(),
+            self.gpu_blocked().await.unwrap_or(true),
+            mode,
+        )
     }
 }

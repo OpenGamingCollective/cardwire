@@ -1,6 +1,11 @@
 //! Used to get GPU env for specific GPU
 
-use crate::core::gpu::GpuVendor;
+use crate::{core::gpu::GpuVendor, types::Modes};
+
+/// Launchable if not blocked and availble, or if in smart mode
+pub fn is_gpu_launchable(is_available: bool, is_blocked: bool, mode: Modes) -> bool {
+    is_available && (!is_blocked || mode == Modes::Smart)
+}
 
 pub fn compute_switcheroo_env(
     gpu_count: usize,
@@ -72,6 +77,33 @@ pub fn compute_switcheroo_env(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_is_gpu_launchable_laptop() {
+        // Blocked dGPU is launchable only in Smart mode
+        assert!(is_gpu_launchable(true, true, Modes::Smart));
+        assert!(!is_gpu_launchable(true, true, Modes::Integrated));
+        assert!(!is_gpu_launchable(true, true, Modes::Hybrid));
+        // Unblocked GPUs are always launchable
+        assert!(is_gpu_launchable(true, false, Modes::Integrated));
+        assert!(is_gpu_launchable(true, false, Modes::Hybrid));
+        assert!(is_gpu_launchable(true, false, Modes::Smart));
+    }
+
+    #[test]
+    fn test_is_gpu_launchable_desktop_and_multi_gpu() {
+        // No Smart mode on desktops/multi-GPU systems: blocked GPUs are never launchable
+        assert!(!is_gpu_launchable(true, true, Modes::Manual));
+        assert!(!is_gpu_launchable(true, true, Modes::Hybrid));
+        assert!(is_gpu_launchable(true, false, Modes::Manual));
+        assert!(is_gpu_launchable(true, false, Modes::Hybrid));
+    }
+
+    #[test]
+    fn test_is_gpu_launchable_unavailable_gpu() {
+        assert!(!is_gpu_launchable(false, false, Modes::Hybrid));
+        assert!(!is_gpu_launchable(false, false, Modes::Smart));
+    }
 
     #[test]
     fn test_compute_switcheroo_env_laptop_hybrid_nvidia() {
