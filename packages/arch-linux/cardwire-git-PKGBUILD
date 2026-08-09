@@ -22,7 +22,7 @@ pkgver() {
 
 prepare() {
   cd "$srcdir/$_pkgname"
-  rustup toolchain install nightly --component rust-src
+  rustup toolchain install nightly-2026-08-04 --component rust-src
   cargo fetch --locked
 }
 options=('!lto')
