@@ -57,7 +57,9 @@ udev = { version = "^0.9.3", features = ["send", "sync"] }
 # cardwire doesn't support X11 and will never support it unless someone maintains it
 iced = { version = "0.14.0", default-features = false, features = [
     "crisp",
+    "image",
     "linux-theme-detection",
+    "svg",
     "tokio",
     "tiny-skia",
     "wayland",

@@ -64,8 +64,24 @@ impl ModeInterface {
             }
         }
 
-        if let Some(emitter) = self.signal_emitter.get() {
-            self.mode_changed(emitter).await?;
+        if let Some(emitter) = self.signal_emitter.get()
+            && let Err(err) = self.mode_changed(emitter).await
+        {
+            warn!("failed to emit mode change signal: {err}");
+        };
+
+        // Emit block_changed signal after the mode has been applied
+        let gpu_list = self.gpu_list.read().await;
+        for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
+            let Some(emitter) = gpu.signal_emitter.get() else {
+                continue;
+            };
+            if let Err(err) = gpu.block_changed(emitter).await {
+                warn!(
+                    "failed to emit Block property change for {}: {err}",
+                    gpu.device.name()
+                );
+            }
         }
         Ok(())
     }

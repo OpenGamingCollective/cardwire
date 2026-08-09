@@ -132,10 +132,6 @@ async fn spawn_dbus_api(
     let path = "/org/opengamingcollective/cardwire";
 
     let gpu_interfaces = daemon.inner.gpu_list.read().await;
-    // cardwire.Mode
-    object_server
-        .at(path, daemon.mode_interface.clone())
-        .await?;
     // cardwire.Config
     object_server
         .at(path, daemon.config_interface.clone())
@@ -147,15 +143,23 @@ async fn spawn_dbus_api(
         object_server
             .at(path.clone(), gpu_interface.as_ref().clone())
             .await?;
+        let gpu_ref = object_server
+            .interface::<_, crate::interface::GpuInterface>(path)
+            .await?;
+        gpu_interface
+            .signal_emitter
+            .get_or_init(|| gpu_ref.signal_emitter().to_owned());
         // spawn power state watcher only for available GPUs
         if gpu_interface.device.is_available() {
-            let handle = task::spawn(watch_power_state(
-                Arc::clone(gpu_interface),
-                object_server.interface(path).await?,
-            ));
+            let handle = task::spawn(watch_power_state(Arc::clone(gpu_interface), gpu_ref));
             power_tasks.insert(*id, handle);
         }
     }
+
+    // cardwire.Mode
+    object_server
+        .at(path, daemon.mode_interface.clone())
+        .await?;
     // Cardwire logger
     object_server
         .at(path, daemon.logger_interface.clone())

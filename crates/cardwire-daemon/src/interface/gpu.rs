@@ -34,6 +34,7 @@ pub struct GpuInterface {
     pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     mode_state: Arc<RwLock<CardwireModeState>>,
+    pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
 }
 
 impl GpuInterface {
@@ -54,6 +55,7 @@ impl GpuInterface {
             pci_list,
             gpu_state,
             mode_state,
+            signal_emitter: Arc::new(OnceLock::new()),
         })
     }
 }
@@ -232,6 +234,10 @@ impl GpuInterface {
 
     #[zbus(property)]
     pub async fn block(&self) -> fdo::Result<bool> {
+        let mode = self.mode_state.read().await.mode();
+        if mode == Modes::Smart && (self.device.is_default() && !self.device.is_discrete()) {
+            return Ok(false);
+        }
         self.gpu_blocked().await
     }
 
