@@ -18,7 +18,7 @@ prepare(){
 	rustup toolchain install nightly --component rust-src
 	cargo fetch --locked
 }
-
+options=('!lto')
 build(){
 	cd "${pkgbase}-${pkgver}"
 	export CARGO_TARGET_DIR=target
