@@ -1,7 +1,7 @@
 {
   lib,
   pkgs,
-  toolchain ? null, # Kept so your flake.nix callPackage doesn't break, but ignored here
+  toolchain ? null,
 }:
 let
   cargoToml = builtins.fromTOML (builtins.readFile ../Cargo.toml);

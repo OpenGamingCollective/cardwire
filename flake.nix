@@ -127,7 +127,6 @@
               enable = true;
               package = toolchainFor system;
             };
-            clang-format.enable = true;
           };
         };
       });
