@@ -59,16 +59,13 @@ async fn reconcile_gpu(
         warn!("failed to probe display state for card{card}; skipping reconcile");
         return;
     };
-    let Some(current_mode) = mode
-        .mode()
-        .await
-        .ok()
-        .and_then(|mode| Modes::try_from(mode).ok())
-    else {
+    // Reconcile against the persisted mode (the user's request), not the applied one, so the
+    // temporary Hybrid override can be restored once the display disconnects
+    let Ok(persisted) = CardwireModeState::build() else {
         return;
     };
 
-    match current_mode {
+    match persisted.mode() {
         // Integrated and Smart modes keep the offload dGPU blocked, except when it needs to
         // drive a connected display: then the effective mode is overridden to Hybrid.
         Modes::Integrated | Modes::Smart => {
@@ -88,10 +85,7 @@ async fn reconcile_gpu(
                 let _ = mode.internal_set_mode(Modes::Hybrid, false).await;
             } else if !active && !blocked {
                 // The override is in effect and the display is gone: restore the persisted mode
-                // from disk, since mode() now reports the applied override.
-                if let Ok(persisted) = CardwireModeState::build() {
-                    let _ = mode.internal_set_mode(persisted.mode(), false).await;
-                }
+                let _ = mode.internal_set_mode(persisted.mode(), false).await;
             }
         }
         // Manual mode leaves the user in control, except unblocking a GPU that suddenly
