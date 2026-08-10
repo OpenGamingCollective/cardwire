@@ -1,4 +1,4 @@
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Desktop {
     Niri,

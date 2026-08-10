@@ -170,17 +170,12 @@ pub async fn send_drm_uevent(card: u32, action: UdevAction) -> io::Result<()> {
                 Ok(value) => value,
                 Err(_) => return Ok(()),
             };
-            let desktop: Desktop = match Desktop::from_str(&desktop_str) {
-                Some(v) => v,
-                None => return Ok(()),
-            };
-            match desktop {
-                // Mutter has no device removal: a "remove" event only makes it rescan the blocked
-                // card, hitting its stale-pointer crash path. No-op until fixed upstream.
-                Desktop::Gnome => Ok(()),
-                _ => {
-                    tokio::fs::write(format!("/sys/class/drm/card{card}/uevent"), "remove\n").await
-                }
+            // Mutter has no device removal: a "remove" event only makes it rescan the blocked
+            // card, hitting its stale-pointer crash path. No-op until fixed upstream.
+            if Desktop::from_str(&desktop_str).is_some_and(|d| d == Desktop::Gnome) {
+                Ok(())
+            } else {
+                tokio::fs::write(format!("/sys/class/drm/card{card}/uevent"), "remove\n").await
             }
         }
     }
