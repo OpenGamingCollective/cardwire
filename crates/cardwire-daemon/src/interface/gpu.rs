@@ -99,7 +99,7 @@ impl GpuInterface {
         for inode in inodes {
             blocker.block_inode(inode, value).into_fdo()?;
         }
-
+        drop(blocker);
         if let Err(err) = send_drm_uevent(*self.device.card(), UdevAction::Remove).await {
             warn!(
                 "failed to send drm uevent for {}: {err}",
@@ -144,6 +144,7 @@ impl GpuInterface {
         for inode in inodes.iter() {
             blocker.unblock_inode(*inode, self.id).into_fdo()?;
         }
+        drop(blocker);
         if let Err(err) = send_drm_uevent(*self.device.card(), UdevAction::Add).await {
             warn!(
                 "failed to send drm uevent for {}: {err}",
