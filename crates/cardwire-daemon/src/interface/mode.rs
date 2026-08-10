@@ -1,6 +1,6 @@
 //! Define the mode dbus
 use crate::{
-    core::gpu::{restart_nvidia_powerd, send_drm_uevent}, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface, config::ConfigMemory}, types::SystemType
+    core::gpu::restart_nvidia_powerd, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface, config::ConfigMemory}, types::SystemType
 };
 use anyhow::Result;
 use aya::maps::Array as AyaArray;
@@ -77,7 +77,7 @@ impl ModeInterface {
             warn!("failed to emit mode change signal: {err}");
         };
 
-        // Emit block_changed signal after the mode has been applied and send drm uevent
+        // Emit block_changed signal after the mode has been applied
         let gpu_list = self.gpu_list.read().await;
 
         for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
@@ -89,9 +89,6 @@ impl ModeInterface {
                     gpu.device.name()
                 );
             }
-            if let Err(err) = send_drm_uevent(*gpu.device.card()).await {
-                warn!("failed to send drm uevent for {}: {err}", gpu.device.name());
-            };
         }
         // Drop the read lock before refreshing the switcheroo api
         drop(gpu_list);

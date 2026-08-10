@@ -151,8 +151,20 @@ pub async fn is_gpu_active(card: u32) -> Option<bool> {
     }
 }
 
-/// Send a "change" uevent for a DRM card, prompting the display server to
-/// rescan connectors.
-pub async fn send_drm_uevent(card: u32) -> io::Result<()> {
-    tokio::fs::write(format!("/sys/class/drm/card{card}/uevent"), "change\n").await
+/// Uevent action sent to a DRM card.
+pub enum UdevAction {
+    Add,
+    Remove,
+}
+
+/// Send a uevent for a DRM card, prompting the display server to react to it.
+pub async fn send_drm_uevent(card: u32, action: UdevAction) -> io::Result<()> {
+    match action {
+        UdevAction::Add => {
+            tokio::fs::write(format!("/sys/class/drm/card{card}/uevent"), "add\n").await
+        }
+        // Mutter has no device removal: a "remove" event only makes it rescan the blocked
+        // card, hitting its stale-pointer crash path. No-op until fixed upstream.
+        UdevAction::Remove => Ok(()),
+    }
 }

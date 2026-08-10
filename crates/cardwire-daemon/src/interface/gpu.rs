@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     core::{
-        env::is_gpu_launchable, gpu::{DbusGpuDevice, GpuDevice, is_gpu_active, send_drm_uevent}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
+        env::is_gpu_launchable, gpu::{DbusGpuDevice, GpuDevice, UdevAction, is_gpu_active, send_drm_uevent}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
     }, file::{CardwireGpuState, CardwireModeState}, interface::{Modes, SwitcherooInterface}
 };
 use cardwire_ebpf_userspace::EbpfBlocker;
@@ -100,6 +100,13 @@ impl GpuInterface {
             blocker.block_inode(inode, value).into_fdo()?;
         }
 
+        if let Err(err) = send_drm_uevent(*self.device.card(), UdevAction::Remove).await {
+            warn!(
+                "failed to send drm uevent for {}: {err}",
+                self.device.name()
+            );
+        }
+
         Ok(())
     }
 
@@ -136,6 +143,12 @@ impl GpuInterface {
 
         for inode in inodes.iter() {
             blocker.unblock_inode(*inode, self.id).into_fdo()?;
+        }
+        if let Err(err) = send_drm_uevent(*self.device.card(), UdevAction::Add).await {
+            warn!(
+                "failed to send drm uevent for {}: {err}",
+                self.device.name()
+            );
         }
         Ok(())
     }
@@ -224,12 +237,6 @@ impl GpuInterface {
                     warn!("could not save gpu_state to file: {e}");
                 };
             }
-            if let Err(err) = send_drm_uevent(*self.device.card()).await {
-                warn!(
-                    "failed to send drm uevent for {}: {err}",
-                    self.device.name()
-                );
-            };
             // Refresh the switcheroo api
             self.switcheroo_int.emit_gpu_list_changed().await;
 
@@ -245,12 +252,6 @@ impl GpuInterface {
                     warn!("could not save gpu_state to file: {e}");
                 };
             }
-            if let Err(err) = send_drm_uevent(*self.device.card()).await {
-                warn!(
-                    "failed to send drm uevent for {}: {err}",
-                    self.device.name()
-                );
-            };
             // Refresh the switcheroo api
             self.switcheroo_int.emit_gpu_list_changed().await;
             Ok(())
