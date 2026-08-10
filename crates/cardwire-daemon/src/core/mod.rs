@@ -1,3 +1,4 @@
+pub mod desktop;
 pub mod env;
 pub mod errors;
 pub mod gpu;
