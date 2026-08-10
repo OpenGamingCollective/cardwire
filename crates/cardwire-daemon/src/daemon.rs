@@ -24,6 +24,7 @@ pub const STATE_PATH: &str = "/var/lib/cardwire";
 async fn main() -> Result<()> {
     // log
     env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+        .filter_module("zbus", log::LevelFilter::Warn)
         .format_target(false)
         .format_timestamp(None)
         .init();
