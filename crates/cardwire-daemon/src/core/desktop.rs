@@ -18,19 +18,23 @@ impl Desktop {
         }
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_desktop_from_str_all_known_variants() {
-    assert!(matches!(Desktop::from_str("niri"), Some(Desktop::Niri)));
-    assert!(matches!(Desktop::from_str("gnome"), Some(Desktop::Gnome)));
-    assert!(matches!(Desktop::from_str("plasma"), Some(Desktop::Plasma)));
-    assert!(matches!(Desktop::from_str("cosmic"), Some(Desktop::Cosmic)));
-}
+    #[test]
+    fn test_desktop_from_str_all_known_variants() {
+        assert!(matches!(Desktop::from_str("niri"), Some(Desktop::Niri)));
+        assert!(matches!(Desktop::from_str("gnome"), Some(Desktop::Gnome)));
+        assert!(matches!(Desktop::from_str("plasma"), Some(Desktop::Plasma)));
+        assert!(matches!(Desktop::from_str("cosmic"), Some(Desktop::Cosmic)));
+    }
 
-#[test]
-fn test_desktop_from_str_unknown_returns_none() {
-    assert!(Desktop::from_str("sway").is_none());
-    assert!(Desktop::from_str("hyprland").is_none());
-    assert!(Desktop::from_str("i3").is_none());
-    assert!(Desktop::from_str("").is_none());
+    #[test]
+    fn test_desktop_from_str_unknown_returns_none() {
+        assert!(Desktop::from_str("sway").is_none());
+        assert!(Desktop::from_str("hyprland").is_none());
+        assert!(Desktop::from_str("i3").is_none());
+        assert!(Desktop::from_str("").is_none());
+    }
 }
