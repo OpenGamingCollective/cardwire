@@ -126,10 +126,14 @@ async fn run_display_monitor(
                 let mut guard = ready?;
                 if guard.ready().is_readable() {
                     // Drain the socket and collapse a burst of uevents into one reconciliation.
+                    // Real connector hotplug always surfaces as a "change" on the card. The
+                    // daemon's own "add" uevents are ignored here, so it never reconciles its
+                    // own mode switches; card "add"/"remove" (boot, dock unplug) is covered by
+                    // the periodic retry below.
                     for event in drm_fd.get_ref().iter() {
-                        if event.action().is_some_and(|action| {
-                            action == "add" || action == "remove" || action == "change"
-                        }) && let Some(card) = card_from_event(&event) {
+                        if event.action().is_some_and(|action| action == "change")
+                            && let Some(card) = card_from_event(&event)
+                        {
                             cards_seen.insert(card);
                         }
                     }
