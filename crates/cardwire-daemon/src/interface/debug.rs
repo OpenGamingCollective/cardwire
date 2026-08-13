@@ -3,9 +3,11 @@ use crate::{
         env::compute_switcheroo_env, gpu::GpuEnumerator, pci::{self, DbusPciDevice, PciDevice}
     }, interface::SwitcherooInterface, tasks::watch_power_state
 };
-use cardwire_ebpf_userspace::EbpfBlocker;
+use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
 use log::{info, warn};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashSet}, sync::Arc
+};
 use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
@@ -46,6 +48,24 @@ impl DebugInterface {
             switcheroo,
         })
     }
+
+    async fn drop_unclaimed_inodes(&self, previous: Vec<InodeKey>) {
+        let claimed: HashSet<InodeKey> = {
+            let gpu_interfaces = self.gpu_list.read().await;
+            let mut claimed = HashSet::new();
+            for gpu in gpu_interfaces.values() {
+                claimed.extend(gpu.pushed_inodes().await);
+            }
+            claimed
+        };
+
+        let mut blocker = self.blocker.write().await;
+        for stale in previous.iter().filter(|key| !claimed.contains(key)) {
+            if let Err(err) = blocker.remove_inode(*stale) {
+                warn!("failed to drop stale inode {:?}: {}", stale, err);
+            }
+        }
+    }
 }
 
 #[interface(name = "org.opengamingcollective.cardwire.Debug")]
@@ -76,13 +96,15 @@ impl DebugInterface {
             let mut power_tasks = self.power_tasks.write().await;
 
             // get rid of the old gpu api and the old tasks
-            for id in gpu_interfaces.keys() {
+            let mut previous_inodes: Vec<InodeKey> = Vec::new();
+            for (id, gpu) in gpu_interfaces.iter() {
                 let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
                 let _ = object_server.remove::<GpuInterface, &str>(&path).await;
                 // if task is present, abort
                 if let Some(handle) = power_tasks.remove(id) {
                     handle.abort();
                 }
+                previous_inodes.extend(gpu.take_pushed_inodes().await);
             }
 
             // Empty the current gpu_interfaces
@@ -165,6 +187,8 @@ impl DebugInterface {
                     warn!("failed to fall back to hybrid mode on hotplug: {fb}");
                 }
             }
+
+            self.drop_unclaimed_inodes(previous_inodes).await;
             self.switcheroo.emit_gpu_list_changed().await;
         }
 
