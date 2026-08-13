@@ -178,7 +178,7 @@ impl DaemonManager {
             {
                 for inode in inodes {
                     if let Err(err) = blocker.block_exp_inode(inode, *id as u32) {
-                        error!("failed to block nvidia's file {}: {}", inode, err);
+                        error!("failed to block nvidia's file {:?}: {}", inode, err);
                     }
                 }
                 break;

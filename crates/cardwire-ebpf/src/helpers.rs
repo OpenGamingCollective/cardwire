@@ -4,22 +4,36 @@ use aya_ebpf::helpers::{
 
 use crate::{
     CardwiredSetting, DAEMON_INDEX, HYBRID, INTEGRATED, MANUAL, MODE_INDEX, SMART, maps::{
-        CW_ALLOWED_COMM, CW_ALLOWED_PID, CW_BLOCKED_INO, CW_DAEMON_PID, CW_EXP_BLK_INO, CW_FORCED_PID, CW_MODE, CW_REPORT_EVENTS, CW_SETTINGS, ReportEvent
+        CW_ALLOWED_COMM, CW_ALLOWED_PID, CW_BLOCKED_INO, CW_DAEMON_PID, CW_EXP_BLK_INO, CW_FORCED_PID, CW_MODE, CW_REPORT_EVENTS, CW_SETTINGS, InodeKey, ReportEvent
     }
 };
 
-use crate::vmlinux::task_struct;
+use crate::vmlinux::{inode, task_struct};
 
-/// Verify if the inode is inside CW_BLOCKED_INO or not
+/// Build the block-map key for an inode
 #[inline(always)]
-pub unsafe fn is_inode_blocked(inode: u64) -> bool {
+pub unsafe fn inode_key(inode_ptr: *const inode) -> Option<InodeKey> {
+    let sb = unsafe { (*inode_ptr).i_sb };
+    if sb.is_null() {
+        return None;
+    }
+
+    Some(InodeKey {
+        dev: unsafe { (*sb).s_dev } as u64,
+        ino: unsafe { (*inode_ptr).i_ino },
+    })
+}
+
+/// Verify if the file is inside CW_BLOCKED_INO or not
+#[inline(always)]
+pub unsafe fn is_inode_blocked(key: InodeKey) -> bool {
     let mut tracked: bool = false;
     let mut ino_gpu_id: u32 = 0;
     let mut blocked: bool = false;
 
     'inode_check: {
-        // Check if the inode is in the blocked list
-        if let Some(v) = unsafe { CW_BLOCKED_INO.get(inode) } {
+        // Check if the file is in the blocked list
+        if let Some(v) = unsafe { CW_BLOCKED_INO.get(key) } {
             tracked = true;
             ino_gpu_id = v.gpu_id;
             blocked = v.blocked == 1;
@@ -27,7 +41,7 @@ pub unsafe fn is_inode_blocked(inode: u64) -> bool {
         }
         // We didn't match any inode, try with nvidia inodes
         if unsafe { is_nvidia_setting_enabled() }
-            && let Some(v) = unsafe { CW_EXP_BLK_INO.get(inode) }
+            && let Some(v) = unsafe { CW_EXP_BLK_INO.get(key) }
         {
             tracked = true;
             ino_gpu_id = *v;
