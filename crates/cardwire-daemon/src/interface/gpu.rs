@@ -9,7 +9,7 @@ use crate::{
         env::is_gpu_launchable, gpu::{DbusGpuDevice, GpuDevice, is_gpu_active, send_drm_uevent}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
     }, file::{CardwireGpuState, CardwireModeState}, interface::{Modes, SwitcherooInterface}
 };
-use cardwire_ebpf_userspace::EbpfBlocker;
+use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
 use log::{info, warn};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface, object_server::SignalEmitter};
@@ -36,6 +36,8 @@ pub struct GpuInterface {
     mode_state: Arc<RwLock<CardwireModeState>>,
     pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
     switcheroo_int: SwitcherooInterface,
+    /// What this GPU last pushed into the eBPF map
+    pushed_inodes: Arc<RwLock<Vec<InodeKey>>>,
 }
 
 impl GpuInterface {
@@ -60,13 +62,14 @@ impl GpuInterface {
             mode_state,
             signal_emitter: Arc::new(OnceLock::new()),
             switcheroo_int,
+            pushed_inodes: Arc::new(RwLock::new(Vec::new())),
         })
     }
 }
 
 impl GpuInterface {
-    /// block the gpu, value = gpu key
-    pub async fn block_gpu(&self, value: u32) -> fdo::Result<()> {
+    /// Read the inodes this GPU currently owns
+    async fn current_inodes(&self) -> fdo::Result<Vec<InodeKey>> {
         let (render, card, pci_address, pci_parent, nvidia_minor, pci_list) = {
             let pci_list_guard = self.pci_list.read().await;
 
@@ -80,7 +83,7 @@ impl GpuInterface {
             )
         };
 
-        let inodes = tokio::task::spawn_blocking(move || {
+        tokio::task::spawn_blocking(move || {
             get_inodes(
                 render,
                 card,
@@ -92,52 +95,51 @@ impl GpuInterface {
         })
         .await
         .into_fdo()?
-        .into_fdo()?;
+        .into_fdo()
+    }
+
+    /// Push this GPU's inodes into the map with the given block state, dropping
+    /// any it pushed earlier that a power cycle or rebind has since renumbered
+    async fn sync_inodes(&self, gpu_id: u32, blocked: bool) -> fdo::Result<()> {
+        let inodes = self.current_inodes().await?;
 
         let mut blocker = self.blocker.write().await;
+        let mut pushed = self.pushed_inodes.write().await;
 
-        for inode in inodes {
-            blocker.block_inode(inode, value).into_fdo()?;
+        for stale in pushed.iter().filter(|key| !inodes.contains(key)) {
+            blocker.remove_inode(*stale).into_fdo()?;
+        }
+
+        // Record before applying, a failure mid loop must still leave every
+        // inserted key removable
+        *pushed = inodes;
+
+        for inode in pushed.iter() {
+            match blocked {
+                true => blocker.block_inode(*inode, gpu_id).into_fdo()?,
+                false => blocker.unblock_inode(*inode, gpu_id).into_fdo()?,
+            }
         }
 
         Ok(())
     }
 
+    /// block the gpu, value = gpu key
+    pub async fn block_gpu(&self, value: u32) -> fdo::Result<()> {
+        self.sync_inodes(value, true).await
+    }
+
     /// unblock the gpu
     pub async fn unblock_gpu(&self) -> fdo::Result<()> {
-        let (render, card, pci_address, pci_parent, nvidia_minor, pci_list) = {
-            let pci_list_guard = self.pci_list.read().await;
+        self.sync_inodes(self.id, false).await
+    }
 
-            (
-                *self.device.render(),
-                *self.device.card(),
-                self.device.pci().pci_address().to_owned(),
-                self.device.pci().parent_pci().to_owned(),
-                *self.device.nvidia_minor(),
-                pci_list_guard.clone(),
-            )
-        };
+    pub async fn take_pushed_inodes(&self) -> Vec<InodeKey> {
+        std::mem::take(&mut *self.pushed_inodes.write().await)
+    }
 
-        // Read the inodes required to unblock the GPU, return if err
-        let inodes = tokio::task::spawn_blocking(move || {
-            get_inodes(
-                render,
-                card,
-                &pci_address,
-                &pci_parent,
-                &pci_list,
-                nvidia_minor,
-            )
-        })
-        .await
-        .into_fdo()?
-        .into_fdo()?;
-        let mut blocker = self.blocker.write().await;
-
-        for inode in inodes.iter() {
-            blocker.unblock_inode(*inode, self.id).into_fdo()?;
-        }
-        Ok(())
+    pub async fn pushed_inodes(&self) -> Vec<InodeKey> {
+        self.pushed_inodes.read().await.clone()
     }
     /// check if the gpu is blocked
     pub async fn gpu_blocked(&self) -> fdo::Result<bool> {

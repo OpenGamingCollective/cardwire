@@ -300,6 +300,21 @@ impl EbpfBlocker {
         Ok(())
     }
 
+    /// Drop a file from the map entirely, a missing key is not an error
+    pub fn remove_inode(&mut self, key: InodeKey) -> CardwireEbpfResult<()> {
+        let mut inode_map: HashMap<_, InodeKey, InodeState> = HashMap::try_from(
+            self.ebpf
+                .map_mut("CW_BLOCKED_INO")
+                .ok_or_else(|| CardwireEbpfError::missing_map("CW_BLOCKED_INO"))?,
+        )
+        .map_err(CardwireEbpfError::aya)?;
+
+        match inode_map.remove(&key) {
+            Ok(()) | Err(MapError::KeyNotFound) => Ok(()),
+            Err(err) => Err(CardwireEbpfError::aya(err)),
+        }
+    }
+
     pub fn is_inode_blocked(&self, key: InodeKey, gpu_id: u32) -> CardwireEbpfResult<bool> {
         let inode_map: HashMap<_, InodeKey, InodeState> = HashMap::try_from(
             self.ebpf
