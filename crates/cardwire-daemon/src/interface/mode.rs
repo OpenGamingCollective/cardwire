@@ -24,6 +24,8 @@ pub struct ModeInterface {
     mode_map: Arc<Mutex<AyaArray<aya::maps::MapData, u8>>>,
     // Mutex to serialize mode transitions
     transition: Arc<Mutex<()>>,
+    // Mutex to serialize nvidia-powerd start/stop operations
+    nvidia_powerd_lock: Arc<Mutex<()>>,
     // Signal emitter for mode changes (used by background tasks), populated once the interface is
     // served
     pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
@@ -45,6 +47,7 @@ impl ModeInterface {
             config: context.config.clone(),
             mode_map,
             transition: Arc::new(Mutex::new(())),
+            nvidia_powerd_lock: Arc::new(Mutex::new(())),
             signal_emitter: Arc::new(OnceLock::new()),
             switcheroo_int,
         })
@@ -100,10 +103,18 @@ impl ModeInterface {
 
         match mode {
             Modes::Hybrid | Modes::Manual => {
-                task::spawn(start_nvidia_powerd());
+                let lock = self.nvidia_powerd_lock.clone();
+                task::spawn(async move {
+                    let _guard = lock.lock().await;
+                    start_nvidia_powerd().await;
+                });
             }
             Modes::Integrated | Modes::Smart => {
-                task::spawn(stop_nvidia_powerd());
+                let lock = self.nvidia_powerd_lock.clone();
+                task::spawn(async move {
+                    let _guard = lock.lock().await;
+                    stop_nvidia_powerd().await;
+                });
             }
         }
 
