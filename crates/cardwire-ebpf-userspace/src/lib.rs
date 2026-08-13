@@ -21,6 +21,7 @@ pub struct EbpfBlocker {
     ebpf: Ebpf,
     pub pid_map: Arc<RwLock<HashMap<aya::maps::MapData, u32, u32>>>,
     pub forced_map: Arc<RwLock<HashMap<aya::maps::MapData, u32, u32>>>,
+    pushed_exp_inodes: Vec<InodeKey>,
 }
 
 #[repr(C)]
@@ -230,6 +231,7 @@ impl EbpfBlocker {
             ebpf,
             pid_map,
             forced_map,
+            pushed_exp_inodes: Vec::new(),
         })
     }
 
@@ -341,6 +343,55 @@ impl EbpfBlocker {
         inode_map
             .insert(key, value, 0)
             .map_err(CardwireEbpfError::aya)?;
+        Ok(())
+    }
+
+    pub fn remove_exp_inode(&mut self, key: InodeKey) -> CardwireEbpfResult<()> {
+        let mut inode_map: HashMap<_, InodeKey, u32> = HashMap::try_from(
+            self.ebpf
+                .map_mut("CW_EXP_BLK_INO")
+                .ok_or_else(|| CardwireEbpfError::missing_map("CW_EXP_BLK_INO"))?,
+        )
+        .map_err(CardwireEbpfError::aya)?;
+
+        match inode_map.remove(&key) {
+            Ok(()) | Err(MapError::KeyNotFound) => Ok(()),
+            Err(err) => Err(CardwireEbpfError::aya(err)),
+        }
+    }
+
+    /// `pushed_exp_inodes` mirrors what we put in `CW_EXP_BLK_INO`, so it is only
+    /// ever updated once the kernel agrees. Dropping a key from it before the
+    /// removal succeeds would leave an entry nothing can name afterwards, and it
+    /// would stay blocked until the daemon restarts
+    pub fn clear_exp_inodes(&mut self) -> CardwireEbpfResult<()> {
+        while let Some(key) = self.pushed_exp_inodes.last().copied() {
+            self.remove_exp_inode(key)?;
+            self.pushed_exp_inodes.pop();
+        }
+        Ok(())
+    }
+
+    pub fn sync_exp_inodes(&mut self, keys: Vec<InodeKey>, gpu_id: u32) -> CardwireEbpfResult<()> {
+        let stale: Vec<InodeKey> = self
+            .pushed_exp_inodes
+            .iter()
+            .copied()
+            .filter(|key| !keys.contains(key))
+            .collect();
+
+        for key in stale {
+            self.remove_exp_inode(key)?;
+            self.pushed_exp_inodes.retain(|tracked| *tracked != key);
+        }
+
+        for key in keys {
+            self.block_exp_inode(key, gpu_id)?;
+            if !self.pushed_exp_inodes.contains(&key) {
+                self.pushed_exp_inodes.push(key);
+            }
+        }
+
         Ok(())
     }
 
