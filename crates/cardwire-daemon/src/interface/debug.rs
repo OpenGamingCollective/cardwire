@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        env::compute_switcheroo_env, gpu::GpuEnumerator, pci::{self, DbusPciDevice, PciDevice}
+        env::compute_switcheroo_env, gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self, DbusPciDevice, PciDevice}
     }, interface::SwitcherooInterface, tasks::watch_power_state
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
@@ -47,6 +47,41 @@ impl DebugInterface {
             power_tasks: context.power_tasks.clone(),
             switcheroo,
         })
+    }
+
+    pub async fn sync_nvidia_inodes(&self) {
+        let target = {
+            let gpu_list = self.gpu_list.read().await;
+            gpu_list
+                .iter()
+                .find(|(_, gpu)| {
+                    gpu.device.gpu_vendor() == GpuVendor::Nvidia && !gpu.device.is_default()
+                })
+                .map(|(id, _)| *id as u32)
+        };
+
+        let inodes = match target {
+            Some(_) => match exp_nvidia_inodes() {
+                Ok(inodes) => inodes,
+                Err(err) => {
+                    warn!(
+                        "failed to read nvidia inodes, leaving the map as is: {}",
+                        err
+                    );
+                    return;
+                }
+            },
+            None => Vec::new(),
+        };
+
+        let mut blocker = self.blocker.write().await;
+        let result = match target {
+            Some(gpu_id) => blocker.sync_exp_inodes(inodes, gpu_id),
+            None => blocker.clear_exp_inodes(),
+        };
+        if let Err(err) = result {
+            warn!("failed to sync nvidia inodes: {}", err);
+        }
     }
 
     async fn drop_unclaimed_inodes(&self, previous: Vec<InodeKey>) {
@@ -189,6 +224,7 @@ impl DebugInterface {
             }
 
             self.drop_unclaimed_inodes(previous_inodes).await;
+            self.sync_nvidia_inodes().await;
             self.switcheroo.emit_gpu_list_changed().await;
         }
 
