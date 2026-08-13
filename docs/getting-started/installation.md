@@ -133,8 +133,15 @@ Then clone and build:
 
 ```bash
 git clone https://github.com/OpenGamingCollective/cardwire.git
+
 make build
 sudo make install
+```
+
+And start the service:
+
+```bash
+sudo systemctl enable cardwired --now
 ```
 
 ## Other distros
@@ -154,4 +161,10 @@ git clone https://github.com/OpenGamingCollective/cardwire.git
 
 make build
 sudo make install
+```
+
+And start the service:
+
+```bash
+sudo systemctl enable cardwired --now
 ```
