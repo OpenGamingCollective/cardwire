@@ -68,22 +68,29 @@ pub async fn start_nvidia_powerd() {
 
 /// check whether the nvidia-powerd service is enabled
 async fn nvidia_powerd_enabled() -> bool {
-    match Command::new("systemctl")
-        .arg("is-enabled")
-        .arg(SERVICE)
-        .output()
-        .await
+    let output = match timeout(
+        Duration::from_secs(10),
+        Command::new("systemctl")
+            .arg("is-enabled")
+            .arg(SERVICE)
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await
     {
-        Ok(output) => {
-            if let Ok(output_str) = str::from_utf8(&output.stdout) {
-                output_str.contains("enabled")
-            } else {
-                false
-            }
-        }
-        Err(err) => {
+        Ok(Ok(output)) => output,
+        Ok(Err(err)) => {
             error!("error while trying to detect nvidia-powerd: {err}");
-            false
+            return false;
         }
+        Err(_) => {
+            error!("timed out after 10s while trying to detect nvidia-powerd");
+            return false;
+        }
+    };
+    if let Ok(output_str) = str::from_utf8(&output.stdout) {
+        output_str.contains("enabled")
+    } else {
+        false
     }
 }
