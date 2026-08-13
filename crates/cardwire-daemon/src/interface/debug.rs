@@ -3,8 +3,9 @@ use crate::{
         env::compute_switcheroo_env, gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self, DbusPciDevice, PciDevice}
     }, interface::SwitcherooInterface, tasks::watch_power_state
 };
+use anyhow::Context;
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
-use log::{info, warn};
+use log::{error, info, warn};
 use std::{
     collections::{BTreeMap, HashSet}, sync::Arc
 };
@@ -49,7 +50,11 @@ impl DebugInterface {
         })
     }
 
-    pub async fn sync_nvidia_inodes(&self) {
+    /// Reconcile CW_EXP_BLK_INO with the nvidia files currently on disk
+    ///
+    /// Missing inodes only warn, the map keeps what it holds. A failed map
+    /// write is returned: the block would be advertised but not enforced
+    pub async fn sync_nvidia_inodes(&self) -> anyhow::Result<()> {
         let target = {
             let gpu_list = self.gpu_list.read().await;
             gpu_list
@@ -65,23 +70,21 @@ impl DebugInterface {
                 Ok(inodes) => inodes,
                 Err(err) => {
                     warn!(
-                        "failed to read nvidia inodes, leaving the map as is: {}",
+                        "failed to read nvidia inodes, leaving the map as is: {:#}",
                         err
                     );
-                    return;
+                    return Ok(());
                 }
             },
             None => Vec::new(),
         };
 
         let mut blocker = self.blocker.write().await;
-        let result = match target {
+        match target {
             Some(gpu_id) => blocker.sync_exp_inodes(inodes, gpu_id),
             None => blocker.clear_exp_inodes(),
-        };
-        if let Err(err) = result {
-            warn!("failed to sync nvidia inodes: {}", err);
         }
+        .context("failed to write the CW_EXP_BLK_INO map")
     }
 
     async fn drop_unclaimed_inodes(&self, previous: Vec<InodeKey>) {
@@ -224,7 +227,12 @@ impl DebugInterface {
             }
 
             self.drop_unclaimed_inodes(previous_inodes).await;
-            self.sync_nvidia_inodes().await;
+            if let Err(err) = self.sync_nvidia_inodes().await {
+                error!(
+                    "nvidia block is out of date after the gpu refresh: {:#}",
+                    err
+                );
+            }
             self.switcheroo.emit_gpu_list_changed().await;
         }
 
