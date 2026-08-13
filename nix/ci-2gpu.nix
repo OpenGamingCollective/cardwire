@@ -4,6 +4,39 @@
   self,
   lib,
 }:
+let
+  # Fills a sandbox's private tmpfs until a file lands on the inode number
+  # given as $1, then checks that file and its neighbours survive
+  sandboxCollision = (pkgs system).writeShellScript "sandbox-collision" ''
+    set -eu
+    export PATH=${(pkgs system).coreutils}/bin:$PATH
+
+    # tmpfs hands out inode numbers in percpu blocks of 1024 and can skip
+    # straight past the target, so overshoot by more than one block
+    n=$(($1 + 1100))
+    i=1
+    while [ "$i" -le "$n" ]; do
+      : > "/tmp/f$i"
+      i=$((i + 1))
+    done
+
+    collider=""
+    for f in /tmp/f*; do
+      if [ "$(stat -c %i "$f")" = "$1" ]; then
+        collider="$f"
+        break
+      fi
+    done
+    # No collision means the checks below prove nothing
+    [ -n "$collider" ]
+
+    # inode_getattr and file_open, the dirent path is covered by the ls
+    stat "$collider" > /dev/null
+    : < "$collider"
+
+    [ "$(ls -1 /tmp | wc -l)" -eq "$n" ]
+  '';
+in
 (pkgs system).testers.runNixOSTest {
   name = "cardwire-test";
   nodes.machine =
@@ -101,6 +134,21 @@
       env_out = machine.succeed("cardwire launch env")
       t.assertIn("CARDWIRE_FORCE_DGPU=1", env_out, "Default launch didn't target dGPU (GPU 1)")
       t.assertIn("DRI_PRIME=pci", env_out, "Default launch didn't set DRI_PRIME")
+
+    with subtest("Sandboxes keep files that share an inode number with a blocked GPU"):
+      machine.succeed("bwrap --dev-bind / / --tmpfs /tmp true")
+
+      # Read it while nothing is blocked, the stat would be denied otherwise
+      machine.succeed("cardwire set hybrid")
+      dgpu_ino = machine.succeed("stat -c %i /dev/dri/renderD129").strip()
+
+      machine.succeed("cardwire set integrated")
+      # if this passed the sandbox check below would prove nothing
+      machine.fail(": < /dev/dri/renderD129")
+
+      machine.succeed(
+        "bwrap --dev-bind / / --tmpfs /tmp ${sandboxCollision} " + dgpu_ino
+      )
 
   '';
 }
