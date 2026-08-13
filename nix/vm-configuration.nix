@@ -34,6 +34,7 @@
     tmux
     gnugrep
     coreutils
+    bubblewrap
   ];
   services.getty.autologinUser = "john";
   virtualisation.vmVariant = {
