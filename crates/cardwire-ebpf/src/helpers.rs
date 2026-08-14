@@ -10,52 +10,81 @@ use crate::{
 
 use crate::vmlinux::{dentry, inode, linux_dirent64, task_struct};
 
+/// Outcome of building a block-map key from a dentry or an inode
+pub enum KeyBuild {
+    /// A usable key
+    Key(InodeKey),
+    /// No name to key on: null dentry/inode, or an anonymous inode (epoll fds,
+    /// eventfds, dma-bufs). Expected while processes run, callers should skip
+    /// silently
+    Unnamed,
+    /// Kernel memory could not be read. Unexpected, callers should log it
+    ProbeFailed,
+}
+
 /// Build the block-map key for a dentry, keying on the entry's name and inode
 ///
 /// The name is copied with bpf_probe_read_kernel_str_bytes, which stops at the
 /// NUL and zero-fills the rest of the buffer: the result is byte-identical to
 /// the zero-padded key userspace builds from the path's basename
 #[inline(always)]
-pub unsafe fn dentry_key(d: *const dentry) -> Option<InodeKey> {
+pub unsafe fn dentry_key(d: *const dentry) -> KeyBuild {
     if d.is_null() {
-        return None;
+        return KeyBuild::Unnamed;
     }
 
     // The dentry may have been reconstructed from inode->i_dentry.first
     // (inode_permission), which the verifier refuses to dereference directly:
     // read the fields through probe reads instead
-    let inode_ptr: *mut inode =
-        unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*d).d_inode)) }.ok()?;
+    let inode_ptr = match unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*d).d_inode)) } {
+        Ok(inode_ptr) => inode_ptr,
+        Err(_) => return KeyBuild::ProbeFailed,
+    };
     if inode_ptr.is_null() {
-        return None;
+        return KeyBuild::Unnamed;
     }
 
-    let name_ptr: *const u8 =
-        unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*d).__bindgen_anon_1.d_name.name)) }
-            .ok()?;
+    let name_ptr = match unsafe {
+        bpf_probe_read_kernel(core::ptr::addr_of!((*d).__bindgen_anon_1.d_name.name))
+    } {
+        Ok(name_ptr) => name_ptr,
+        Err(_) => return KeyBuild::ProbeFailed,
+    };
     if name_ptr.is_null() {
-        return None;
+        return KeyBuild::Unnamed;
     }
 
-    let ino: u64 =
-        unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*inode_ptr).i_ino)) }.ok()?;
+    let ino = match unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*inode_ptr).i_ino)) } {
+        Ok(ino) => ino,
+        Err(_) => return KeyBuild::ProbeFailed,
+    };
 
     let mut name = [0u8; 64];
-    unsafe { bpf_probe_read_kernel_str_bytes(name_ptr, &mut name) }.ok()?;
+    if unsafe { bpf_probe_read_kernel_str_bytes(name_ptr, &mut name) }.is_err() {
+        return KeyBuild::ProbeFailed;
+    }
 
-    Some(InodeKey { name, ino })
+    KeyBuild::Key(InodeKey { name, ino })
 }
 
 /// Build the block-map key for an inode, keying on the entry's name and inode
+///
+/// inode_permission receives no dentry, so the name comes from
+/// inode->i_dentry.first. An inode exposed under several names (bind mounts,
+/// hard links) can therefore be keyed under an alias the caller didn't use and
+/// fail open. Accepted: cardwire's targets (sysfs entries, DRM device nodes)
+/// have no aliases, and walking i_dentry would need an unbounded loop the
+/// verifier rejects
 #[inline(always)]
-pub unsafe fn inode_key(inode_ptr: *const inode) -> Option<InodeKey> {
+pub unsafe fn inode_key(inode_ptr: *const inode) -> KeyBuild {
     if inode_ptr.is_null() {
-        return None;
+        return KeyBuild::Unnamed;
     }
 
     let alias = unsafe { (*inode_ptr).__bindgen_anon_2.i_dentry.first };
     if alias.is_null() {
-        return None;
+        // Anonymous inode (epoll, eventfd, dma-buf, ...): no name by design
+        return KeyBuild::Unnamed;
     }
 
     // The workspace profile enables overflow-checks, so pointer arithmetic
@@ -286,6 +315,18 @@ pub const SCAN_READ_FAILED: u32 = 1;
 /// A hidden entry could not be merged into the previous one, the scan stopped
 pub const SCAN_WRITE_FAILED: u32 = 2;
 
+/// Largest getdents64 return value the hook scans, must match the retval guard
+/// in the exit hook
+const GETDENTS_BUF_MAX: u64 = 32768;
+
+/// Iteration bound for the dirent scan
+///
+/// One buffer holds at most GETDENTS_BUF_MAX / sizeof(linux_dirent64)
+/// header-sized records, plus one iteration to observe the bounds-check miss
+/// that ends the scan, so the bound can never truncate a buffer silently
+pub const MAX_DIRENTS: u32 =
+    (GETDENTS_BUF_MAX / core::mem::size_of::<linux_dirent64>() as u64) as u32 + 1;
+
 /// State shared between the getdents64 exit hook and the bpf_loop callback
 #[repr(C)]
 pub struct ScanCtx {
@@ -299,6 +340,9 @@ pub struct ScanCtx {
     pub prev_reclen: u16,
     /// One of the SCAN_* constants
     pub status: u32,
+    /// Kernel return code of the failed write, valid when status is
+    /// SCAN_WRITE_FAILED
+    pub errno: i32,
 }
 
 /// One iteration of the getdents64 buffer scan
@@ -329,8 +373,9 @@ pub unsafe extern "C" fn scan_dirent(_index: u32, scan: *mut ScanCtx) -> u64 {
 
     let reclen = dirent.d_reclen;
 
-    // Malformed
-    if reclen == 0 || reclen > 512 {
+    // Malformed: a record shorter than its own header can't be valid, and
+    // advancing by it would also break the MAX_DIRENTS bound
+    if (reclen as usize) < core::mem::size_of::<linux_dirent64>() || reclen > 512 {
         return 1;
     }
 
@@ -357,9 +402,13 @@ pub unsafe extern "C" fn scan_dirent(_index: u32, scan: *mut ScanCtx) -> u64 {
         if scan.prev_ptr != 0 {
             let new_reclen = scan.prev_reclen.wrapping_add(reclen);
 
-            let reclen_ptr = scan.prev_ptr.wrapping_add(16) as *mut u16;
-            if unsafe { bpf_probe_write_user(reclen_ptr, &new_reclen) }.is_err() {
+            let reclen_ptr = scan
+                .prev_ptr
+                .wrapping_add(core::mem::offset_of!(linux_dirent64, d_reclen) as u64)
+                as *mut u16;
+            if let Err(err) = unsafe { bpf_probe_write_user(reclen_ptr, &new_reclen) } {
                 scan.status = SCAN_WRITE_FAILED;
+                scan.errno = err;
                 return 1;
             }
 

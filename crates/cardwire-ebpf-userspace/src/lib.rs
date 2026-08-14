@@ -134,10 +134,19 @@ impl EbpfBlocker {
             .map_err(CardwireEbpfError::aya)
         {
             Ok(_) => {
-                did_sys_exit_getdents64_success = true;
-                cardwire_sys_exit_getdents64
+                // The flag gates sys_enter_getdents64, which would otherwise
+                // fill CW_DIRENT with no exit hook to drain it: only raise it
+                // once the exit hook is actually attached
+                match cardwire_sys_exit_getdents64
                     .attach("syscalls", "sys_exit_getdents64")
-                    .map_err(CardwireEbpfError::aya)?;
+                    .map_err(CardwireEbpfError::aya)
+                {
+                    Ok(_) => did_sys_exit_getdents64_success = true,
+                    Err(err) => {
+                        warn!("Failed to attach sys_exit_getdents64: {}", err);
+                        warn!("falling back to a weakened cardwired...");
+                    }
+                }
             }
             Err(err) => {
                 // If we cannot load the program, it usually mean the kernel lockdown is enabled
@@ -165,9 +174,16 @@ impl EbpfBlocker {
                 .map_err(CardwireEbpfError::aya)
             {
                 Ok(_) => {
-                    cardwire_sys_enter_getdents64
+                    match cardwire_sys_enter_getdents64
                         .attach("syscalls", "sys_enter_getdents64")
-                        .map_err(CardwireEbpfError::aya)?;
+                        .map_err(CardwireEbpfError::aya)
+                    {
+                        Ok(_) => {}
+                        Err(err) => {
+                            warn!("Failed to attach sys_enter_getdents64: {}", err);
+                            warn!("falling back to a weakened cardwired...");
+                        }
+                    }
                 }
                 Err(err) => {
                     let lockdown = is_lockdown_enabled();

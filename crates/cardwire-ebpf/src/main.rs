@@ -4,11 +4,11 @@
 use aya_ebpf::{
     helpers::{bpf_get_current_pid_tgid, bpf_loop}, macros::{lsm, tracepoint}, programs::{LsmContext, TracePointContext}
 };
-use aya_log_ebpf::{error, warn};
+use aya_log_ebpf::{debug, error, warn};
 
 use crate::{
     helpers::{
-        SCAN_OK, SCAN_READ_FAILED, SCAN_WRITE_FAILED, ScanCtx, dentry_key, inode_key, is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_manual, is_smart, scan_dirent
+        KeyBuild, MAX_DIRENTS, SCAN_OK, SCAN_READ_FAILED, SCAN_WRITE_FAILED, ScanCtx, dentry_key, inode_key, is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_manual, is_smart, scan_dirent
     }, maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent, InodeKey}, vmlinux::{dentry, file, inode, path}
 };
 
@@ -127,12 +127,22 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
         return ReturnCode::SUCCESS;
     }
 
-    let Some(key) = (unsafe { dentry_key(d) }) else {
-        error!(
-            &ctx,
-            "EBPF dentry_key() could not build a key in file_open, skipping"
-        );
-        return ReturnCode::SUCCESS;
+    let key = match unsafe { dentry_key(d) } {
+        KeyBuild::Key(key) => key,
+        KeyBuild::Unnamed => {
+            debug!(
+                &ctx,
+                "EBPF dentry_key() found no name in file_open, skipping"
+            );
+            return ReturnCode::SUCCESS;
+        }
+        KeyBuild::ProbeFailed => {
+            error!(
+                &ctx,
+                "EBPF dentry_key() could not read the dentry in file_open, skipping"
+            );
+            return ReturnCode::SUCCESS;
+        }
     };
 
     match unsafe { is_inode_blocked(key) } {
@@ -197,12 +207,22 @@ unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
         return ReturnCode::SUCCESS;
     }
 
-    let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
-        error!(
-            &ctx,
-            "EBPF inode_key() could not build a key in inode_permission, skipping"
-        );
-        return ReturnCode::SUCCESS;
+    let key = match unsafe { inode_key(inode_ptr) } {
+        KeyBuild::Key(key) => key,
+        KeyBuild::Unnamed => {
+            debug!(
+                &ctx,
+                "EBPF inode_key() found an unnamed inode in inode_permission, skipping"
+            );
+            return ReturnCode::SUCCESS;
+        }
+        KeyBuild::ProbeFailed => {
+            error!(
+                &ctx,
+                "EBPF inode_key() could not read the inode in inode_permission, skipping"
+            );
+            return ReturnCode::SUCCESS;
+        }
     };
 
     match unsafe { is_inode_blocked(key) } {
@@ -271,12 +291,22 @@ unsafe fn try_inode_getattr(ctx: LsmContext) -> Result<i32, i32> {
         return ReturnCode::SUCCESS;
     }
 
-    let Some(key) = (unsafe { dentry_key(dentry_ptr) }) else {
-        error!(
-            &ctx,
-            "EBPF dentry_key() could not build a key in inode_getattr, skipping"
-        );
-        return ReturnCode::SUCCESS;
+    let key = match unsafe { dentry_key(dentry_ptr) } {
+        KeyBuild::Key(key) => key,
+        KeyBuild::Unnamed => {
+            debug!(
+                &ctx,
+                "EBPF dentry_key() found no name in inode_getattr, skipping"
+            );
+            return ReturnCode::SUCCESS;
+        }
+        KeyBuild::ProbeFailed => {
+            error!(
+                &ctx,
+                "EBPF dentry_key() could not read the dentry in inode_getattr, skipping"
+            );
+            return ReturnCode::SUCCESS;
+        }
     };
 
     match unsafe { is_inode_blocked(key) } {
@@ -378,6 +408,7 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
         prev_ptr: 0,
         prev_reclen: 0,
         status: SCAN_OK,
+        errno: 0,
     };
 
     // The callback reference must be transmuted from the fn pointer, never
@@ -390,11 +421,16 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
         )
     };
     let scan_ptr: *mut core::ffi::c_void = core::ptr::addr_of_mut!(scan).cast();
-    let _ = unsafe { bpf_loop(512, callback, scan_ptr, 0) };
+    // MAX_DIRENTS covers any buffer the retval guard lets through, a negative
+    // return would mean the helper itself rejected the call (EINVAL/E2BIG)
+    let loop_ret = unsafe { bpf_loop(MAX_DIRENTS, callback, scan_ptr, 0) };
+    if loop_ret < 0 {
+        warn!(&ctx, "bpf_loop failed with {}", loop_ret);
+    }
 
     match scan.status {
         SCAN_WRITE_FAILED => {
-            error!(&ctx, "failed to write new reclen");
+            error!(&ctx, "failed to write new reclen {}", scan.errno);
             ReturnCode::SUCCESS
         }
         SCAN_READ_FAILED => Err(-1),
