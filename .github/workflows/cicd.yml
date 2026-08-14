@@ -70,7 +70,7 @@ jobs:
       - name: Install Nightly Rust (for aya-ebpf)
         uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly-2026-08-04
+          toolchain: nightly-2026-08-12
           components: rust-src
       - name: Install Stable Rust
         uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
@@ -100,7 +100,7 @@ jobs:
       - name: Install Nightly Rust (for aya-ebpf)
         uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly-2026-08-04
+          toolchain: nightly-2026-08-12
           components: rust-src
       - name: Install Stable Rust
         uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0

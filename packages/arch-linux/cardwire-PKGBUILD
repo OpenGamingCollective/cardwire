@@ -15,7 +15,7 @@ sha256sums=('37882d4d0d431c3ff48e24bd47cea03b7847080623254d8bdb4af9846134d700')
 
 prepare(){
 	cd "${pkgbase}-${pkgver}"
-	rustup toolchain install nightly-2026-08-04 --component rust-src
+	rustup toolchain install nightly-2026-08-12 --component rust-src
 	cargo fetch --locked
 }
 options=('!lto')

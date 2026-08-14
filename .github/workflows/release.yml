@@ -33,7 +33,7 @@ jobs:
       - name: Install Nightly Rust (for aya-ebpf)
         uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly-2026-08-04
+          toolchain: nightly-2026-08-12
           components: rust-src
 
       - name: Install Stable Rust
@@ -70,7 +70,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install dependencies
         run: |
-          pacman -Sy git base-devel pacman-contrib --noconfirm
+          pacman -Sy git base-devel pacman-contrib curl zstd --noconfirm
+      # The distro bpf-linker (0.11.0-1) links against stable llvm-libs and cannot lower
+      # trunk-LLVM bitcode emitted by the rustup nightly above. Install the upstream
+      # release binary instead: it is built against the rustc trunk LLVM matching
+      # nightly-2026-08-12 and shadows /usr/bin/bpf-linker via /usr/local/bin.
+      # latest/download tracks upstream releases, nothing is version-pinned.
+      - name: Install upstream bpf-linker
+        run: |
+          curl -Ls https://github.com/aya-rs/bpf-linker/releases/latest/download/bpf-linker-x86_64-unknown-linux-musl.tar.zst | tar --zstd -x -C /usr/local/bin
+          chmod 755 /usr/local/bin/bpf-linker
+          /usr/local/bin/bpf-linker --version
       - name: Prepare PKGBUILD
         run: |
           mkdir /build
