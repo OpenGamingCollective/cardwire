@@ -11,6 +11,10 @@ use crate::{
 use crate::vmlinux::{inode, task_struct};
 
 /// Build the block-map key for an inode
+///
+/// None means the inode carries no superblock. Every live inode has one, so
+/// this cannot happen on a healthy kernel: callers log it to make clear the
+/// fault is upstream and not in cardwire
 #[inline(always)]
 pub unsafe fn inode_key(inode_ptr: *const inode) -> Option<InodeKey> {
     let sb = unsafe { (*inode_ptr).i_sb };
