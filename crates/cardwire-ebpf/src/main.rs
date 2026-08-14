@@ -9,7 +9,7 @@ use aya_log_ebpf::{debug, error, warn};
 use crate::{
     helpers::{
         KeyBuild, MAX_DIRENTS, SCAN_OK, SCAN_READ_FAILED, SCAN_WRITE_FAILED, ScanCtx, dentry_key, inode_key, is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_manual, is_smart, scan_dirent
-    }, maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent, InodeKey}, vmlinux::{dentry, file, inode, path}
+    }, maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent}, vmlinux::{dentry, file, inode, path}
 };
 
 #[allow(
