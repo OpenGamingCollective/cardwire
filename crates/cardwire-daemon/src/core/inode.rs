@@ -92,7 +92,7 @@ pub fn render_to_inode(render: u32) -> Result<InodeKey> {
         warn!("failed to get inode for {}: {}", render_path, e);
         e
     })?;
-    Ok(InodeKey::new(metadata.dev(), metadata.ino()))
+    Ok(InodeKey::new(&format!("renderD{}", render), metadata.ino()))
 }
 
 pub fn card_to_inode(card: u32) -> Result<InodeKey> {
@@ -101,7 +101,7 @@ pub fn card_to_inode(card: u32) -> Result<InodeKey> {
         warn!("failed to get inode for {}: {}", card_path, e);
         e
     })?;
-    Ok(InodeKey::new(metadata.dev(), metadata.ino()))
+    Ok(InodeKey::new(&format!("card{}", card), metadata.ino()))
 }
 
 // Here return a list of inode that contain the pci card, the audio card and their parents
@@ -117,13 +117,13 @@ pub fn pci_to_inode(
         // First get the link ino
         let pci_path = format!("/sys/bus/pci/devices/{}", pci);
         if let Ok(metadata) = fs::metadata(&pci_path) {
-            inodes.push(InodeKey::new(metadata.dev(), metadata.ino()));
+            inodes.push(InodeKey::new(pci, metadata.ino()));
         }
 
         // Now without following link
         let pci_path = format!("/sys/bus/pci/devices/{}", pci);
         if let Ok(metadata) = fs::symlink_metadata(&pci_path) {
-            inodes.push(InodeKey::new(metadata.dev(), metadata.ino()));
+            inodes.push(InodeKey::new(pci, metadata.ino()));
         }
     };
 
@@ -153,7 +153,7 @@ pub fn single_pci_to_inode(pci: &str) -> Result<InodeKey> {
         warn!("failed to get inode for {}: {}", pci_path, e);
         e
     })?;
-    Ok(InodeKey::new(metadata.dev(), metadata.ino()))
+    Ok(InodeKey::new(pci, metadata.ino()))
 }
 
 pub fn nvidia_to_inode(nvidia_minor: u32) -> Result<InodeKey> {
@@ -162,7 +162,10 @@ pub fn nvidia_to_inode(nvidia_minor: u32) -> Result<InodeKey> {
         warn!("failed to get inode for {}: {}", nvidia_path, e);
         e
     })?;
-    Ok(InodeKey::new(metadata.dev(), metadata.ino()))
+    Ok(InodeKey::new(
+        &format!("nvidia{}", nvidia_minor),
+        metadata.ino(),
+    ))
 }
 
 /// The only gpu vendor that need it's backlight to be blocked is nvidia
@@ -172,7 +175,10 @@ pub fn backlight_to_inode(nvidia_minor: u32) -> Result<InodeKey> {
         warn!("failed to get inode for {}: {}", nvidia_path, e);
         e
     })?;
-    Ok(InodeKey::new(metadata.dev(), metadata.ino()))
+    Ok(InodeKey::new(
+        &format!("nvidia_{}", nvidia_minor),
+        metadata.ino(),
+    ))
 }
 
 pub fn exp_nvidia_inodes() -> Result<Vec<InodeKey>> {
@@ -181,7 +187,7 @@ pub fn exp_nvidia_inodes() -> Result<Vec<InodeKey>> {
     // Get nvidiactl inode
     let nvidiactl = "/dev/nvidiactl";
     if let Ok(metadata) = fs::metadata(nvidiactl) {
-        inodes.push(InodeKey::new(metadata.dev(), metadata.ino()));
+        inodes.push(InodeKey::new("nvidiactl", metadata.ino()));
     }
 
     // Now try to find the vulkan file
@@ -202,7 +208,10 @@ pub fn exp_nvidia_inodes() -> Result<Vec<InodeKey>> {
         };
 
         for entry in entries.flatten() {
-            let name = entry.file_name();
+            let entry_name = entry.file_name();
+            let Some(name) = entry_name.to_str() else {
+                continue;
+            };
 
             if (name == "nvidia_icd.json"
                 || name == "nvidia_icd.x86_64.json"
@@ -210,7 +219,7 @@ pub fn exp_nvidia_inodes() -> Result<Vec<InodeKey>> {
                 && let Ok(metadata) = fs::metadata(entry.path())
                 && metadata.is_file()
             {
-                inodes.push(InodeKey::new(metadata.dev(), metadata.ino()));
+                inodes.push(InodeKey::new(name, metadata.ino()));
             }
         }
     }
@@ -232,7 +241,7 @@ pub fn sys_drm_inodes(render: u32, card: u32) -> Result<Vec<InodeKey>> {
             // we matched with the blocked device, get the inodes without following the link
             let inode_res = fs::symlink_metadata(entry.path());
             if let Ok(meta) = inode_res {
-                inodes.push(InodeKey::new(meta.dev(), meta.ino()));
+                inodes.push(InodeKey::new(&entry_name, meta.ino()));
             }
         }
     }
@@ -247,12 +256,12 @@ pub fn sys_hwmon(pci: &str) -> Result<Vec<InodeKey>> {
 
     for entry in fs::read_dir(sysfs_pci_path)? {
         let entry = entry?;
-        // First add hwmon from the sysfs pci folder
-        if let Ok(meta) = fs::metadata(entry.path()) {
-            inodes.push(InodeKey::new(meta.dev(), meta.ino()));
-        }
-        // Then add from /sys/class/hwmon
         if let Ok(hwmon_entry) = entry.file_name().into_string() {
+            // First add hwmon from the sysfs pci folder
+            if let Ok(meta) = fs::metadata(entry.path()) {
+                inodes.push(InodeKey::new(&hwmon_entry, meta.ino()));
+            }
+            // Then add from /sys/class/hwmon
             let hwmon_path = format!("/sys/class/hwmon/{}", hwmon_entry);
             let hwmon_path = Path::new(&hwmon_path);
             // skip if folder doesnt exist
@@ -260,10 +269,10 @@ pub fn sys_hwmon(pci: &str) -> Result<Vec<InodeKey>> {
                 continue;
             }
             if let Ok(meta) = fs::metadata(hwmon_path) {
-                inodes.push(InodeKey::new(meta.dev(), meta.ino()));
+                inodes.push(InodeKey::new(&hwmon_entry, meta.ino()));
             }
             if let Ok(meta) = fs::symlink_metadata(hwmon_path) {
-                inodes.push(InodeKey::new(meta.dev(), meta.ino()));
+                inodes.push(InodeKey::new(&hwmon_entry, meta.ino()));
             }
         }
     }
