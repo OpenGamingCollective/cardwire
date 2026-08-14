@@ -1,5 +1,17 @@
 # Maintainer: luytan <luytan@khora.me>
 
+# NOTE: the repo bpf-linker (0.11.0-1) is linked against stable llvm-libs (22.x)
+# and cannot lower the trunk-LLVM bitcode emitted by the rustup nightly this
+# package builds the eBPF crate with ("A call to built-in function 'memset' is
+# not supported"). Until it is rebuilt against a matching LLVM, build bpf-linker
+# from source with the same nightly before making this package:
+#   rustup toolchain install nightly-2026-08-12 --component rust-src
+#   cargo +nightly-2026-08-12 install --locked bpf-linker@0.10.4
+# 0.10.x proxies rustc's LLVM (aya-rustc-llvm-proxy), so the linker always
+# matches the compiler that emitted the bitcode. The binary lands in
+# ~/.cargo/bin, which shadows /usr/bin/bpf-linker. No version constraint is set
+# here on purpose so the package heals itself once the distro rebuild lands.
+
 pkgbase=cardwire
 pkgname=cardwire
 pkgver=0.10.2

@@ -40,9 +40,13 @@ jobs:
         uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
 
       - name: Install bpf-linker
-        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
-        with:
-          tool: bpf-linker
+        # Build bpf-linker from source with the same nightly that emits the
+        # bitcode: 0.10.x routes LLVM through aya-rustc-llvm-proxy, so the
+        # linker's LLVM always matches the rustc that compiled it and trunk
+        # bitcode links on every arch. Prebuilt binaries (taiki-e/install-action,
+        # upstream release assets) pin their own LLVM and break against trunk
+        # nightlies ("Invalid record" / "memset is not supported").
+        run: cargo +nightly-2026-08-12 install --locked bpf-linker@0.10.4
       - name: Build cardwire
         run: |
           cargo install cargo-deb
@@ -70,16 +74,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install dependencies
         run: |
-          pacman -Sy git base-devel pacman-contrib curl zstd --noconfirm
-      # The distro bpf-linker (0.11.0-1) links against stable llvm-libs and cannot lower
-      # trunk-LLVM bitcode emitted by the rustup nightly above. Install the upstream
-      # release binary instead: it is built against the rustc trunk LLVM matching
-      # nightly-2026-08-12 and shadows /usr/bin/bpf-linker via /usr/local/bin.
-      # latest/download tracks upstream releases, nothing is version-pinned.
-      - name: Install upstream bpf-linker
+          pacman -Sy git base-devel pacman-contrib rustup --noconfirm
+      # The distro bpf-linker (0.11.0-1) links against stable llvm-libs and cannot
+      # lower the trunk-LLVM bitcode emitted by the rustup nightly the PKGBUILD
+      # builds with. Install bpf-linker from source with that same nightly
+      # instead: 0.10.x routes LLVM through aya-rustc-llvm-proxy, so the linker's
+      # LLVM always matches the rustc that compiled it. --root /usr/local shadows
+      # /usr/bin/bpf-linker for every user; the PKGBUILD's makedepend is
+      # satisfied by the distro package without it being used.
+      - name: Install bpf-linker
         run: |
-          curl -Ls https://github.com/aya-rs/bpf-linker/releases/latest/download/bpf-linker-x86_64-unknown-linux-musl.tar.zst | tar --zstd -x -C /usr/local/bin
-          chmod 755 /usr/local/bin/bpf-linker
+          rustup toolchain install nightly-2026-08-12 --component rust-src
+          cargo +nightly-2026-08-12 install --locked bpf-linker@0.10.4 --root /usr/local
           /usr/local/bin/bpf-linker --version
       - name: Prepare PKGBUILD
         run: |
