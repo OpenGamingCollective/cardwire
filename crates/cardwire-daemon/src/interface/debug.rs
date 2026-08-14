@@ -1,11 +1,14 @@
 use crate::{
     core::{
-        env::compute_switcheroo_env, gpu::GpuEnumerator, pci::{self, DbusPciDevice, PciDevice}
+        env::compute_switcheroo_env, gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self, DbusPciDevice, PciDevice}
     }, interface::SwitcherooInterface, tasks::watch_power_state
 };
-use cardwire_ebpf_userspace::EbpfBlocker;
-use log::{info, warn};
-use std::{collections::BTreeMap, sync::Arc};
+use anyhow::Context;
+use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
+use log::{error, info, warn};
+use std::{
+    collections::{BTreeMap, HashSet}, sync::Arc
+};
 use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
@@ -46,6 +49,61 @@ impl DebugInterface {
             switcheroo,
         })
     }
+
+    /// Reconcile CW_EXP_BLK_INO with the nvidia files currently on disk
+    ///
+    /// Missing inodes only warn, the map keeps what it holds. A failed map
+    /// write is returned: the block would be advertised but not enforced
+    pub async fn sync_nvidia_inodes(&self) -> anyhow::Result<()> {
+        let target = {
+            let gpu_list = self.gpu_list.read().await;
+            gpu_list
+                .iter()
+                .find(|(_, gpu)| {
+                    gpu.device.gpu_vendor() == GpuVendor::Nvidia && !gpu.device.is_default()
+                })
+                .map(|(id, _)| *id as u32)
+        };
+
+        let inodes = match target {
+            Some(_) => match exp_nvidia_inodes() {
+                Ok(inodes) => inodes,
+                Err(err) => {
+                    warn!(
+                        "failed to read nvidia inodes, leaving the map as is: {:#}",
+                        err
+                    );
+                    return Ok(());
+                }
+            },
+            None => Vec::new(),
+        };
+
+        let mut blocker = self.blocker.write().await;
+        match target {
+            Some(gpu_id) => blocker.sync_exp_inodes(inodes, gpu_id),
+            None => blocker.clear_exp_inodes(),
+        }
+        .context("failed to write the CW_EXP_BLK_INO map")
+    }
+
+    async fn drop_unclaimed_inodes(&self, previous: Vec<InodeKey>) {
+        let claimed: HashSet<InodeKey> = {
+            let gpu_interfaces = self.gpu_list.read().await;
+            let mut claimed = HashSet::new();
+            for gpu in gpu_interfaces.values() {
+                claimed.extend(gpu.pushed_inodes().await);
+            }
+            claimed
+        };
+
+        let mut blocker = self.blocker.write().await;
+        for stale in previous.iter().filter(|key| !claimed.contains(key)) {
+            if let Err(err) = blocker.remove_inode(*stale) {
+                warn!("failed to drop stale inode {:?}: {}", stale, err);
+            }
+        }
+    }
 }
 
 #[interface(name = "org.opengamingcollective.cardwire.Debug")]
@@ -76,13 +134,15 @@ impl DebugInterface {
             let mut power_tasks = self.power_tasks.write().await;
 
             // get rid of the old gpu api and the old tasks
-            for id in gpu_interfaces.keys() {
+            let mut previous_inodes: Vec<InodeKey> = Vec::new();
+            for (id, gpu) in gpu_interfaces.iter() {
                 let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
                 let _ = object_server.remove::<GpuInterface, &str>(&path).await;
                 // if task is present, abort
                 if let Some(handle) = power_tasks.remove(id) {
                     handle.abort();
                 }
+                previous_inodes.extend(gpu.take_pushed_inodes().await);
             }
 
             // Empty the current gpu_interfaces
@@ -164,6 +224,14 @@ impl DebugInterface {
                 {
                     warn!("failed to fall back to hybrid mode on hotplug: {fb}");
                 }
+            }
+
+            self.drop_unclaimed_inodes(previous_inodes).await;
+            if let Err(err) = self.sync_nvidia_inodes().await {
+                error!(
+                    "nvidia block is out of date after the gpu refresh: {:#}",
+                    err
+                );
             }
             self.switcheroo.emit_gpu_list_changed().await;
         }

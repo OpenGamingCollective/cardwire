@@ -2,7 +2,7 @@
 //! startup tasks and background-task futures.
 use crate::{
     analyzer::CardwireAnalyzer, core::{
-        env::compute_switcheroo_env, gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self}
+        env::compute_switcheroo_env, gpu::GpuEnumerator, pci::{self}
     }, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
     }, tasks
@@ -118,8 +118,12 @@ impl DaemonManager {
 
         // Set nvidia setting
         self.set_nvidia_setting().await?;
-        // Push nvidia inodes, if empty/error just ignore
-        self.block_nvidia_inodes().await?;
+        // Fatal: the setting is already on, so an unwritable map advertises a
+        // block that is never enforced
+        self.debug_interface
+            .sync_nvidia_inodes()
+            .await
+            .context("failed to prime the experimental nvidia block")?;
 
         // Add some programs to the whitelisted comm map
         self.whitelist_programs().await?;
@@ -165,26 +169,6 @@ impl DaemonManager {
                     .into(),
             )
             .map_err(|err| err.into())
-    }
-    async fn block_nvidia_inodes(&self) -> Result<()> {
-        let gpus_list = self.inner.gpu_list.read().await;
-        let mut blocker = self.inner.blocker.write().await;
-        // Only block if the device has a Nvidia gpu
-        for (id, gpu) in gpus_list.iter() {
-            if gpu.device.gpu_vendor() == GpuVendor::Nvidia
-                && !gpu.device.is_default()
-                && let Ok(inodes) = exp_nvidia_inodes()
-                && !inodes.is_empty()
-            {
-                for inode in inodes {
-                    if let Err(err) = blocker.block_exp_inode(inode, *id as u32) {
-                        error!("failed to block nvidia's file {}: {}", inode, err);
-                    }
-                }
-                break;
-            }
-        }
-        Ok(())
     }
     async fn whitelist_programs(&self) -> Result<()> {
         // List of allowed programs

@@ -2,14 +2,16 @@
 #![no_main]
 
 use aya_ebpf::{
-    helpers::{bpf_get_current_pid_tgid, bpf_probe_read_user, bpf_probe_write_user}, macros::{lsm, tracepoint}, programs::{LsmContext, TracePointContext}
+    helpers::{bpf_get_current_pid_tgid, bpf_probe_read_user, bpf_probe_write_user}, macros::{fentry, lsm, tracepoint}, programs::{FEntryContext, LsmContext, TracePointContext}
 };
 use aya_log_ebpf::{error, warn};
 
 use crate::{
     helpers::{
-        is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_manual, is_smart
-    }, maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent}, vmlinux::{dentry, file, inode, linux_dirent64, path}
+        inode_key, is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_manual, is_smart
+    }, maps::{
+        CW_ALLOWED_PID, CW_DIRENT, CW_DIRENT_DEV, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent, InodeKey
+    }, vmlinux::{dentry, file, inode, linux_dirent64, path}
 };
 
 #[allow(
@@ -133,9 +135,16 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
     if inode_ptr.is_null() {
         return ReturnCode::SUCCESS;
     }
-    let inode: u64 = unsafe { (*inode_ptr).i_ino };
 
-    match unsafe { is_inode_blocked(inode) } {
+    let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
+        error!(
+            &ctx,
+            "EBPF inode_key() got an inode with no superblock in file_open, this is a kernel bug, skipping"
+        );
+        return ReturnCode::SUCCESS;
+    };
+
+    match unsafe { is_inode_blocked(key) } {
         true => ReturnCode::ENOENT,
         false => ReturnCode::SUCCESS,
     }
@@ -196,9 +205,16 @@ unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
     if inode_ptr.is_null() {
         return ReturnCode::SUCCESS;
     }
-    let inode: u64 = unsafe { (*inode_ptr).i_ino };
 
-    match unsafe { is_inode_blocked(inode) } {
+    let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
+        error!(
+            &ctx,
+            "EBPF inode_key() got an inode with no superblock in inode_permission, this is a kernel bug, skipping"
+        );
+        return ReturnCode::SUCCESS;
+    };
+
+    match unsafe { is_inode_blocked(key) } {
         true => ReturnCode::ENOENT,
         false => ReturnCode::SUCCESS,
     }
@@ -270,9 +286,16 @@ unsafe fn try_inode_getattr(ctx: LsmContext) -> Result<i32, i32> {
     if inode_ptr.is_null() {
         return ReturnCode::SUCCESS;
     }
-    let inode: u64 = unsafe { (*inode_ptr).i_ino };
 
-    match unsafe { is_inode_blocked(inode) } {
+    let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
+        error!(
+            &ctx,
+            "EBPF inode_key() got an inode with no superblock in inode_getattr, this is a kernel bug, skipping"
+        );
+        return ReturnCode::SUCCESS;
+    };
+
+    match unsafe { is_inode_blocked(key) } {
         true => ReturnCode::ENOENT,
         false => ReturnCode::SUCCESS,
     }
@@ -337,6 +360,73 @@ unsafe fn try_tracepoint_enter_getdents64(ctx: TracePointContext) -> Result<i32,
     ReturnCode::SUCCESS
 }
 
+/// Records the device id the getdents64 exit hook pairs with each d_ino
+#[fentry(function = "iterate_dir")]
+pub fn fentry_iterate_dir(ctx: FEntryContext) -> u32 {
+    match unsafe { try_fentry_iterate_dir(ctx) } {
+        Ok(ret) => ret as u32,
+        Err(ret) => ret as u32,
+    }
+}
+
+unsafe fn try_fentry_iterate_dir(ctx: FEntryContext) -> Result<i32, i32> {
+    if is_comm_whitelisted() {
+        return ReturnCode::SUCCESS;
+    }
+
+    match is_cardwired() {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => return ReturnCode::SUCCESS,
+    }
+
+    match unsafe { is_hybrid() } {
+        Some(res) => {
+            if res {
+                return ReturnCode::SUCCESS;
+            }
+        }
+        None => return ReturnCode::SUCCESS,
+    }
+
+    // Only the getdents64 exit hook drains this map, recording for iterate_dir's
+    // other callers fills it for good and inserts then start failing open
+    let tid = bpf_get_current_pid_tgid() as u32;
+    if unsafe { CW_DIRENT.get(tid) }.is_none() {
+        return ReturnCode::SUCCESS;
+    }
+
+    let file_ptr: *const file = ctx.arg(0);
+    if file_ptr.is_null() {
+        return ReturnCode::SUCCESS;
+    }
+
+    let d: *mut dentry = unsafe { (*file_ptr).__bindgen_anon_1.f_path.dentry };
+    if d.is_null() {
+        return ReturnCode::SUCCESS;
+    }
+
+    let inode_ptr: *mut inode = unsafe { (*d).d_inode };
+    if inode_ptr.is_null() {
+        return ReturnCode::SUCCESS;
+    }
+
+    let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
+        error!(
+            &ctx,
+            "EBPF inode_key() got an inode with no superblock in iterate_dir, this is a kernel bug, skipping"
+        );
+        return ReturnCode::SUCCESS;
+    };
+
+    CW_DIRENT_DEV.insert(tid, key.dev, 0)?;
+
+    ReturnCode::SUCCESS
+}
+
 #[tracepoint]
 pub fn tracepoint_exit_getdents64(ctx: TracePointContext) -> u32 {
     match unsafe { try_tracepoint_exit_getdents64(ctx) } {
@@ -347,13 +437,18 @@ pub fn tracepoint_exit_getdents64(ctx: TracePointContext) -> u32 {
 
 unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, i32> {
     let tid = bpf_get_current_pid_tgid() as u32;
-    let dirent_ptr = match unsafe { CW_DIRENT.get(tid) } {
-        Some(ptr) => *ptr as *const linux_dirent64,
-        None => return ReturnCode::SUCCESS,
+
+    // Drain both maps up front to avoid a map leak on an early return
+    let dirp = unsafe { CW_DIRENT.get(tid) }.copied();
+    let _ = CW_DIRENT.remove(tid);
+    let dir_dev = unsafe { CW_DIRENT_DEV.get(tid) }.copied();
+    let _ = CW_DIRENT_DEV.remove(tid);
+
+    let (Some(dirp), Some(dir_dev)) = (dirp, dir_dev) else {
+        return ReturnCode::SUCCESS;
     };
 
-    // Remove entry immediately to avoid map leak
-    let _ = CW_DIRENT.remove(tid);
+    let dirent_ptr = dirp as *const linux_dirent64;
 
     let retval = match unsafe { ctx.read_at::<i64>(16) } {
         Ok(ret) => ret as u64,
@@ -389,7 +484,12 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
             break;
         }
 
-        let blocked = unsafe { is_inode_blocked(dirent.d_ino) };
+        let blocked = unsafe {
+            is_inode_blocked(InodeKey {
+                dev: dir_dev,
+                ino: dirent.d_ino,
+            })
+        };
         if blocked {
             // We can't hide the first entry
             if prev_ptr != 0 {
