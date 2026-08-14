@@ -137,6 +137,10 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
     }
 
     let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
+        error!(
+            &ctx,
+            "EBPF inode_key() got an inode with no superblock in file_open, this is a kernel bug, skipping"
+        );
         return ReturnCode::SUCCESS;
     };
 
@@ -203,6 +207,10 @@ unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
     }
 
     let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
+        error!(
+            &ctx,
+            "EBPF inode_key() got an inode with no superblock in inode_permission, this is a kernel bug, skipping"
+        );
         return ReturnCode::SUCCESS;
     };
 
@@ -280,6 +288,10 @@ unsafe fn try_inode_getattr(ctx: LsmContext) -> Result<i32, i32> {
     }
 
     let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
+        error!(
+            &ctx,
+            "EBPF inode_key() got an inode with no superblock in inode_getattr, this is a kernel bug, skipping"
+        );
         return ReturnCode::SUCCESS;
     };
 
@@ -403,6 +415,10 @@ unsafe fn try_fentry_iterate_dir(ctx: FEntryContext) -> Result<i32, i32> {
     }
 
     let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
+        error!(
+            &ctx,
+            "EBPF inode_key() got an inode with no superblock in iterate_dir, this is a kernel bug, skipping"
+        );
         return ReturnCode::SUCCESS;
     };
 
