@@ -2,6 +2,7 @@ mod args;
 mod completion;
 mod dbus;
 mod display;
+mod types;
 
 use std::{collections::BTreeMap, process::Stdio};
 
@@ -9,7 +10,7 @@ use args::{Args, CliMode, Commands, ConfigAction, DebugAction, ManagerAction};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
 
-use crate::display::print_devices_pci;
+use crate::{display::print_devices_pci, types::SystemType};
 
 const BIN_NAME: &str = "cardwire";
 
@@ -299,18 +300,28 @@ async fn main() -> anyhow::Result<()> {
                     ));
                 }
                 target
+            // No gpu specified
             } else {
-                let mut candidates: Vec<(&usize, &display::GpuDevice)> =
-                    available_gpu.iter().collect();
-                candidates.sort_by_key(|(_, gpu)| match (gpu.default, gpu.discrete) {
-                    (false, true) => 0,
-                    (_, true) => 1,
-                    (true, _) => 2,
-                    _ => 3,
-                });
-                candidates
-                    .into_iter()
-                    .find_map(|(_, gpu)| gpu.launchable.then_some(gpu))
+                available_gpu.retain(|_, gpu| gpu.available && gpu.launchable);
+                let system_type = SystemType::from_gpulist(&available_gpu);
+                match system_type {
+                    // 2 GPUs, one iGPU and one dGPU
+                    SystemType::Laptop => available_gpu
+                        .iter()
+                        .find(|(_, gpu)| !gpu.default && gpu.discrete),
+                    // 2 GPUs, use default discrete GPU
+                    SystemType::Desktop => available_gpu
+                        .iter()
+                        .find(|(_, gpu)| gpu.default && gpu.discrete),
+                    // 1 GPU or 3+ GPUs, get in this priority:
+                    // 0. Default Discrete GPU
+                    // 1. non-Default discrete GPU
+                    // 2. Others
+                    SystemType::Manual => available_gpu.iter().max_by_key(|(_, gpu)| {
+                        (gpu.default && gpu.discrete, gpu.discrete, gpu.default)
+                    }),
+                }
+                .map(|(_, gpu)| gpu)
             };
 
             if let Some(gpu) = target_gpu {
