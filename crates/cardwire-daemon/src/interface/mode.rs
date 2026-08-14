@@ -1,6 +1,6 @@
 //! Define the mode dbus
 use crate::{
-    core::gpu::{restart_nvidia_powerd, send_drm_uevent}, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface, config::ConfigMemory}, types::SystemType
+    core::gpu::{send_drm_uevent, start_nvidia_powerd, stop_nvidia_powerd}, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface, config::ConfigMemory}, types::SystemType
 };
 use anyhow::Result;
 use aya::maps::Array as AyaArray;
@@ -24,6 +24,8 @@ pub struct ModeInterface {
     mode_map: Arc<Mutex<AyaArray<aya::maps::MapData, u8>>>,
     // Mutex to serialize mode transitions
     transition: Arc<Mutex<()>>,
+    // Mutex to serialize nvidia-powerd start/stop operations
+    nvidia_powerd_lock: Arc<Mutex<()>>,
     // Signal emitter for mode changes (used by background tasks), populated once the interface is
     // served
     pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
@@ -45,6 +47,7 @@ impl ModeInterface {
             config: context.config.clone(),
             mode_map,
             transition: Arc::new(Mutex::new(())),
+            nvidia_powerd_lock: Arc::new(Mutex::new(())),
             signal_emitter: Arc::new(OnceLock::new()),
             switcheroo_int,
         })
@@ -98,8 +101,22 @@ impl ModeInterface {
         // Refresh the switcheroo api
         self.switcheroo_int.emit_gpu_list_changed().await;
 
-        // and at last, try to restart nvidia-powerd, ignore if error, it will be logged
-        task::spawn(restart_nvidia_powerd());
+        match mode {
+            Modes::Hybrid | Modes::Manual => {
+                let lock = self.nvidia_powerd_lock.clone();
+                task::spawn(async move {
+                    let _guard = lock.lock().await;
+                    start_nvidia_powerd().await;
+                });
+            }
+            Modes::Integrated | Modes::Smart => {
+                let lock = self.nvidia_powerd_lock.clone();
+                task::spawn(async move {
+                    let _guard = lock.lock().await;
+                    stop_nvidia_powerd().await;
+                });
+            }
+        }
 
         Ok(())
     }
