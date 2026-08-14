@@ -1,5 +1,5 @@
 use aya_ebpf::helpers::{
-    bpf_get_current_comm, bpf_get_current_pid_tgid, bpf_probe_read_kernel, generated::bpf_get_current_task
+    bpf_get_current_comm, bpf_get_current_pid_tgid, bpf_probe_read_kernel, bpf_probe_read_kernel_str_bytes, bpf_probe_read_user, bpf_probe_read_user_str_bytes, bpf_probe_write_user, generated::bpf_get_current_task
 };
 
 use crate::{
@@ -8,24 +8,62 @@ use crate::{
     }
 };
 
-use crate::vmlinux::{inode, task_struct};
+use crate::vmlinux::{dentry, inode, linux_dirent64, task_struct};
 
-/// Build the block-map key for an inode
+/// Build the block-map key for a dentry, keying on the entry's name and inode
 ///
-/// None means the inode carries no superblock. Every live inode has one, so
-/// this cannot happen on a healthy kernel: callers log it to make clear the
-/// fault is upstream and not in cardwire
+/// The name is copied with bpf_probe_read_kernel_str_bytes, which stops at the
+/// NUL and zero-fills the rest of the buffer: the result is byte-identical to
+/// the zero-padded key userspace builds from the path's basename
 #[inline(always)]
-pub unsafe fn inode_key(inode_ptr: *const inode) -> Option<InodeKey> {
-    let sb = unsafe { (*inode_ptr).i_sb };
-    if sb.is_null() {
+pub unsafe fn dentry_key(d: *const dentry) -> Option<InodeKey> {
+    if d.is_null() {
         return None;
     }
 
-    Some(InodeKey {
-        dev: unsafe { (*sb).s_dev } as u64,
-        ino: unsafe { (*inode_ptr).i_ino },
-    })
+    // The dentry may have been reconstructed from inode->i_dentry.first
+    // (inode_permission), which the verifier refuses to dereference directly:
+    // read the fields through probe reads instead
+    let inode_ptr: *mut inode =
+        unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*d).d_inode)) }.ok()?;
+    if inode_ptr.is_null() {
+        return None;
+    }
+
+    let name_ptr: *const u8 =
+        unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*d).__bindgen_anon_1.d_name.name)) }
+            .ok()?;
+    if name_ptr.is_null() {
+        return None;
+    }
+
+    let ino: u64 =
+        unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*inode_ptr).i_ino)) }.ok()?;
+
+    let mut name = [0u8; 64];
+    unsafe { bpf_probe_read_kernel_str_bytes(name_ptr, &mut name) }.ok()?;
+
+    Some(InodeKey { name, ino })
+}
+
+/// Build the block-map key for an inode, keying on the entry's name and inode
+#[inline(always)]
+pub unsafe fn inode_key(inode_ptr: *const inode) -> Option<InodeKey> {
+    if inode_ptr.is_null() {
+        return None;
+    }
+
+    let alias = unsafe { (*inode_ptr).__bindgen_anon_2.i_dentry.first };
+    if alias.is_null() {
+        return None;
+    }
+
+    // The workspace profile enables overflow-checks, so pointer arithmetic
+    // must be wrapping or rustc emits a panic branch
+    let d = (alias as usize).wrapping_sub(core::mem::offset_of!(dentry, __bindgen_anon_3))
+        as *mut dentry;
+
+    unsafe { dentry_key(d) }
 }
 
 /// Verify if the file is inside CW_BLOCKED_INO or not
@@ -239,4 +277,100 @@ pub unsafe fn is_nvidia_setting_enabled() -> bool {
         Some(setting) => *setting,
         None => false,
     }
+}
+
+/// The scan ran to completion (or hit a non-fatal stop condition)
+pub const SCAN_OK: u32 = 0;
+/// A dirent header could not be read, the syscall result must not be trusted
+pub const SCAN_READ_FAILED: u32 = 1;
+/// A hidden entry could not be merged into the previous one, the scan stopped
+pub const SCAN_WRITE_FAILED: u32 = 2;
+
+/// State shared between the getdents64 exit hook and the bpf_loop callback
+#[repr(C)]
+pub struct ScanCtx {
+    /// Cursor: address of the dirent currently being inspected
+    pub dirent_ptr: u64,
+    /// First address past the getdents64 buffer (base + retval)
+    pub end: u64,
+    /// Address of the last visible entry before the cursor, 0 if none yet
+    pub prev_ptr: u64,
+    /// d_reclen of prev_ptr, updated when hidden entries are merged into it
+    pub prev_reclen: u16,
+    /// One of the SCAN_* constants
+    pub status: u32,
+}
+
+/// One iteration of the getdents64 buffer scan
+///
+/// This must run as a bpf_loop callback, never as a plain `for` loop body:
+/// the verifier explores bounded loops iteration by iteration and walks the
+/// callee body again on every one of them, which pushed the program past the
+/// 1M insn verification limit. bpf_loop callbacks are verified exactly once
+/// and the iteration bound is enforced at runtime
+///
+/// Returns 0 to continue the scan, 1 to stop it
+pub unsafe extern "C" fn scan_dirent(_index: u32, scan: *mut ScanCtx) -> u64 {
+    let scan = unsafe { &mut *scan };
+
+    // Check before reading
+    if scan
+        .dirent_ptr
+        .wrapping_add(core::mem::size_of::<linux_dirent64>() as u64)
+        > scan.end
+    {
+        return 1;
+    }
+
+    let dirent = match unsafe { bpf_probe_read_user(scan.dirent_ptr as *const linux_dirent64) } {
+        Ok(dirent) => dirent,
+        Err(_) => return 1,
+    };
+
+    let reclen = dirent.d_reclen;
+
+    // Malformed
+    if reclen == 0 || reclen > 512 {
+        return 1;
+    }
+
+    // The workspace profile enables overflow-checks, so pointer arithmetic
+    // must be wrapping or rustc emits a panic branch
+    let name_pos = scan
+        .dirent_ptr
+        .wrapping_add(core::mem::offset_of!(linux_dirent64, d_name) as u64)
+        as *const u8;
+    let mut name = [0u8; 64];
+    if unsafe { bpf_probe_read_user_str_bytes(name_pos, &mut name) }.is_err() {
+        scan.status = SCAN_READ_FAILED;
+        return 1;
+    }
+
+    let blocked = unsafe {
+        is_inode_blocked(InodeKey {
+            name,
+            ino: dirent.d_ino,
+        })
+    };
+    if blocked {
+        // We can't hide the first entry
+        if scan.prev_ptr != 0 {
+            let new_reclen = scan.prev_reclen.wrapping_add(reclen);
+
+            let reclen_ptr = scan.prev_ptr.wrapping_add(16) as *mut u16;
+            if unsafe { bpf_probe_write_user(reclen_ptr, &new_reclen) }.is_err() {
+                scan.status = SCAN_WRITE_FAILED;
+                return 1;
+            }
+
+            scan.prev_reclen = new_reclen;
+        }
+    } else {
+        scan.prev_ptr = scan.dirent_ptr;
+        scan.prev_reclen = reclen;
+    }
+
+    scan.dirent_ptr = scan.dirent_ptr.wrapping_add(reclen as u64);
+
+    0
 }

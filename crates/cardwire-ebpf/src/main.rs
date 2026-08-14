@@ -2,16 +2,14 @@
 #![no_main]
 
 use aya_ebpf::{
-    helpers::{bpf_get_current_pid_tgid, bpf_probe_read_user, bpf_probe_write_user}, macros::{fentry, lsm, tracepoint}, programs::{FEntryContext, LsmContext, TracePointContext}
+    helpers::{bpf_get_current_pid_tgid, bpf_loop}, macros::{lsm, tracepoint}, programs::{LsmContext, TracePointContext}
 };
 use aya_log_ebpf::{error, warn};
 
 use crate::{
     helpers::{
-        inode_key, is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_manual, is_smart
-    }, maps::{
-        CW_ALLOWED_PID, CW_DIRENT, CW_DIRENT_DEV, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent, InodeKey
-    }, vmlinux::{dentry, file, inode, linux_dirent64, path}
+        SCAN_OK, SCAN_READ_FAILED, SCAN_WRITE_FAILED, ScanCtx, dentry_key, inode_key, is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_manual, is_smart, scan_dirent
+    }, maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent, InodeKey}, vmlinux::{dentry, file, inode, path}
 };
 
 #[allow(
@@ -129,17 +127,10 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
         return ReturnCode::SUCCESS;
     }
 
-    // Get a mutable ptr to the inode
-    let inode_ptr: *mut inode = unsafe { (*d).d_inode };
-
-    if inode_ptr.is_null() {
-        return ReturnCode::SUCCESS;
-    }
-
-    let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
+    let Some(key) = (unsafe { dentry_key(d) }) else {
         error!(
             &ctx,
-            "EBPF inode_key() got an inode with no superblock in file_open, this is a kernel bug, skipping"
+            "EBPF dentry_key() could not build a key in file_open, skipping"
         );
         return ReturnCode::SUCCESS;
     };
@@ -209,7 +200,7 @@ unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
     let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
         error!(
             &ctx,
-            "EBPF inode_key() got an inode with no superblock in inode_permission, this is a kernel bug, skipping"
+            "EBPF inode_key() could not build a key in inode_permission, skipping"
         );
         return ReturnCode::SUCCESS;
     };
@@ -280,17 +271,10 @@ unsafe fn try_inode_getattr(ctx: LsmContext) -> Result<i32, i32> {
         return ReturnCode::SUCCESS;
     }
 
-    // Get a mutable ptr to the inode, in inode_permission it's the first argument
-    let inode_ptr: *mut inode = unsafe { (*dentry_ptr).d_inode };
-
-    if inode_ptr.is_null() {
-        return ReturnCode::SUCCESS;
-    }
-
-    let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
+    let Some(key) = (unsafe { dentry_key(dentry_ptr) }) else {
         error!(
             &ctx,
-            "EBPF inode_key() got an inode with no superblock in inode_getattr, this is a kernel bug, skipping"
+            "EBPF dentry_key() could not build a key in inode_getattr, skipping"
         );
         return ReturnCode::SUCCESS;
     };
@@ -360,73 +344,6 @@ unsafe fn try_tracepoint_enter_getdents64(ctx: TracePointContext) -> Result<i32,
     ReturnCode::SUCCESS
 }
 
-/// Records the device id the getdents64 exit hook pairs with each d_ino
-#[fentry(function = "iterate_dir")]
-pub fn fentry_iterate_dir(ctx: FEntryContext) -> u32 {
-    match unsafe { try_fentry_iterate_dir(ctx) } {
-        Ok(ret) => ret as u32,
-        Err(ret) => ret as u32,
-    }
-}
-
-unsafe fn try_fentry_iterate_dir(ctx: FEntryContext) -> Result<i32, i32> {
-    if is_comm_whitelisted() {
-        return ReturnCode::SUCCESS;
-    }
-
-    match is_cardwired() {
-        Some(res) => {
-            if res {
-                return ReturnCode::SUCCESS;
-            }
-        }
-        None => return ReturnCode::SUCCESS,
-    }
-
-    match unsafe { is_hybrid() } {
-        Some(res) => {
-            if res {
-                return ReturnCode::SUCCESS;
-            }
-        }
-        None => return ReturnCode::SUCCESS,
-    }
-
-    // Only the getdents64 exit hook drains this map, recording for iterate_dir's
-    // other callers fills it for good and inserts then start failing open
-    let tid = bpf_get_current_pid_tgid() as u32;
-    if unsafe { CW_DIRENT.get(tid) }.is_none() {
-        return ReturnCode::SUCCESS;
-    }
-
-    let file_ptr: *const file = ctx.arg(0);
-    if file_ptr.is_null() {
-        return ReturnCode::SUCCESS;
-    }
-
-    let d: *mut dentry = unsafe { (*file_ptr).__bindgen_anon_1.f_path.dentry };
-    if d.is_null() {
-        return ReturnCode::SUCCESS;
-    }
-
-    let inode_ptr: *mut inode = unsafe { (*d).d_inode };
-    if inode_ptr.is_null() {
-        return ReturnCode::SUCCESS;
-    }
-
-    let Some(key) = (unsafe { inode_key(inode_ptr) }) else {
-        error!(
-            &ctx,
-            "EBPF inode_key() got an inode with no superblock in iterate_dir, this is a kernel bug, skipping"
-        );
-        return ReturnCode::SUCCESS;
-    };
-
-    CW_DIRENT_DEV.insert(tid, key.dev, 0)?;
-
-    ReturnCode::SUCCESS
-}
-
 #[tracepoint]
 pub fn tracepoint_exit_getdents64(ctx: TracePointContext) -> u32 {
     match unsafe { try_tracepoint_exit_getdents64(ctx) } {
@@ -438,17 +355,13 @@ pub fn tracepoint_exit_getdents64(ctx: TracePointContext) -> u32 {
 unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, i32> {
     let tid = bpf_get_current_pid_tgid() as u32;
 
-    // Drain both maps up front to avoid a map leak on an early return
+    // Drain the map up front to avoid a map leak on an early return
     let dirp = unsafe { CW_DIRENT.get(tid) }.copied();
     let _ = CW_DIRENT.remove(tid);
-    let dir_dev = unsafe { CW_DIRENT_DEV.get(tid) }.copied();
-    let _ = CW_DIRENT_DEV.remove(tid);
 
-    let (Some(dirp), Some(dir_dev)) = (dirp, dir_dev) else {
+    let Some(dirp) = dirp else {
         return ReturnCode::SUCCESS;
     };
-
-    let dirent_ptr = dirp as *const linux_dirent64;
 
     let retval = match unsafe { ctx.read_at::<i64>(16) } {
         Ok(ret) => ret as u64,
@@ -459,62 +372,34 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
         return ReturnCode::SUCCESS;
     }
 
-    // Buffer end = base + bytes written
-    let base = dirent_ptr as u64;
-    let end = base.wrapping_add(retval);
+    let mut scan = ScanCtx {
+        dirent_ptr: dirp,
+        end: dirp.wrapping_add(retval),
+        prev_ptr: 0,
+        prev_reclen: 0,
+        status: SCAN_OK,
+    };
 
-    let mut dirent_ptr = dirent_ptr;
-    let mut prev_ptr: u64 = 0;
-    let mut prev_reclen: u16 = 0;
-    for _ in 0..512 {
-        // Check before reading
-        if (dirent_ptr as u64).wrapping_add(core::mem::size_of::<linux_dirent64>() as u64) > end {
-            break;
+    // The callback reference must be transmuted from the fn pointer, never
+    // routed through an integer: the relocation that tags it as
+    // BPF_PSEUDO_FUNC only survives if the function symbol reaches ld_imm64
+    // untouched
+    let callback = unsafe {
+        core::mem::transmute::<unsafe extern "C" fn(u32, *mut ScanCtx) -> u64, *mut core::ffi::c_void>(
+            scan_dirent,
+        )
+    };
+    let scan_ptr: *mut core::ffi::c_void = core::ptr::addr_of_mut!(scan).cast();
+    let _ = unsafe { bpf_loop(512, callback, scan_ptr, 0) };
+
+    match scan.status {
+        SCAN_WRITE_FAILED => {
+            error!(&ctx, "failed to write new reclen");
+            ReturnCode::SUCCESS
         }
-
-        let dirent = match unsafe { bpf_probe_read_user(dirent_ptr) } {
-            Ok(dirent) => dirent,
-            Err(_) => break,
-        };
-
-        let reclen = dirent.d_reclen;
-
-        // Malformed
-        if reclen == 0 || reclen > 512 {
-            break;
-        }
-
-        let blocked = unsafe {
-            is_inode_blocked(InodeKey {
-                dev: dir_dev,
-                ino: dirent.d_ino,
-            })
-        };
-        if blocked {
-            // We can't hide the first entry
-            if prev_ptr != 0 {
-                let new_reclen = prev_reclen.wrapping_add(reclen);
-
-                let reclen_ptr = (prev_ptr.wrapping_add(16)) as *mut u16;
-                match unsafe { bpf_probe_write_user(reclen_ptr, &new_reclen) } {
-                    Ok(_) => {}
-                    Err(err) => {
-                        error!(&ctx, "failed to write new reclen {}", err);
-                        break;
-                    }
-                };
-
-                prev_reclen = new_reclen;
-            }
-        } else {
-            prev_ptr = dirent_ptr as u64;
-            prev_reclen = reclen;
-        }
-
-        dirent_ptr = (dirent_ptr as u64).wrapping_add(reclen as u64) as *const linux_dirent64;
+        SCAN_READ_FAILED => Err(-1),
+        _ => ReturnCode::SUCCESS,
     }
-
-    ReturnCode::SUCCESS
 }
 
 #[tracepoint]
