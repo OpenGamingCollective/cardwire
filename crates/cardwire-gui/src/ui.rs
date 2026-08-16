@@ -909,7 +909,7 @@ pub fn daemon_setting_page<'a>(
             .align_y(Alignment::Center),
             row![
                 column![
-                    text("Switch mode on power").size(15).color(Color::from_rgb(0.95, 0.95, 0.95)),
+                    text("Switch mode on AC power").size(15).color(Color::from_rgb(0.95, 0.95, 0.95)),
                     text("Cardwire mode to switch to when connected to AC power.")
                         .size(14)
                         .color(Color::from_rgb(0.72, 0.72, 0.75)),
