@@ -20,7 +20,7 @@ pkgdesc='GPU manager for Linux using eBPF LSM hooks'
 arch=('x86_64')
 url='https://github.com/OpenGamingCollective/cardwire'
 license=('GPL3')
-depends=('hwdata' 'dbus' 'systemd' 'upower')
+depends=('hwdata' 'dbus' 'sqlite' 'systemd' 'upower')
 makedepends=('cargo' 'bpf-linker' 'rustup' 'libxcb')
 source=("https://github.com/OpenGamingCollective/cardwire/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('37882d4d0d431c3ff48e24bd47cea03b7847080623254d8bdb4af9846134d700')
@@ -30,9 +30,9 @@ prepare(){
 	rustup toolchain install nightly-2026-08-12 --component rust-src
 	cargo fetch --locked
 }
-options=('!lto')
 build(){
 	cd "${pkgbase}-${pkgver}"
+	export LIBSQLITE3_SYS_USE_PKG_CONFIG=1
 	export CARGO_TARGET_DIR=target
 	export RUSTFLAGS="$RUSTFLAGS --remap-path-prefix=$srcdir=/usr/src"
 
