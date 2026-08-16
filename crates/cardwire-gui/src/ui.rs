@@ -899,7 +899,7 @@ pub fn daemon_setting_page<'a>(
             row![
                 column![
                     text("Switch mode on battery").size(15).color(Color::from_rgb(0.95, 0.95, 0.95)),
-                    text("Automatically switch to a designated power-saving mode when on battery.")
+                    text("Automatically switch to integrated mode when on battery.")
                         .size(14)
                         .color(Color::from_rgb(0.72, 0.72, 0.75)),
                 ],
@@ -909,8 +909,8 @@ pub fn daemon_setting_page<'a>(
             .align_y(Alignment::Center),
             row![
                 column![
-                    text("Battery target mode").size(15).color(Color::from_rgb(0.95, 0.95, 0.95)),
-                    text("Cardwire mode to activate when disconnected from AC power.")
+                    text("Switch mode on power").size(15).color(Color::from_rgb(0.95, 0.95, 0.95)),
+                    text("Cardwire mode to switch to when connected to AC power.")
                         .size(14)
                         .color(Color::from_rgb(0.72, 0.72, 0.75)),
                 ],
