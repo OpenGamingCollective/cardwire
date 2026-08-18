@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap}, io, sync::Arc
+    collections::{BTreeMap, HashMap}, io, sync::Arc, time::Duration
 };
 
 use log::{error, info, warn};
@@ -123,17 +123,7 @@ impl GpuEnumerator {
             }
         };
 
-        // Skip the EGL probe for unavailable GPUs: the render node is unknown (u32::MAX) and the
-        // lookup would always fail on a phantom /dev/dri/renderD4294967295 path
-        let discrete = self.is_discrete_vulkan(device.pci_address())
-            || (available
-                && match is_discrete_egl(render) {
-                    Ok(discrete) => discrete,
-                    Err(err) => {
-                        warn!("{}: EGL discrete check failed: {}", device_name, err);
-                        false
-                    }
-                });
+        let discrete = self.is_discrete(device.pci_address(), render, available, &device_name);
 
         Ok(GpuDevice::new(
             device_name,
@@ -154,6 +144,54 @@ impl GpuEnumerator {
             && let Some(vlk_dev) = vlk_map.get(pci_id)
         {
             return vlk_dev.properties().device_type == PhysicalDeviceType::DiscreteGpu;
+        }
+
+        false
+    }
+    /// Determine whether a GPU is discrete, retrying both the Vulkan and EGL probes.
+    ///
+    /// At daemon startup these probes can race the NVIDIA/AMD driver stack coming up (the
+    /// GPU's DRM nodes may only just have appeared, see `drm_node_ids`'s own retry loop), so a
+    /// single failed attempt right after boot doesn't mean the GPU truly isn't discrete - it
+    /// means the ICD/EGL driver wasn't ready yet. Re-enumerate Vulkan fresh on each attempt since
+    /// the cached `vlk_physical_devices` snapshot was taken even earlier, at enumerator
+    /// construction time.
+    fn is_discrete(&self, pci_id: &str, render: u32, available: bool, device_name: &str) -> bool {
+        const MAX_RETRIES: u32 = 10;
+        const RETRY_INTERVAL: Duration = Duration::from_millis(500);
+
+        if self.is_discrete_vulkan(pci_id) {
+            return true;
+        }
+
+        // Skip the EGL probe for unavailable GPUs: the render node is unknown (u32::MAX) and the
+        // lookup would always fail on a phantom /dev/dri/renderD4294967295 path
+        if !available {
+            return false;
+        }
+
+        for attempt in 1..=MAX_RETRIES {
+            if attempt > 1
+                && let Some(vlk_dev) = vlk_enumerate().and_then(|map| map.get(pci_id).cloned())
+                && vlk_dev.properties().device_type == PhysicalDeviceType::DiscreteGpu
+            {
+                return true;
+            }
+
+            match is_discrete_egl(render) {
+                Ok(discrete) => return discrete,
+                Err(err) if attempt < MAX_RETRIES => {
+                    warn!(
+                        "{}: EGL discrete check failed, attempt {}/{MAX_RETRIES}, retrying in 500ms...: {}",
+                        device_name, attempt, err
+                    );
+                    std::thread::sleep(RETRY_INTERVAL);
+                }
+                Err(err) => {
+                    warn!("{}: EGL discrete check failed: {}", device_name, err);
+                    return false;
+                }
+            }
         }
 
         false
