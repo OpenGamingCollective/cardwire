@@ -411,10 +411,6 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
         errno: 0,
     };
 
-    // The callback reference must be transmuted from the fn pointer, never
-    // routed through an integer: the relocation that tags it as
-    // BPF_PSEUDO_FUNC only survives if the function symbol reaches ld_imm64
-    // untouched
     let callback = unsafe {
         core::mem::transmute::<unsafe extern "C" fn(u32, *mut ScanCtx) -> u64, *mut core::ffi::c_void>(
             scan_dirent,

@@ -23,10 +23,6 @@ pub enum KeyBuild {
 }
 
 /// Build the block-map key for a dentry, keying on the entry's name and inode
-///
-/// The name is copied with bpf_probe_read_kernel_str_bytes, which stops at the
-/// NUL and zero-fills the rest of the buffer: the result is byte-identical to
-/// the zero-padded key userspace builds from the path's basename
 #[inline(always)]
 pub unsafe fn dentry_key(d: *const dentry) -> KeyBuild {
     if d.is_null() {
@@ -68,13 +64,6 @@ pub unsafe fn dentry_key(d: *const dentry) -> KeyBuild {
 }
 
 /// Build the block-map key for an inode, keying on the entry's name and inode
-///
-/// inode_permission receives no dentry, so the name comes from
-/// inode->i_dentry.first. An inode exposed under several names (bind mounts,
-/// hard links) can therefore be keyed under an alias the caller didn't use and
-/// fail open. Accepted: cardwire's targets (sysfs entries, DRM device nodes)
-/// have no aliases, and walking i_dentry would need an unbounded loop the
-/// verifier rejects
 #[inline(always)]
 pub unsafe fn inode_key(inode_ptr: *const inode) -> KeyBuild {
     if inode_ptr.is_null() {
@@ -87,8 +76,7 @@ pub unsafe fn inode_key(inode_ptr: *const inode) -> KeyBuild {
         return KeyBuild::Unnamed;
     }
 
-    // The workspace profile enables overflow-checks, so pointer arithmetic
-    // must be wrapping or rustc emits a panic branch
+    // Wrapping_sub is used to prevent bpf bytecode from being rejected
     let d = (alias as usize).wrapping_sub(core::mem::offset_of!(dentry, __bindgen_anon_3))
         as *mut dentry;
 
@@ -315,8 +303,7 @@ pub const SCAN_READ_FAILED: u32 = 1;
 /// A hidden entry could not be merged into the previous one, the scan stopped
 pub const SCAN_WRITE_FAILED: u32 = 2;
 
-/// Largest getdents64 return value the hook scans, must match the retval guard
-/// in the exit hook
+/// Largest getdents64 return value the hook scans
 const GETDENTS_BUF_MAX: u64 = 32768;
 
 /// Iteration bound for the dirent scan
@@ -346,13 +333,6 @@ pub struct ScanCtx {
 }
 
 /// One iteration of the getdents64 buffer scan
-///
-/// This must run as a bpf_loop callback, never as a plain `for` loop body:
-/// the verifier explores bounded loops iteration by iteration and walks the
-/// callee body again on every one of them, which pushed the program past the
-/// 1M insn verification limit. bpf_loop callbacks are verified exactly once
-/// and the iteration bound is enforced at runtime
-///
 /// Returns 0 to continue the scan, 1 to stop it
 pub unsafe extern "C" fn scan_dirent(_index: u32, scan: *mut ScanCtx) -> u64 {
     let scan = unsafe { &mut *scan };
@@ -379,8 +359,6 @@ pub unsafe extern "C" fn scan_dirent(_index: u32, scan: *mut ScanCtx) -> u64 {
         return 1;
     }
 
-    // The workspace profile enables overflow-checks, so pointer arithmetic
-    // must be wrapping or rustc emits a panic branch
     let name_pos = scan
         .dirent_ptr
         .wrapping_add(core::mem::offset_of!(linux_dirent64, d_name) as u64)
