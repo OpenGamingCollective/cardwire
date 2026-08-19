@@ -76,11 +76,11 @@ jobs:
         uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
         with:
           components: clippy
+      - uses: cargo-bins/cargo-binstall@v1.21.1
+        with:
+          version: "1.79.0"
       - name: Install bpf-linker
-        # From source with the same nightly that emits the bitcode: 0.10.x proxies
-        # rustc's LLVM, so writer and reader always match (prebuilt binaries pin
-        # their own LLVM and break against trunk nightlies)
-        run: cargo +nightly-2026-08-12 install --locked bpf-linker@0.10.4
+        run: cargo binstall bpf-linker
       - name: Clippy Workspace
         uses: auguwu/clippy-action@9817d076b82df0194935be9db6154c56ac07b317 # 1.5.0
         with:
@@ -105,11 +105,11 @@ jobs:
           components: rust-src
       - name: Install Stable Rust
         uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
+      - uses: cargo-bins/cargo-binstall@v1.21.1
+        with:
+          version: "1.79.0"
       - name: Install bpf-linker
-        # From source with the same nightly that emits the bitcode: 0.10.x proxies
-        # rustc's LLVM, so writer and reader always match (prebuilt binaries pin
-        # their own LLVM and break against trunk nightlies)
-        run: cargo +nightly-2026-08-12 install --locked bpf-linker@0.10.4
+        run: cargo binstall bpf-linker
       - name: Test code
         run: cargo test
   rust-format:

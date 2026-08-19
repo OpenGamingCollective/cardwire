@@ -39,14 +39,12 @@ jobs:
       - name: Install Stable Rust
         uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
 
+      - uses: cargo-bins/cargo-binstall@v1.21.1
+        with:
+          version: "1.79.0"
       - name: Install bpf-linker
-        # Build bpf-linker from source with the same nightly that emits the
-        # bitcode: 0.10.x routes LLVM through aya-rustc-llvm-proxy, so the
-        # linker's LLVM always matches the rustc that compiled it and trunk
-        # bitcode links on every arch. Prebuilt binaries (taiki-e/install-action,
-        # upstream release assets) pin their own LLVM and break against trunk
-        # nightlies ("Invalid record" / "memset is not supported").
-        run: cargo +nightly-2026-08-12 install --locked bpf-linker@0.10.4
+        run: cargo binstall bpf-linker
+
       - name: Build cardwire
         run: |
           cargo install cargo-deb
@@ -74,19 +72,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install dependencies
         run: |
-          pacman -Sy git base-devel pacman-contrib rustup --noconfirm
-      # The distro bpf-linker (0.11.0-1) links against stable llvm-libs and cannot
-      # lower the trunk-LLVM bitcode emitted by the rustup nightly the PKGBUILD
-      # builds with. Install bpf-linker from source with that same nightly
-      # instead: 0.10.x routes LLVM through aya-rustc-llvm-proxy, so the linker's
-      # LLVM always matches the rustc that compiled it. --root /usr/local shadows
-      # /usr/bin/bpf-linker for every user; the PKGBUILD's makedepend is
-      # satisfied by the distro package without it being used.
+          pacman -Sy git base-devel pacman-contrib cargo-binstall rust cargo --noconfirm
       - name: Install bpf-linker
         run: |
-          rustup toolchain install nightly-2026-08-12 --component rust-src
-          cargo +nightly-2026-08-12 install --locked bpf-linker@0.10.4 --root /usr/local
-          /usr/local/bin/bpf-linker --version
+          cargo binstall --locked --no-confirm --version 0.11.0 bpf-linker
       - name: Prepare PKGBUILD
         run: |
           mkdir /build
