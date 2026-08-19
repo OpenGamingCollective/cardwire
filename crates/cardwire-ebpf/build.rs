@@ -11,6 +11,8 @@ use which::which;
 /// which would likely mean far too much cache invalidation.
 ///
 /// [bindeps]: https://doc.rust-lang.org/nightly/cargo/reference/unstable.html?highlight=feature#artifact-dependencies
+/// NOTE: The build will fail if bpf-linker is not linked to llvm23
+/// See <https://github.com/OpenGamingCollective/cardwire/issues/193>
 fn main() {
     let bpf_linker = which("bpf-linker").unwrap();
     println!("cargo:rerun-if-changed={}", bpf_linker.to_str().unwrap());

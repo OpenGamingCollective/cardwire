@@ -25,13 +25,8 @@ fn main() -> anyhow::Result<()> {
     };
     // aya-build only routes through rustup when it is on PATH; distro builds
     // (nixpkgs and friends) drive their own toolchain and ignore this pin
-    //
-    // The pin must pair with the LLVM inside the bpf-linker rustup users have on
-    // PATH: upstream bpf-linker releases since 0.11.0 are built against the rustc
-    // trunk LLVM pinned to 2026-08-12, so use the matching nightly. Distro
-    // bpf-linkers linked against a stable llvm cannot lower trunk bitcode no
-    // matter which nightly is pinned here (Arch's 0.11.0-1 vs llvm-libs 22 for
-    // example); those builds need a bpf-linker matching their rustc's LLVM
+    // NOTE: The build will fail if bpf-linker is not linked to llvm23
+    // See <https://github.com/OpenGamingCollective/cardwire/issues/193>
     const EBPF_NIGHTLY: &str = "nightly-2026-08-12";
     aya_build::build_ebpf([ebpf_package], Toolchain::Custom(EBPF_NIGHTLY))
 }
