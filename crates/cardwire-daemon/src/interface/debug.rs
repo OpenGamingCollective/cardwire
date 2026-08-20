@@ -107,6 +107,10 @@ impl DebugInterface {
 
 #[interface(name = "org.opengamingcollective.cardwire.Debug")]
 impl DebugInterface {
+    /// Try to refresh the gpu_list
+    /// if the pci devices didn't change, does nothing
+    /// if the pci devices changed and a new GPU is found, clear the eBPF Maps and refresh the GPUs
+    /// inodes
     pub async fn get_pci_devices(&self) -> fdo::Result<BTreeMap<String, DbusPciDevice>> {
         let pci_list = &self.pci_list.read().await;
         let mut dbus_list: BTreeMap<String, DbusPciDevice> = BTreeMap::new();
