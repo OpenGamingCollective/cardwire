@@ -1,6 +1,6 @@
 //! Watch the power state and send a signal when it changes, one task is spawned per gpu
 use crate::{
-    core::gpu::PowerState, interface::{GpuInterface, GpuInterfaceSignals}
+    Result, core::gpu::PowerState, interface::{GpuInterface, GpuInterfaceSignals}
 };
 use log::{error, info, warn};
 use std::{fs, str::FromStr, sync::Arc, time::Duration};
@@ -10,7 +10,7 @@ use zbus::object_server::{self};
 pub async fn watch_power_state(
     gpu: Arc<GpuInterface>,
     interface: object_server::InterfaceRef<GpuInterface>,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let power_path = format!(
         "/sys/bus/pci/devices/{}/power_state",
         gpu.device.pci.pci_address()

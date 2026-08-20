@@ -1,9 +1,8 @@
 //! helper to manage cardwired configs, include the user config .toml, and the .json states like
 //! gpu, mode or pci
 use crate::{
-    file::common::{FileKind, create_default_file}, types::Modes
+    Result, core::errors::CardwireError::CardwireConfigError, file::common::{FileKind, create_default_file}, types::Modes
 };
-use anyhow::Context;
 use log::warn;
 use tokio::io::AsyncWriteExt;
 
@@ -50,17 +49,16 @@ impl CardwireConfig {
         }
     }
     /// Read TOML config file and return it's settings as a struct
-    pub fn build() -> anyhow::Result<CardwireConfig> {
+    pub fn build() -> Result<CardwireConfig> {
         let config_file = format!("{}/cardwire.toml", crate::CONFIG_PATH);
         // create the config if it doesnt exist
         if !(fs::exists(&config_file)?) {
-            Self::create_default_config().context("Could not create default dir for config")?;
+            Self::create_default_config()?;
         }
         // remove leftover temp files from a save interrupted by a crash
         Self::cleanup_stale_tmp_files();
         // read the config into a string and parse it
-        let config_content =
-            fs::read_to_string(&config_file).context("Could not read cardwire.toml")?;
+        let config_content = fs::read_to_string(&config_file).map_err(CardwireConfigError)?;
         Ok(Self::parse_or_default(&config_content))
     }
     /// Remove leftover cardwire.toml.*.tmp files from a save interrupted by a crash
@@ -90,7 +88,7 @@ impl CardwireConfig {
         }
     }
     /// Create a default cardwire.toml if not present
-    fn create_default_config() -> anyhow::Result<()> {
+    fn create_default_config() -> Result<()> {
         create_default_file(FileKind::Config)?;
         Ok(())
     }

@@ -1,5 +1,6 @@
 //! Functions for static analysis, contains:
 //! - FDO desktop entries analysis
+use crate::Result;
 use freedesktop_desktop_entry::{DesktopEntry, get_languages_from_env};
 use inotify::{EventMask, Inotify, StreamExt, WatchDescriptor, WatchMask};
 use log::error;
@@ -17,7 +18,7 @@ pub struct AppMetadata {
 }
 
 /// Return a list of fdo apps present in the system
-pub async fn get_fdo_apps() -> anyhow::Result<(HashMap<String, AppMetadata>, Vec<PathBuf>)> {
+pub async fn get_fdo_apps() -> Result<(HashMap<String, AppMetadata>, Vec<PathBuf>)> {
     let mut app_directories: Vec<PathBuf> = Vec::new();
     // get from ENV
     let xdg_dir = BaseDirectories::new();

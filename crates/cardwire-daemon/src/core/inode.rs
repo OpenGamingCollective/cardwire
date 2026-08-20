@@ -3,7 +3,7 @@ use std::{
     collections::BTreeMap, fs::{self}, os::unix::fs::MetadataExt, path::Path
 };
 
-use anyhow::Result;
+use crate::Result;
 use log::{error, warn};
 
 use cardwire_ebpf_userspace::InodeKey;

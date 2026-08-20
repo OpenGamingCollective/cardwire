@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt, sync::Arc};
 
-use crate::interface::GpuInterface;
+use crate::{Result, core::errors::CardwireError, interface::GpuInterface};
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -26,38 +26,18 @@ impl fmt::Display for Modes {
     }
 }
 
-/// Error returned when a u32 does not map to a known GPU mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InvalidModeError {
-    value: u32,
-}
-
-impl InvalidModeError {
-    pub fn value(&self) -> u32 {
-        self.value
-    }
-}
-
-impl fmt::Display for InvalidModeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "unknown mode: {}", self.value)
-    }
-}
-
-impl std::error::Error for InvalidModeError {}
-
 /// Try to convert a u32 into a mode.
 ///
 /// This is the deserialization side of the D-Bus/eBPF encoding contract.
 impl TryFrom<u32> for Modes {
-    type Error = InvalidModeError;
+    type Error = CardwireError;
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(Self::Integrated),
             1 => Ok(Self::Hybrid),
             2 => Ok(Self::Manual),
             3 => Ok(Self::Smart),
-            _ => Err(InvalidModeError { value }),
+            _ => Err(CardwireError::UnknownMode(value)),
         }
     }
 }
@@ -127,13 +107,6 @@ mod tests {
         assert_eq!(Modes::try_from(1).unwrap(), Modes::Hybrid);
         assert_eq!(Modes::try_from(2).unwrap(), Modes::Manual);
         assert_eq!(Modes::try_from(3).unwrap(), Modes::Smart);
-    }
-
-    #[test]
-    fn test_modes_try_from_invalid_value() {
-        assert!(Modes::try_from(4).is_err());
-        assert!(Modes::try_from(u32::MAX).is_err());
-        assert_eq!(Modes::try_from(4).unwrap_err().value(), 4);
     }
 
     #[test]

@@ -1,9 +1,8 @@
 //! helper to manage cardwired configs, include the user config .toml, and the .json states like
 //! gpu, mode or pci
 use crate::{
-    core::gpu::GpuDevice, file::common::{FileKind, create_default_file}, types::Modes
+    Result, core::{errors::CardwireError::CardwireStateError, gpu::GpuDevice}, file::common::{FileKind, create_default_file}, types::Modes
 };
-use anyhow::{Context, Ok};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs};
@@ -23,7 +22,7 @@ impl Default for CardwireModeState {
 
 impl CardwireModeState {
     /// Read a mode.json file and return into a struct
-    pub fn build() -> anyhow::Result<CardwireModeState> {
+    pub fn build() -> Result<CardwireModeState> {
         let mode_file = format!("{}/mode.json", crate::STATE_PATH);
 
         let mode = Self::parse_mode_state(&mode_file);
@@ -31,19 +30,19 @@ impl CardwireModeState {
             warn!("mode.json could not get parsed {e}, overwriting with default one...");
             Self::create_default_mode()?;
         }
-        let mode = Self::parse_mode_state(&mode_file).context("couldn't fix mode.json")?;
+        let mode = Self::parse_mode_state(&mode_file)?;
         Ok(mode)
     }
-    fn parse_mode_state(mode_file: &str) -> anyhow::Result<CardwireModeState> {
+    fn parse_mode_state(mode_file: &str) -> Result<CardwireModeState> {
         if !(fs::exists(mode_file)?) {
             Self::create_default_mode()?;
         }
         let mode_state = fs::read_to_string(mode_file)?;
-        let string_content: CardwireModeState =
-            serde_json::from_str(&mode_state).context("Failed to parse json to str")?;
+        let string_content: CardwireModeState = serde_json::from_str(&mode_state)
+            .map_err(|err| CardwireStateError(String::from("mode.json"), err))?;
         Ok(string_content)
     }
-    fn create_default_mode() -> anyhow::Result<()> {
+    fn create_default_mode() -> Result<()> {
         create_default_file(FileKind::ModeState)?;
         Ok(())
     }
@@ -51,12 +50,13 @@ impl CardwireModeState {
         self.mode
     }
     /// Update the mode in daemon state, persisting it to mode_state.json only when `save` is true
-    pub async fn save_state(&mut self, new_mode: Modes, save: bool) -> anyhow::Result<()> {
+    pub async fn save_state(&mut self, new_mode: Modes, save: bool) -> Result<()> {
         // Save to daemon state
         self.mode = new_mode;
         // Save the whole state into the json
         if save {
-            let state_file = serde_json::to_string_pretty(&self)?;
+            let state_file = serde_json::to_string_pretty(&self)
+                .map_err(|err| CardwireStateError(String::from("mode.json"), err))?;
             tokio::fs::write(format!("{}/mode.json", crate::STATE_PATH), state_file).await?;
         }
         Ok(())
@@ -85,7 +85,7 @@ pub struct CardwireGpuUnit {
 
 impl CardwireGpuState {
     /// Build a CardwireGpuState struct
-    pub fn build() -> anyhow::Result<CardwireGpuState> {
+    pub fn build() -> Result<CardwireGpuState> {
         let state_file = format!("{}/gpu_state.json", crate::STATE_PATH);
 
         let gpu_hash = Self::parse_gpu_state(&state_file);
@@ -93,29 +93,28 @@ impl CardwireGpuState {
             warn!("gpu_hash.json could not get parsed {e}, overwriting with default one...");
             Self::create_default_state()?;
         }
-        let gpu_hash = Self::parse_gpu_state(&state_file).context("couldn't fix gpu_hash.json")?;
+        let gpu_hash = Self::parse_gpu_state(&state_file)?;
         let gpu_state = CardwireGpuState { gpu: gpu_hash };
         Ok(gpu_state)
     }
     // Parse directly into CardwireGpuState
-    fn parse_gpu_state(state_file: &str) -> anyhow::Result<BTreeMap<String, CardwireGpuUnit>> {
+    fn parse_gpu_state(state_file: &str) -> Result<BTreeMap<String, CardwireGpuUnit>> {
         if !(fs::exists(state_file)?) {
-            Self::create_default_state().context("Could not create default gpu_state.json")?;
+            Self::create_default_state()?;
         }
-        let gpu_state = fs::read_to_string(state_file)
-            .with_context(|| format!("Could not read file {}", state_file))?;
+        let gpu_state = fs::read_to_string(state_file)?;
 
-        let content: BTreeMap<String, CardwireGpuUnit> =
-            serde_json::from_str(&gpu_state).context("Could not parse string into json")?;
+        let content: BTreeMap<String, CardwireGpuUnit> = serde_json::from_str(&gpu_state)
+            .map_err(|err| CardwireStateError(String::from("gpu_state.json"), err))?;
         Ok(content)
     }
     /// Create default gpu_state.json, including folders if missing
-    fn create_default_state() -> anyhow::Result<()> {
+    fn create_default_state() -> Result<()> {
         create_default_file(FileKind::GpuState)?;
         Ok(())
     }
     /// Save the new state into the daemon and to the gpu_state.json file
-    pub async fn save_state(&mut self, gpu: &GpuDevice, state: bool) -> anyhow::Result<()> {
+    pub async fn save_state(&mut self, gpu: &GpuDevice, state: bool) -> Result<()> {
         // Prevent overwriting default config if it's not replaceable
         if self.gpu.contains_key("Null") {
             info!("detected default gpu_state file, overwriting it...");
@@ -127,7 +126,8 @@ impl CardwireGpuState {
             CardwireGpuUnit { block: state },
         );
         // Save the whole hashmap into json
-        let state_file = serde_json::to_string_pretty(&self.gpu)?;
+        let state_file = serde_json::to_string_pretty(&self.gpu)
+            .map_err(|err| CardwireStateError(String::from("mode.json"), err))?;
         tokio::fs::write(format!("{}/gpu_state.json", crate::STATE_PATH), state_file).await?;
         Ok(())
     }

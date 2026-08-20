@@ -1,3 +1,10 @@
+use crate::{
+    Result, analyzer::{
+        dynamic_analysis::{check_env, get_app_id_wayland_with_retry, get_steam_app_id}, helpers::{
+            comm_to_string, get_real_process_name, is_proc_still_alive, normalized_candidates
+        }, static_analysis::{self, AppMetadata, watch_fdo_folders}
+    }, file::{DbusAppMetadata, GpuPolicy}, interface::{LogEntry, LoggerInterfaceSignals, SmartPolicyInterface}
+};
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
 use aya_log::EbpfLogger;
 use cardwire_ebpf_userspace::EbpfBlocker;
@@ -9,14 +16,6 @@ use tokio::{
     io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore, mpsc, oneshot}, task, time::Instant
 };
 use zbus::object_server::SignalEmitter;
-
-use crate::{
-    analyzer::{
-        dynamic_analysis::{check_env, get_app_id_wayland_with_retry, get_steam_app_id}, helpers::{
-            comm_to_string, get_real_process_name, is_proc_still_alive, normalized_candidates
-        }, static_analysis::{self, AppMetadata, watch_fdo_folders}
-    }, file::{DbusAppMetadata, GpuPolicy}, interface::{LogEntry, LoggerInterfaceSignals, SmartPolicyInterface}
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ExecEvent {
@@ -71,7 +70,7 @@ impl CardwireAnalyzer {
         db_cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
         db_tx: mpsc::Sender<(String, AppMetadata, oneshot::Sender<bool>)>,
         new_app_signal: Arc<OnceLock<SignalEmitter<'static>>>,
-    ) -> anyhow::Result<CardwireAnalyzer> {
+    ) -> Result<CardwireAnalyzer> {
         let mut blocker = blocker.write().await;
         let exec_ring = blocker.get_exec_ring()?;
         let report_ring = blocker.get_report_ring()?;
@@ -112,7 +111,7 @@ impl CardwireAnalyzer {
             new_app_signal,
         })
     }
-    pub async fn run(self) -> anyhow::Result<()> {
+    pub async fn run(self) -> Result<()> {
         // Clone the Arcs and Sender to move into the background task
         let exec_arc = self.exec_ring.clone();
         let logger_arc = self.ebpf_logger.clone();
