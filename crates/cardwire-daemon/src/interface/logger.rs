@@ -33,12 +33,14 @@ impl LoggerInterface {
 
 #[interface(name = "org.opengamingcollective.cardwire.Logger")]
 impl LoggerInterface {
+    /// Return a Vec of processes blocked by cardwire
     pub async fn process_blocked(&self) -> fdo::Result<VecDeque<LogEntry>> {
         let vec = self.report_logs.read().await;
         Ok(vec.clone())
     }
 
     #[zbus(signal)]
+    /// Signal when cardwire blocked a process
     pub async fn process_blocked_changed(
         emitter: &SignalEmitter<'_>,
         log: LogEntry,
