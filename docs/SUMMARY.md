@@ -10,7 +10,7 @@
 # Diagnostics
 
 - [Troubleshooting](diagnostics/troubleshooting.md)
-- [NVIDIA Sleep issue](diagnostics/sleep.md)
+- [GPU Sleep issue](diagnostics/sleep.md)
 
 # Development
 

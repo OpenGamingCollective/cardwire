@@ -2,7 +2,7 @@
 
 # How to diagnose a dGPU that won't sleep
 
-Your NVIDIA dGPU won't sleep? Here's how to find and fix the issue.
+Your dGPU won't sleep? Here's how to find and fix the issue.
 
 ## Check your NVIDIA GPU power information
 
@@ -33,29 +33,35 @@ If Runtime D3 status is disabled, your GPU will never sleep.
 
 To enable it, follow this method (only tested on Arch, please adapt it for other distros):
 
->[!CAUTION]
+> [!CAUTION]
 > If you lack the knowledge, or you fear you will break your system, you can always make a post on the Discord to get assistance.
 
 Go to [https://gitlab.com/asus-linux/nvidia-laptop-power-cfg](https://gitlab.com/asus-linux/nvidia-laptop-power-cfg).
 
 We will need two files:
-* nvidia.rules
-* nvidia.conf
+
+- nvidia.rules
+- nvidia.conf
 
 You will need to copy them to their respective directory:
 For nvidia.conf:
+
 ```bash
 /etc/modprobe.d/nvidia.conf
 ```
+
 For nvidia.rules:
+
 ```bash
 /usr/lib/udev/rules.d/80-nvidia-pm.rules
 ```
 
 Once it's done, execute:
+
 ```bash
 sudo mkinitcpio -P
 ```
+
 and restart your computer.
 
 ### RTX 2000 Series
@@ -64,3 +70,13 @@ If it's not working and you own an RTX 2000 GPU, it's a known issue.
 You must use driver 580 and add `NVreg_EnableGpuFirmware=0` to `/etc/modprobe.d/nvidia.conf`.
 
 ## Check the PCI control value
+
+```bash
+cat /sys/bus/pci/devices/0000:03:00.0/power/control
+```
+
+If it says `auto`, you can skip this, if it says on/off, try this command to set the control to `auto`:
+
+```bash
+echo "auto" | sudo tee cat /sys/bus/pci/devices/0000:03:00.0/power/control
+```
