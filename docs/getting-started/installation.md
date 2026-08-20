@@ -18,7 +18,22 @@ sudo systemctl enable cardwired --now
 
 ## Nix
 
-Using the repo's flake:
+Using nixpkgs-unstable (recommended)
+
+```nix
+services.cardwired = {
+    enable = true;
+    settings = {
+        auto_apply_gpu_state = true;
+        experimental_nvidia_block = true;
+        battery_auto_switch = true;
+        battery_auto_switch_mode = "hybrid";
+        external_display_auto_switch = false;
+    };
+}
+```
+
+Using the repo's flake (This will be dropped when cardwire hits nixpkgs-26.11):
 
 flake.nix:
 
@@ -65,7 +80,11 @@ And start the service:
 sudo systemctl enable cardwired --now
 ```
 
-## Bazzite/Atomic Fedora-based
+## Bazzite
+
+Cardwire is installed out-of-the-box
+
+## Atomic Fedora-based
 
 Cardwire is officially distributed through Terra on Fedora systems
 
@@ -118,15 +137,18 @@ sudo systemctl enable cardwired --now
 Install build dependencies:
 
 ```bash
-sudo apt install libbpf-dev libudev-dev pkg-config libegl1-mesa-dev libvulkan-dev libglvnd-dev libwayland-dev libxkbcommon-dev libx11-dev libxcb1-dev libx11-xcb-dev gcc-multilib
+sudo apt install libbpf-dev libudev-dev pkg-config libegl1-mesa-dev libvulkan-dev libglvnd-dev libwayland-dev libxkbcommon-dev libx11-dev libxcb1-dev libx11-xcb-dev
 ```
-
-The eBPF program also requires `bpf-linker` and a pinned nightly Rust toolchain with the `rust-src` component (see `cardwire-ebpf-userspace/build.rs`). The devshell provided by `nix develop` bundles all of these (excepted bpf-linker which need to be installed using `cargo install bpf-linker`)
 
 Install Rust (if not already installed):
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Install bpf-linker
+```bash
+cargo binstall bpf-linker
 ```
 
 Then clone and build:
@@ -151,7 +173,6 @@ For now, other distros must clone the repo and use `make` to build and install C
 Build dependencies:
 
 - cargo (plus `bpf-linker` and a pinned nightly toolchain for the eBPF program)
-- libbpf
 - libudev-dev
 - pkg-config
 - Vulkan, EGL, Wayland and X11 development packages (GUI build)
