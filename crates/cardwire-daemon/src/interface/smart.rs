@@ -38,6 +38,14 @@ impl SmartPolicyInterface {
 #[interface(name = "org.opengamingcollective.cardwire.SmartPolicy")]
 impl SmartPolicyInterface {
     /// Authorized a pid to access a specific GPU
+    /// policy should be:
+    ///     Default (does nothing)
+    ///     Allow_dGPU
+    ///     Force_dGPU
+    ///     Force_GPU
+    /// value:
+    /// if allow/force dGPU: use 0 or 1 (bool)
+    /// if Force_GPU: use the target GPU id
     pub async fn request_process_access(
         &self,
         pid: u32,
@@ -98,8 +106,8 @@ impl SmartPolicyInterface {
         }
     }
 
-    /// Check if the process is inside PID or FORCED map, and return the map type with the gpu_id
-    /// associed
+    /// Check if the process is inside PID or FORCED map
+    /// Return the map type with the gpu_id associed
     pub async fn get_process_status(&self, pid: u32) -> Result<(String, Option<u32>), fdo::Error> {
         let mut status = String::new();
         let mut gpu_id: Option<u32> = None;
@@ -184,6 +192,7 @@ impl SmartPolicyInterface {
     }
 
     #[zbus(signal)]
+    /// Signal when cardwire discovered a new app
     pub async fn new_app_added(
         emitter: &SignalEmitter<'_>,
         new_app: (String, DbusAppMetadata),
