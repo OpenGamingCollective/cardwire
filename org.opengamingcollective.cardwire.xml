@@ -1,0 +1,352 @@
+
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.ObjectManager">
+    <method name="GetManagedObjects">
+      <arg type="a{oa{sa{sv}}}" direction="out"/>
+    </method>
+    <signal name="InterfacesAdded">
+      <arg name="object_path" type="o"/>
+      <arg name="interfaces_and_properties" type="a{sa{sv}}"/>
+    </signal>
+    <signal name="InterfacesRemoved">
+      <arg name="object_path" type="o"/>
+      <arg name="interfaces" type="as"/>
+    </signal>
+  </interface>
+  <interface name="org.freedesktop.DBus.Peer">
+    <method name="Ping">
+    </method>
+    <method name="GetMachineId">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg type="v" direction="out"/>
+    </method>
+    <method name="Set">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg name="value" type="v" direction="in"/>
+    </method>
+    <method name="GetAll">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg type="a{sv}" direction="out"/>
+    </method>
+    <signal name="PropertiesChanged">
+      <arg name="interface_name" type="s"/>
+      <arg name="changed_properties" type="a{sv}"/>
+      <arg name="invalidated_properties" type="as"/>
+    </signal>
+  </interface>
+  <interface name="org.opengamingcollective.cardwire.Config">
+    <!--
+     Save the daemon's configuration to cardwire.toml
+     -->
+    <method name="SaveToFile">
+    </method>
+    <property name="AutoApplyGpuState" type="b" access="readwrite"/>
+    <property name="BatteryAutoSwitch" type="b" access="readwrite"/>
+    <property name="BatteryAutoSwitchMode" type="u" access="readwrite"/>
+    <property name="ExperimentalNvidiaBlock" type="b" access="readwrite"/>
+    <property name="ExternalDisplayAutoSwitch" type="b" access="readwrite"/>
+  </interface>
+  <interface name="org.opengamingcollective.cardwire.Debug">
+    <!--
+     Try to refresh the gpu_list
+     if the pci devices didn't change, does nothing
+     if the pci devices changed and a new GPU is found, clear the eBPF Maps and refresh the GPUs
+     inodes
+     -->
+    <method name="GetPciDevices">
+      <arg type="a{s(sssssssss)}" direction="out"/>
+    </method>
+    <method name="RefreshGpu">
+    </method>
+  </interface>
+  <interface name="org.opengamingcollective.cardwire.Logger">
+    <!--
+     Return a Vec of processes blocked by cardwire
+     -->
+    <method name="ProcessBlocked">
+      <arg type="a((tu)usus)" direction="out"/>
+    </method>
+    <!--
+     Signal when cardwire blocked a process
+     -->
+    <signal name="ProcessBlockedChanged">
+      <arg name="log" type="((tu)usus)"/>
+    </signal>
+  </interface>
+  <interface name="org.opengamingcollective.cardwire.Manager">
+    <method name="Status">
+    </method>
+  </interface>
+  <interface name="org.opengamingcollective.cardwire.Mode">
+    <!--
+     List of available modes depending of the system type
+     -->
+    <method name="AvailableModes">
+      <arg type="au" direction="out"/>
+    </method>
+    <!--
+     Set the requested mode
+     0 -> Integrated
+     1 -> Hybrid
+     2 -> Manual
+     3 -> Smart
+     -->
+    <!--
+     Return the mode currently applied
+     0 -> Integrated
+     1 -> Hybrid
+     2 -> Manual
+     3 -> Smart
+     -->
+    <property name="Mode" type="u" access="readwrite"/>
+  </interface>
+  <interface name="org.opengamingcollective.cardwire.SmartPolicy">
+    <!--
+     Authorized a pid to access a specific GPU
+     policy should be:
+         Default (does nothing)
+         Allow_dGPU
+         Force_dGPU
+         Force_GPU
+     value:
+     if allow/force dGPU: use 0 or 1 (bool)
+     if Force_GPU: use the target GPU id
+     -->
+    <method name="RequestProcessAccess">
+      <arg name="pid" type="u" direction="in"/>
+      <arg name="policy" type="s" direction="in"/>
+      <arg name="value" type="u" direction="in"/>
+    </method>
+    <!--
+     Check if the process is inside PID or FORCED map
+     Return the map type with the gpu_id associed
+     -->
+    <method name="GetProcessStatus">
+      <arg name="pid" type="u" direction="in"/>
+      <arg type="s" direction="out"/>
+      <arg type="au" direction="out"/>
+    </method>
+    <!--
+     Get the list of app inside the internal cardwire database
+     -->
+    <method name="GetAppPolicies">
+      <arg type="a{s(sasasu)}" direction="out"/>
+    </method>
+    <!--
+     Set the policy of an app using the app_id
+     -->
+    <method name="SetAppPolicy">
+      <arg name="app_id" type="s" direction="in"/>
+      <arg name="policy" type="i" direction="in"/>
+    </method>
+    <!--
+     Signal when cardwire discovered a new app
+     -->
+    <signal name="NewAppAdded">
+      <arg name="new_app" type="(s(sasasu))"/>
+    </signal>
+  </interface>
+  <node name="Gpu">
+    <interface name="org.freedesktop.DBus.Introspectable">
+      <method name="Introspect">
+        <arg type="s" direction="out"/>
+      </method>
+    </interface>
+    <interface name="org.freedesktop.DBus.Peer">
+      <method name="Ping">
+      </method>
+      <method name="GetMachineId">
+        <arg type="s" direction="out"/>
+      </method>
+    </interface>
+    <interface name="org.freedesktop.DBus.Properties">
+      <method name="Get">
+        <arg name="interface_name" type="s" direction="in"/>
+        <arg name="property_name" type="s" direction="in"/>
+        <arg type="v" direction="out"/>
+      </method>
+      <method name="Set">
+        <arg name="interface_name" type="s" direction="in"/>
+        <arg name="property_name" type="s" direction="in"/>
+        <arg name="value" type="v" direction="in"/>
+      </method>
+      <method name="GetAll">
+        <arg name="interface_name" type="s" direction="in"/>
+        <arg type="a{sv}" direction="out"/>
+      </method>
+      <signal name="PropertiesChanged">
+        <arg name="interface_name" type="s"/>
+        <arg name="changed_properties" type="a{sv}"/>
+        <arg name="invalidated_properties" type="as"/>
+      </signal>
+    </interface>
+    <node name="0">
+      <interface name="org.freedesktop.DBus.Introspectable">
+        <method name="Introspect">
+          <arg type="s" direction="out"/>
+        </method>
+      </interface>
+      <interface name="org.freedesktop.DBus.Peer">
+        <method name="Ping">
+        </method>
+        <method name="GetMachineId">
+          <arg type="s" direction="out"/>
+        </method>
+      </interface>
+      <interface name="org.freedesktop.DBus.Properties">
+        <method name="Get">
+          <arg name="interface_name" type="s" direction="in"/>
+          <arg name="property_name" type="s" direction="in"/>
+          <arg type="v" direction="out"/>
+        </method>
+        <method name="Set">
+          <arg name="interface_name" type="s" direction="in"/>
+          <arg name="property_name" type="s" direction="in"/>
+          <arg name="value" type="v" direction="in"/>
+        </method>
+        <method name="GetAll">
+          <arg name="interface_name" type="s" direction="in"/>
+          <arg type="a{sv}" direction="out"/>
+        </method>
+        <signal name="PropertiesChanged">
+          <arg name="interface_name" type="s"/>
+          <arg name="changed_properties" type="a{sv}"/>
+          <arg name="invalidated_properties" type="as"/>
+        </signal>
+      </interface>
+      <interface name="org.opengamingcollective.cardwire.Gpu">
+        <!--
+         perform a lsof on the GPU nodes
+         -->
+        <method name="Lsof">
+          <arg type="a{sas}" direction="out"/>
+        </method>
+        <!--
+         Get information about the GPU
+         -->
+        <method name="GetDevice">
+          <arg type="(ssuubbbbssbs)" direction="out"/>
+        </method>
+        <!--
+         Get the current power_state of the GPU
+         -->
+        <method name="PowerState">
+          <arg type="s" direction="out"/>
+        </method>
+        <!--
+         Signal when the power state of the GPU changed
+         -->
+        <signal name="PowerStateChanged">
+          <arg name="state" type="s"/>
+        </signal>
+        <!--
+         Block or Unblock the GPU
+         -->
+        <!--
+         Check if the GPU is blocked
+         -->
+        <property name="Block" type="b" access="readwrite"/>
+        <!--
+         Get the env(s) for the GPU
+         -->
+        <property name="Env" type="as" access="read"/>
+        <!--
+         Whether this GPU can be targeted by an offload launch in the current mode: available and
+         not blocked, or blocked in Smart mode where the smart policy can grant per-process access
+         -->
+        <property name="Launchable" type="b" access="read"/>
+      </interface>
+    </node>
+    <node name="1">
+      <interface name="org.freedesktop.DBus.Introspectable">
+        <method name="Introspect">
+          <arg type="s" direction="out"/>
+        </method>
+      </interface>
+      <interface name="org.freedesktop.DBus.Peer">
+        <method name="Ping">
+        </method>
+        <method name="GetMachineId">
+          <arg type="s" direction="out"/>
+        </method>
+      </interface>
+      <interface name="org.freedesktop.DBus.Properties">
+        <method name="Get">
+          <arg name="interface_name" type="s" direction="in"/>
+          <arg name="property_name" type="s" direction="in"/>
+          <arg type="v" direction="out"/>
+        </method>
+        <method name="Set">
+          <arg name="interface_name" type="s" direction="in"/>
+          <arg name="property_name" type="s" direction="in"/>
+          <arg name="value" type="v" direction="in"/>
+        </method>
+        <method name="GetAll">
+          <arg name="interface_name" type="s" direction="in"/>
+          <arg type="a{sv}" direction="out"/>
+        </method>
+        <signal name="PropertiesChanged">
+          <arg name="interface_name" type="s"/>
+          <arg name="changed_properties" type="a{sv}"/>
+          <arg name="invalidated_properties" type="as"/>
+        </signal>
+      </interface>
+      <interface name="org.opengamingcollective.cardwire.Gpu">
+        <!--
+         perform a lsof on the GPU nodes
+         -->
+        <method name="Lsof">
+          <arg type="a{sas}" direction="out"/>
+        </method>
+        <!--
+         Get information about the GPU
+         -->
+        <method name="GetDevice">
+          <arg type="(ssuubbbbssbs)" direction="out"/>
+        </method>
+        <!--
+         Get the current power_state of the GPU
+         -->
+        <method name="PowerState">
+          <arg type="s" direction="out"/>
+        </method>
+        <!--
+         Signal when the power state of the GPU changed
+         -->
+        <signal name="PowerStateChanged">
+          <arg name="state" type="s"/>
+        </signal>
+        <!--
+         Block or Unblock the GPU
+         -->
+        <!--
+         Check if the GPU is blocked
+         -->
+        <property name="Block" type="b" access="readwrite"/>
+        <!--
+         Get the env(s) for the GPU
+         -->
+        <property name="Env" type="as" access="read"/>
+        <!--
+         Whether this GPU can be targeted by an offload launch in the current mode: available and
+         not blocked, or blocked in Smart mode where the smart policy can grant per-process access
+         -->
+        <property name="Launchable" type="b" access="read"/>
+      </interface>
+    </node>
+  </node>
+</node>
