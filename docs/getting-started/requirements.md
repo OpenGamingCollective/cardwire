@@ -10,11 +10,11 @@ Cardwire requires:
 
 > [!TIP]
 > The following distributions are known to work out of the box with zero manual configuration required:
-> - **OGC Distros (Officially Supported)**: Bazzite, Ultramarine, Nobara, PikaOS, ChimeraOS, winesapOS
+> - **OGC Distros (Officially Supported)**: see [ogc website](https://opengamingcollective.org/)
 > - **NixOS (Officially Supported)**
 > - Arch Linux / CachyOS
 > - Fedora (and Atomic variants)
-> - Debian
+> - Debian/Ubuntu
 
 If you are using one of these distributions, you can safely skip the advanced verification below and head straight to the [Installation Guide](installation.md).
 
