@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    core::{
+    Result, core::{
         env::is_gpu_launchable, gpu::{DbusGpuDevice, GpuDevice, is_gpu_active, send_drm_uevent}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
     }, file::{CardwireGpuState, CardwireModeState}, interface::{Modes, SwitcherooInterface}
 };
@@ -51,7 +51,7 @@ impl GpuInterface {
         gpu_state: Arc<RwLock<CardwireGpuState>>,
         mode_state: Arc<RwLock<CardwireModeState>>,
         switcheroo_int: SwitcherooInterface,
-    ) -> anyhow::Result<GpuInterface> {
+    ) -> Result<GpuInterface> {
         Ok(Self {
             id,
             device: Arc::new(device),

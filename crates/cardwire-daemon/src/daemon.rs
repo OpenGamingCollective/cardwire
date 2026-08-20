@@ -7,8 +7,7 @@ mod manager;
 mod tasks;
 pub mod types;
 
-use crate::{manager::DaemonManager, tasks::watch_power_state};
-use anyhow::Result;
+use crate::{core::errors::Result, manager::DaemonManager, tasks::watch_power_state};
 use env_logger::Env;
 use log::info;
 use std::{future::pending, sync::Arc};
@@ -128,7 +127,7 @@ async fn main() -> Result<()> {
 async fn spawn_dbus_api(
     object_server: &zbus::ObjectServer,
     daemon: &mut DaemonManager,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let path = "/org/opengamingcollective/cardwire";
 
     let gpu_interfaces = daemon.inner.gpu_list.read().await;

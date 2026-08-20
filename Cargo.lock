@@ -765,7 +765,6 @@ dependencies = [
 name = "cardwire-daemon"
 version = "0.12.1"
 dependencies = [
- "anyhow",
  "aya",
  "aya-log",
  "cardwire-ebpf-userspace",

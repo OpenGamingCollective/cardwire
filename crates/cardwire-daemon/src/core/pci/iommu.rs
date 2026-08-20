@@ -1,8 +1,10 @@
-use crate::core::{errors::Error as CardwireError, pci::IommuGroup};
+use crate::{
+    Result, core::{errors::CardwireError, pci::IommuGroup}
+};
 use log::error;
 use std::{collections::BTreeMap, fs, path::Path};
 
-pub fn read_iommu_groups() -> Result<BTreeMap<usize, IommuGroup>, CardwireError> {
+pub fn read_iommu_groups() -> Result<BTreeMap<usize, IommuGroup>> {
     let base_path = Path::new("/sys/kernel/iommu_groups");
     let mut dir_iter = base_path.read_dir().map_err(|e| {
         error!(

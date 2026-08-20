@@ -3,7 +3,6 @@ use crate::{
         env::compute_switcheroo_env, gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self, DbusPciDevice, PciDevice}
     }, interface::SwitcherooInterface, tasks::watch_power_state
 };
-use anyhow::Context;
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
 use log::{error, info, warn};
 use std::{
@@ -13,7 +12,7 @@ use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, DaemonContext, GpuInterface, ModeInterface, Modes}
+    Result, file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, DaemonContext, GpuInterface, ModeInterface, Modes}
 };
 
 #[derive(Clone)]
@@ -26,7 +25,7 @@ pub struct DebugInterface {
     pub blocker: Arc<RwLock<EbpfBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     pub object_server: Option<zbus::ObjectServer>,
-    pub power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<anyhow::Result<()>>>>>,
+    pub power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<Result<()>>>>>,
     pub switcheroo: SwitcherooInterface,
 }
 impl DebugInterface {
@@ -35,7 +34,7 @@ impl DebugInterface {
         mode_interface: ModeInterface,
         object_server: Option<zbus::ObjectServer>,
         switcheroo: SwitcherooInterface,
-    ) -> anyhow::Result<DebugInterface> {
+    ) -> Result<DebugInterface> {
         Ok(DebugInterface {
             mode_state: context.mode_state.clone(),
             mode_interface,
@@ -54,7 +53,7 @@ impl DebugInterface {
     ///
     /// Missing inodes only warn, the map keeps what it holds. A failed map
     /// write is returned: the block would be advertised but not enforced
-    pub async fn sync_nvidia_inodes(&self) -> anyhow::Result<()> {
+    pub async fn sync_nvidia_inodes(&self) -> Result<()> {
         let target = {
             let gpu_list = self.gpu_list.read().await;
             gpu_list
@@ -84,7 +83,7 @@ impl DebugInterface {
             Some(gpu_id) => blocker.sync_exp_inodes(inodes, gpu_id),
             None => blocker.clear_exp_inodes(),
         }
-        .context("failed to write the CW_EXP_BLK_INO map")
+        .map_err(|err| err.into())
     }
 
     async fn drop_unclaimed_inodes(&self, previous: Vec<InodeKey>) {

@@ -1,13 +1,12 @@
 //! Daemon composition root: builds the shared [`DaemonContext`] and every D-Bus interface, owns
 //! startup tasks and background-task futures.
 use crate::{
-    analyzer::CardwireAnalyzer, core::{
+    Result, analyzer::CardwireAnalyzer, core::{
         env::compute_switcheroo_env, gpu::GpuEnumerator, pci::{self}
     }, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
         ConfigInterface, ConfigMemory, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
     }, tasks
 };
-use anyhow::{Context, Result};
 use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
 use log::error;
 use std::{collections::BTreeMap, sync::Arc};
@@ -27,12 +26,10 @@ pub struct DaemonManager {
 
 impl DaemonManager {
     pub async fn new() -> Result<Self> {
-        let mode_state: CardwireModeState =
-            CardwireModeState::build().context("Error building mode")?;
+        let mode_state: CardwireModeState = CardwireModeState::build()?;
         let mode_state: Arc<RwLock<CardwireModeState>> = Arc::new(RwLock::new(mode_state));
 
-        let user_config: CardwireConfig =
-            CardwireConfig::build().context("Error building toml config")?;
+        let user_config: CardwireConfig = CardwireConfig::build()?;
         let user_config = Arc::new(ConfigMemory::build(user_config));
 
         let gpu_state: CardwireGpuState = CardwireGpuState::build()?;
@@ -120,10 +117,7 @@ impl DaemonManager {
         self.set_nvidia_setting().await?;
         // Fatal: the setting is already on, so an unwritable map advertises a
         // block that is never enforced
-        self.debug_interface
-            .sync_nvidia_inodes()
-            .await
-            .context("failed to prime the experimental nvidia block")?;
+        self.debug_interface.sync_nvidia_inodes().await?;
 
         // Add some programs to the whitelisted comm map
         self.whitelist_programs().await?;
@@ -214,10 +208,7 @@ impl DaemonManager {
         // On first attempt: don't save (already persisted)
         // On fallback: persist so the broken mode isn't retried on every boot
         let save = mode_arg.is_some();
-        self.mode_interface
-            .internal_set_mode(mode, save)
-            .await
-            .map_err(anyhow::Error::from)
+        self.mode_interface.internal_set_mode(mode, save).await
     }
     pub fn battery_switch_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
         let auto_switch = Arc::clone(&self.inner.config.battery_auto_switch);
@@ -256,7 +247,7 @@ impl DaemonManager {
             res
         }
     }
-    pub fn run_analyzer(&self) -> impl Future<Output = Result<(), anyhow::Error>> + 'static {
+    pub fn run_analyzer(&self) -> impl Future<Output = Result<()>> + 'static {
         let blocker = Arc::clone(&self.inner.blocker);
         let logger = Arc::clone(&self.logger_interface.report_logs);
         let signal = Arc::clone(&self.logger_interface.signal_emitter);

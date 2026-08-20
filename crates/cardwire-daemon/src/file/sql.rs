@@ -1,8 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{STATE_PATH, analyzer::AppMetadata};
+use crate::{Result, STATE_PATH, analyzer::AppMetadata};
 use log::error;
-use rusqlite::{Connection, OptionalExtension, Result};
+use rusqlite::{Connection, OptionalExtension};
 use tokio::sync::{RwLock, mpsc, oneshot};
 use zbus::zvariant;
 
@@ -171,7 +171,7 @@ impl CardwireDatabase {
             rusqlite::params![gpu_policy, binary_name],
         )?;
         if affected == 0 {
-            return Err(rusqlite::Error::QueryReturnedNoRows);
+            return Err(rusqlite::Error::QueryReturnedNoRows.into());
         }
         Ok(())
     }
