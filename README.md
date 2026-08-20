@@ -28,6 +28,8 @@ When a GPU is "blocked," the eBPF program returns `-ENOENT` for any syscall targ
 - **Power Efficiency:** By blocking access at the syscall level, the GPU is never woken from its lowest power state (D3cold), extending battery life on laptops
 - **Non-Invasive:** Unlike traditional methods that might require driver unloading, risky unbind or complex Wayland setups, this approach is transparent to the rest of the system and easy to toggle
 
+Cardwire can also forces apps to be launched on a specific GPU !
+
 _Note: X11 is not supported. Cardwire requires Wayland._
 
 ## Community projects:
@@ -36,6 +38,9 @@ _for issues related to these projects, please report to their respective repo_
 
 GNOME extension (by Moxuz):
 https://extensions.gnome.org/extension/9919/cardwire-gpu-toggle/
+
+KDE Plasmoid:
+https://github.com/Neo-AzTeK/cardwire-plasmoid
 
 ## Discord
 
