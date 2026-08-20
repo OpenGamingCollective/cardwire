@@ -4,23 +4,26 @@ Cardwire is a GPU manager for Linux systems with multiple GPUs. It allows users 
 
 ## Why Cardwire?
 
-Traditional GPU managers for Linux (like envycontrol, optimus-manager, supergfxctl) often require [system restarts](https://github.com/bayasdev/envycontrol), [display manager logouts](https://gitlab.com/asus-linux/supergfxctl), or rely on legacy [X11 architectures](https://github.com/Askannz/optimus-manager). Other built-in tools (like switcheroo-control) are great for launching apps but don't actively protect the dedicated GPU from being woken up by misbehaving background applications.
+Traditional GPU managers for Linux (like envycontrol, optimus-manager, supergfxctl) often require system restarts or display manager logouts. And other built-in tools (like switcheroo-control) are great for launching apps but don't actively protect the dedicated GPU from being woken up, and cannot force an APP to run on a specific GPU.
 
-Cardwire solves this by using **eBPF (Extended Berkeley Packet Filter) and LSM (Linux Security Modules)** to dynamically block access to the GPU. This ensures the GPU can enter its deepest sleep state (`D3Cold`, a hardware state that uses almost zero power) without requiring logouts or reboots to change modes.
+Cardwire solves this by using **eBPF and LSM** to dynamically block access to the GPU (more info about those [here](https://youtu.be/eVsMkXDE_5I)). This ensures the GPU is blocked at a userspace level.
 
-Furthermore, unlike older managers, **Cardwire never unbinds PCI devices or kernel drivers**. Unbinding drivers on the fly is notoriously unstable and is a frequent cause of crashes on AMD GPUs or system deadlocks on NVIDIA GPUs. Cardwire's eBPF approach is entirely seamless and significantly more stable.
+Furthermore, unlike older managers, **Cardwire never unbinds PCI devices or unload kernel drivers**. Unbinding drivers on the fly is notoriously unstable and is a frequent cause of crashes on AMD GPUs or system deadlocks on NVIDIA GPUs. Cardwire's eBPF approach is entirely seamless and significantly more stable.
 
 ## Modes
 
 Cardwire provides several GPU management modes:
 
-- **Integrated mode** -- Uses eBPF LSM hooks to block applications from accessing dedicated GPUs. This saves power by preventing the GPU from waking up and allowing it to enter an energy-efficient sleep state (`D3Cold`).
+- **Integrated mode** - Block applications from accessing dedicated GPU, leaving only the iGPU available
 
 - **Hybrid mode** -- Removes the blocks, letting the system function normally with both integrated and dedicated GPUs available.
 
 - **Manual mode** -- Allows users to manually block or unblock individual GPUs by ID for granular control. It is only available on desktop systems and never blocks the default GPU.
 
 - **Smart mode** -- Like integrated mode it blocks the dGPU by default, but a userspace analyzer inspects each application at launch and selectively allows GPU access for approved applications. It is only available on laptops.
+
+> [!WARNING]
+> Integrated and Smart mode are only available for laptops, desktop/multi-gpus have access to Hybrid & Manual
 
 Switching between modes is fast and does not require reboots or logouts.
 
