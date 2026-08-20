@@ -4,18 +4,31 @@ mod gui_config;
 mod helpers;
 mod message;
 mod models;
+mod single_instance;
 mod subscription;
 mod tray;
 mod ui;
 
 use app::AppState;
 use env_logger::Env;
+use log::info;
 
 fn main() -> iced::Result {
     env_logger::Builder::from_env(Env::default().default_filter_or("info"))
         .format_target(false)
         .format_timestamp(None)
         .init();
+
+    // Keep alive for the process's lifetime: dropping it releases the D-Bus name and a
+    // subsequent launch would no longer detect this instance as running.
+    let _single_instance_guard = match single_instance::acquire() {
+        single_instance::Acquisition::Acquired(connection) => Some(connection),
+        single_instance::Acquisition::AlreadyRunning => {
+            info!("cardwire-gui is already running; exiting");
+            return Ok(());
+        }
+        single_instance::Acquisition::Unchecked => None,
+    };
 
     unsafe {
         // Vulkan wakes the dGPU
