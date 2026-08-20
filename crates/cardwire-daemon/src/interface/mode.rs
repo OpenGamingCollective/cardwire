@@ -1,6 +1,8 @@
 //! Define the mode dbus
 use crate::{
-    Result, core::gpu::{send_drm_uevent, start_nvidia_powerd, stop_nvidia_powerd}, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface, config::ConfigMemory}, types::SystemType
+    Result, core::{
+        errors::CardwireError, gpu::{send_drm_uevent, start_nvidia_powerd, stop_nvidia_powerd}
+    }, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface, config::ConfigMemory}, types::SystemType
 };
 use aya::maps::Array as AyaArray;
 use log::{error, info, warn};
@@ -208,10 +210,11 @@ impl ModeInterface {
     #[zbus(property)]
     pub async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
         let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
-        self.internal_set_mode(mode, true)
-            .await
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        Ok(())
+        match self.internal_set_mode(mode, true).await {
+            Ok(()) => Ok(()),
+            Err(CardwireError::FdoError(err)) => Err(err),
+            Err(err) => Err(fdo::Error::Failed(err.to_string())),
+        }
     }
 
     /// Return the mode currently applied
