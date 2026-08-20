@@ -179,6 +179,7 @@ impl GpuInterface {
 #[interface(name = "org.opengamingcollective.cardwire.Gpu")]
 impl GpuInterface {
     #[zbus(property)]
+    /// Block or Unblock the GPU
     pub async fn set_block(&mut self, block: bool) -> fdo::Result<()> {
         let mode = self.mode_state.read().await;
         if mode.mode() != Modes::Manual {
@@ -260,6 +261,7 @@ impl GpuInterface {
     }
 
     #[zbus(property)]
+    /// Check if the GPU is blocked
     pub async fn block(&self) -> fdo::Result<bool> {
         self.gpu_blocked().await
     }
@@ -296,10 +298,13 @@ impl GpuInterface {
 
         Ok(proc_map)
     }
+
+    /// Get information about the GPU
     pub async fn get_device(&self) -> fdo::Result<DbusGpuDevice> {
         Ok(DbusGpuDevice::from(&*self.device))
     }
 
+    /// Get the current power_state of the GPU
     pub async fn power_state(&self) -> fdo::Result<String> {
         let power_path = format!(
             "/sys/bus/pci/devices/{}/power_state",
@@ -315,9 +320,11 @@ impl GpuInterface {
     }
 
     #[zbus(signal)]
+    /// Signal when the power state of the GPU changed
     pub async fn power_state_changed(emitter: &SignalEmitter<'_>, state: &str) -> zbus::Result<()>;
 
     #[zbus(property)]
+    /// Get the env(s) for the GPU
     pub async fn env(&self) -> Vec<String> {
         match self.env.get() {
             Some(v) => v.clone(),
@@ -325,9 +332,9 @@ impl GpuInterface {
         }
     }
 
+    #[zbus(property)]
     /// Whether this GPU can be targeted by an offload launch in the current mode: available and
     /// not blocked, or blocked in Smart mode where the smart policy can grant per-process access
-    #[zbus(property)]
     pub async fn launchable(&self) -> bool {
         let mode = self.mode_state.read().await.mode();
         is_gpu_launchable(
