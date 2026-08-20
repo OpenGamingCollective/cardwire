@@ -1,5 +1,8 @@
 [book]
 src = "docs"
+title = "Cardwire Guide"
+description = "A Guide for Cardwire"
+
 
 [preprocessor.mermaid]
 command = "mdbook-mermaid"
