@@ -14,6 +14,6 @@
 
 # Development
 
-- [SmartMode](development/smart.md)
-- [BPF](development/bpf.md) 
-- [Build&Dev](development/build-dev.md)
+- [Help for Packagers](development/packaging.md)
+- [Smart Mode TLDR](development/smart.md)
+- [Developing on Cardwire](development/build-dev.md)
