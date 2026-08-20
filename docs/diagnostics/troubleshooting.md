@@ -60,3 +60,6 @@ Since v0.12.0, cardwired restarts `nvidia-powerd` automatically after every mode
 ```bash
 sudo systemctl restart nvidia-powerd.service
 ```
+
+> [!NOTE]
+> This was fixed in cardwire 0.12.1, cardwired now stop and start nvidia-powerd on mode switch instead of a naive restart
