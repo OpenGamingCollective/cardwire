@@ -207,6 +207,10 @@ impl ModeInterface {
 #[interface(name = "org.opengamingcollective.cardwire.Mode")]
 impl ModeInterface {
     /// Set the requested mode
+    /// 0 -> Integrated
+    /// 1 -> Hybrid
+    /// 2 -> Manual
+    /// 3 -> Smart
     #[zbus(property)]
     pub async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
         let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
@@ -218,6 +222,10 @@ impl ModeInterface {
     }
 
     /// Return the mode currently applied
+    /// 0 -> Integrated
+    /// 1 -> Hybrid
+    /// 2 -> Manual
+    /// 3 -> Smart
     #[zbus(property)]
     pub async fn mode(&self) -> fdo::Result<u32> {
         Ok(u32::from(self.mode_state.read().await.mode()))
