@@ -41,7 +41,7 @@ jobs:
 
       - uses: cargo-bins/cargo-binstall@v1.21.1
         with:
-          version: "1.79.0"
+          version: "1.21.1"
       - name: Install bpf-linker
         run: cargo binstall bpf-linker
 

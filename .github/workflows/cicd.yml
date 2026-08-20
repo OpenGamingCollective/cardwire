@@ -78,7 +78,7 @@ jobs:
           components: clippy
       - uses: cargo-bins/cargo-binstall@v1.21.1
         with:
-          version: "1.79.0"
+          version: "1.21.1"
       - name: Install bpf-linker
         run: cargo binstall bpf-linker
       - name: Clippy Workspace
@@ -107,7 +107,7 @@ jobs:
         uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
       - uses: cargo-bins/cargo-binstall@v1.21.1
         with:
-          version: "1.79.0"
+          version: "1.21.1"
       - name: Install bpf-linker
         run: cargo binstall bpf-linker
       - name: Test code
