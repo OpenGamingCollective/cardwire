@@ -16,11 +16,11 @@ Cardwire provides several GPU management modes:
 
 - **Integrated mode** - Block applications from accessing dedicated GPU, leaving only the iGPU available
 
-- **Hybrid mode** -- Removes the blocks, letting the system function normally with both integrated and dedicated GPUs available.
+- **Hybrid mode** - Removes the blocks, letting the system function normally with all GPUs available.
 
-- **Manual mode** -- Allows users to manually block or unblock individual GPUs by ID for granular control. It is only available on desktop systems and never blocks the default GPU.
+- **Manual mode** - Allows users to manually block or unblock individual GPUs by ID for granular control. It is only available on desktop systems and never blocks the default GPU.
 
-- **Smart mode** -- Like integrated mode it blocks the dGPU by default, but a userspace analyzer inspects each application at launch and selectively allows GPU access for approved applications. It is only available on laptops.
+- **Smart mode** - Like integrated mode it blocks the dGPU by default, but a userspace analyzer inspects each application at launch and selectively allows GPU access for approved applications.
 
 > [!WARNING]
 > Integrated and Smart mode are only available for laptops, desktop/multi-gpus have access to Hybrid & Manual
