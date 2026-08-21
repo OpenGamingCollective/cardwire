@@ -6,9 +6,18 @@ If this PR introduce a new feature, explain your motivations
 
 Fixes # (issue)
 
+<!---
+If you used an LLM/AI, please let us know with either
+Co-Authored-By:
+or
+Assisted-by:
+-->
+
+<!--- Uncomment if needed
 # TODO
 
 - [ ] Copy-Paste this line
+-->
 
 # Checklist:
 
