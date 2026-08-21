@@ -12,7 +12,7 @@ use crate::{
     helpers::CardwireDbus, message::Message, models::{DaemonSettings, LogEntry, Mode, PciDevice}, tray
 };
 use zbus::{
-    Connection, Proxy, names::OwnedInterfaceName, proxy, zvariant::{OwnedObjectPath, OwnedValue}
+    Connection, MatchRule, MessageStream, Proxy, message::Type as MessageType, names::OwnedInterfaceName, proxy, zvariant::{OwnedObjectPath, OwnedValue}
 };
 
 pub fn tray_sub() -> Subscription<Message> {
@@ -51,6 +51,54 @@ pub fn tray_sub() -> Subscription<Message> {
             std::future::pending::<()>().await;
         })
     })
+}
+
+pub fn show_window_sub() -> Subscription<Message> {
+    Subscription::run_with("cardwire_show_window_subscription", |_id| {
+        stream::channel(1, |mut output: Sender<Message>| async move {
+            let connection = match Connection::session().await {
+                Ok(conn) => conn,
+                Err(error) => {
+                    warn!(
+                        "Failed to connect to D-Bus for show-window requests: {}",
+                        error
+                    );
+                    return;
+                }
+            };
+
+            let rule = match show_window_match_rule() {
+                Ok(rule) => rule,
+                Err(error) => {
+                    warn!("Failed to build show-window match rule: {}", error);
+                    return;
+                }
+            };
+
+            let mut signals = match MessageStream::for_match_rule(rule, &connection, None).await {
+                Ok(stream) => stream,
+                Err(error) => {
+                    warn!("Failed to listen for show-window requests: {}", error);
+                    return;
+                }
+            };
+
+            while signals.next().await.is_some() {
+                if output.send(Message::ShowWindow).await.is_err() {
+                    return;
+                }
+            }
+        })
+    })
+}
+
+fn show_window_match_rule() -> zbus::Result<MatchRule<'static>> {
+    Ok(MatchRule::builder()
+        .msg_type(MessageType::Signal)
+        .path(crate::single_instance::OBJECT_PATH)?
+        .interface(crate::single_instance::BUS_NAME)?
+        .member(crate::single_instance::SHOW_SIGNAL)?
+        .build())
 }
 
 // CardwireMode is used to listen to mode change signals

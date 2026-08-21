@@ -273,6 +273,7 @@ impl AppState {
                 }
             }
             Message::TrayShutdownComplete => return iced::exit(),
+            Message::ShowWindow => return self.open_or_focus_window(),
             Message::WindowClosed(id) => {
                 if self.window_id == Some(id) {
                     self.window_id = None;
@@ -536,6 +537,7 @@ impl AppState {
         Subscription::batch([
             crate::subscription::dbus_sub(),
             crate::subscription::tray_sub(),
+            crate::subscription::show_window_sub(),
             window::close_events().map(Message::WindowClosed),
         ])
     }

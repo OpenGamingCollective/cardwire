@@ -20,6 +20,7 @@ pub enum Message {
     TrayAction(TrayAction),
     TrayUnavailable(String),
     TrayShutdownComplete,
+    ShowWindow,
     WindowClosed(iced::window::Id),
     UpdateGpuPowerState(usize, String),
     UpdateBlockState(usize, bool),
