@@ -22,9 +22,9 @@ Please provide your distro, kernel, and hardware details. The output of `fastfet
 ```
 Cardwire version (`cardwire --version`):
 
-**`cardwire list` output**
+**`cardwire list --json` output**
 Please paste the text output (do not use a screenshot):
-```text
+```json
 ```
 
 **`ls -la /dev/dri/by-path/`**
