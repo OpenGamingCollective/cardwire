@@ -5,8 +5,7 @@ Welcome to Cardwire ! Thanks for taking the time to contribute to this project.
 LLM are always a source of debate, so, here's my take:
 
 - LLM must be used as tools, not as an employe executing your orders.
-- Fully vibe-coded/slop PR are not allowed. The Contributor must be able to understand and to explain his changes.
-- If the PR is fully LLM generated and i didn't notice it, Well Played !
+- Fully vibe-coded/slop PR may be refused.
 - If a AI/LLM was used, please mention it with either the LLM co-signing the commit, or with a <assisted-by: MODEL> message in the PR
 
 ## Pull Requests
