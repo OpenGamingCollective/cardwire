@@ -1,7 +1,7 @@
 //! Define the mode dbus
 use crate::{
     Result, core::{
-        errors::CardwireError, gpu::{send_drm_uevent, start_nvidia_powerd, stop_nvidia_powerd}
+        errors::CardwireError, gpu::{start_nvidia_powerd, stop_nvidia_powerd}
     }, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface, config::ConfigMemory}, types::SystemType
 };
 use aya::maps::Array as AyaArray;
@@ -10,7 +10,7 @@ use std::{
     collections::BTreeMap, sync::{Arc, OnceLock, atomic::Ordering}
 };
 use tokio::{
-    sync::{Mutex, RwLock}, task
+    sync::{Mutex, RwLock}, task::{self}
 };
 use zbus::{fdo, interface, object_server::SignalEmitter};
 
@@ -81,7 +81,7 @@ impl ModeInterface {
             warn!("failed to emit mode change signal: {err}");
         };
 
-        // Emit block_changed signal after the mode has been applied and send drm uevent
+        // Emit block_changed signal after the mode has been applied
         let gpu_list = self.gpu_list.read().await;
 
         for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
@@ -93,9 +93,6 @@ impl ModeInterface {
                     gpu.device.name()
                 );
             }
-            if let Err(err) = send_drm_uevent(*gpu.device.card()).await {
-                warn!("failed to send drm uevent for {}: {err}", gpu.device.name());
-            };
         }
         // Drop the read lock before refreshing the switcheroo api
         drop(gpu_list);
@@ -144,6 +141,9 @@ impl ModeInterface {
                 for (id, gpu) in gpu_list.iter().filter(|(_, gpu)| gpu.device.is_available()) {
                     if gpu.device.is_discrete() && !gpu.device.is_default() {
                         // Here we block the offload dGPU
+                        // we MUST send the drm remove before blocking it, else a compositor could
+                        // crash (eg: niri)
+                        gpu.send_drm_remove().await;
                         gpu.block_gpu(*id as u32).await?;
                     } else if mode == Modes::Smart
                         && gpu.device.is_default()
@@ -159,6 +159,7 @@ impl ModeInterface {
             Modes::Hybrid => {
                 for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
                     gpu.unblock_gpu().await?;
+                    gpu.send_drm_add().await;
                 }
             }
 
@@ -185,12 +186,15 @@ impl ModeInterface {
                                 gpu.device.name()
                             );
                             gpu.unblock_gpu().await?;
+                            gpu.send_drm_add().await;
                         } else {
                             info!("blocking: {} ", gpu.device.pci().pci_address());
+                            gpu.send_drm_remove().await;
                             gpu.block_gpu(*id as u32).await?;
                         }
                     } else {
                         gpu.unblock_gpu().await?;
+                        gpu.send_drm_add().await;
                     }
                 }
             }

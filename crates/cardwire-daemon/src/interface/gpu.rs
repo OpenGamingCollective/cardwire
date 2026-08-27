@@ -6,12 +6,12 @@ use std::{
 
 use crate::{
     Result, core::{
-        env::is_gpu_launchable, gpu::{DbusGpuDevice, GpuDevice, is_gpu_active, send_drm_uevent}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
+        env::is_gpu_launchable, gpu::{DbusGpuDevice, DrmUEvents, GpuDevice, is_gpu_active, send_uevent_blocking}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
     }, file::{CardwireGpuState, CardwireModeState}, interface::{Modes, SwitcherooInterface}
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
 use log::{info, warn};
-use tokio::sync::RwLock;
+use tokio::{sync::RwLock, task::spawn_blocking};
 use zbus::{fdo, interface, object_server::SignalEmitter};
 
 pub trait FdoResultExt<T> {
@@ -133,6 +133,36 @@ impl GpuInterface {
     pub async fn unblock_gpu(&self) -> fdo::Result<()> {
         self.sync_inodes(self.id, false).await
     }
+    /// Send a 'remove' drm uevent
+    pub async fn send_drm_remove(&self) {
+        let card = *self.device.card();
+        let render = *self.device.render();
+        if let Err(err) =
+            spawn_blocking(move || send_uevent_blocking(DrmUEvents::Remove, card, render))
+                .await
+                .unwrap()
+        {
+            warn!(
+                "failed to send drm uevent for {}: {err}",
+                self.device.name()
+            );
+        };
+    }
+    /// Send a 'add' drm uevent
+    pub async fn send_drm_add(&self) {
+        let card = *self.device.card();
+        let render = *self.device.render();
+        if let Err(err) =
+            spawn_blocking(move || send_uevent_blocking(DrmUEvents::Add, card, render))
+                .await
+                .unwrap()
+        {
+            warn!(
+                "failed to send drm uevent for {}: {err}",
+                self.device.name()
+            );
+        };
+    }
 
     pub async fn take_pushed_inodes(&self) -> Vec<InodeKey> {
         std::mem::take(&mut *self.pushed_inodes.write().await)
@@ -227,12 +257,6 @@ impl GpuInterface {
                     warn!("could not save gpu_state to file: {e}");
                 };
             }
-            if let Err(err) = send_drm_uevent(*self.device.card()).await {
-                warn!(
-                    "failed to send drm uevent for {}: {err}",
-                    self.device.name()
-                );
-            };
             // Refresh the switcheroo api
             self.switcheroo_int.emit_gpu_list_changed().await;
 
@@ -248,12 +272,6 @@ impl GpuInterface {
                     warn!("could not save gpu_state to file: {e}");
                 };
             }
-            if let Err(err) = send_drm_uevent(*self.device.card()).await {
-                warn!(
-                    "failed to send drm uevent for {}: {err}",
-                    self.device.name()
-                );
-            };
             // Refresh the switcheroo api
             self.switcheroo_int.emit_gpu_list_changed().await;
             Ok(())
