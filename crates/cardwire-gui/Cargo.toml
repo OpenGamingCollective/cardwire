@@ -24,6 +24,7 @@ toml.workspace = true
 xdg.workspace = true
 chrono.workspace = true
 freedesktop-desktop-entry.workspace = true
+clap.workspace = true
 
 [[bin]]
 name = "cardwire-gui"

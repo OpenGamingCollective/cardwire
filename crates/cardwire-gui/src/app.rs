@@ -1,3 +1,4 @@
+use clap::Parser;
 use iced::{
     Alignment, Element, Length::{Fill, Fixed}, Subscription, Task, widget::{column, container, row, stack}, window
 };
@@ -5,7 +6,7 @@ use log::error;
 use std::collections::BTreeMap;
 
 use crate::{
-    gui_config::{GuiConfig, PrimaryClickAction}, helpers::{CardwireDbus, GpuDevice}, message::Message, models::{
+    args::CardwireArgs, gui_config::{GuiConfig, PrimaryClickAction}, helpers::{CardwireDbus, GpuDevice}, message::Message, models::{
         DaemonSettings, LogState, MainState, Mode, Page, PciDevice, SettingState, SmartState
     }, tray::{self, TrayAction, TrayHandle}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
 };
@@ -44,7 +45,11 @@ impl AppState {
                 Some(format!("Could not load GUI settings: {error}")),
             ),
         };
-        let (window_id, open_window) = if gui_config.start_in_tray {
+        let args = CardwireArgs::parse();
+        // Hide the GUI if launched with --background, or if the start_in_tray setting is set
+        let (window_id, open_window) = if args.background.is_some_and(|b| b)
+            || (args.background.is_none() && gui_config.start_in_tray)
+        {
             (None, Task::none())
         } else {
             let (id, task) = window::open(default_window_settings());

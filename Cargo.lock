@@ -817,6 +817,7 @@ name = "cardwire-gui"
 version = "0.12.1"
 dependencies = [
  "chrono",
+ "clap",
  "env_logger",
  "freedesktop-desktop-entry",
  "iced",

@@ -1,4 +1,5 @@
 mod app;
+mod args;
 mod gtk_font;
 mod gui_config;
 mod helpers;
