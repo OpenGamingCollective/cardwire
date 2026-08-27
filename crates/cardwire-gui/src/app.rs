@@ -46,16 +46,12 @@ impl AppState {
             ),
         };
         let args = CardwireArgs::parse();
-
-        println!("arg result: {:?}", args.background);
         // Hide the GUI if launched with --background, or if the start_in_tray setting is set
         let (window_id, open_window) = if args.background.is_some_and(|b| b)
             || (args.background.is_none() && gui_config.start_in_tray)
         {
-            println!("would hide gui");
             (None, Task::none())
         } else {
-            println!("would show gui");
             let (id, task) = window::open(default_window_settings());
             (Some(id), task.discard())
         };
