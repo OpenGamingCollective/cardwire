@@ -7,4 +7,5 @@ pub const ALLOWED_PROGRAMS: &[&str] = &[
     "apt",
     "nix",
     "nix-daemon",
+    "virtnodedevd",
 ];
