@@ -4,3 +4,4 @@ pub mod gpu;
 pub mod inode;
 pub mod pci;
 pub mod procfs;
+pub mod whitelist;
