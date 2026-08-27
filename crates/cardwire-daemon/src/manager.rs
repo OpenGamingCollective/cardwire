@@ -165,21 +165,10 @@ impl DaemonManager {
             .map_err(|err| err.into())
     }
     async fn whitelist_programs(&self) -> Result<()> {
-        // List of allowed programs
-        const ALLOWED_PROGRAMS: &[&str] = &[
-            "(udev-worker)",
-            "systemd-udevd",
-            "pacman",
-            "dnf",
-            "apt",
-            "nix",
-            "nix-daemon",
-        ];
-
         let mut blocker = self.inner.blocker.write().await;
 
         // Iter over the ALLOWED_PROGRAMS array and allow each comm
-        for comm in ALLOWED_PROGRAMS {
+        for comm in crate::core::whitelist::ALLOWED_PROGRAMS {
             blocker.allow_comm(comm)?;
         }
         Ok(())
