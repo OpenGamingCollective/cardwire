@@ -44,6 +44,9 @@ pub enum CardwireError {
     #[error("Error with state_file {0}: {1}")]
     CardwireStateError(String, serde_json::Error),
 
+    #[error("Couldn't find renderD{0}")]
+    DriRenderdNotFound(u32),
+
     // Mode errors
     #[error("unknown mode: {0}")]
     UnknownMode(u32),
