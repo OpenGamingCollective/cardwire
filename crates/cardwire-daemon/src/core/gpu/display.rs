@@ -150,9 +150,3 @@ pub async fn is_gpu_active(card: u32) -> Option<bool> {
         None => Some(false),
     }
 }
-
-/// Send a "change" uevent for a DRM card, prompting the display server to
-/// rescan connectors.
-pub async fn send_drm_uevent(card: u32) -> io::Result<()> {
-    tokio::fs::write(format!("/sys/class/drm/card{card}/uevent"), "change\n").await
-}
