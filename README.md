@@ -1,36 +1,47 @@
 # cardwire
+A GPU manager for Linux for laptops and multi-GPU desktops, using eBPF LSM hooks.
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/cardwire.svg)](https://repology.org/project/cardwire/versions)
 
 [![GitHub License](https://img.shields.io/github/license/OpenGamingCollective/cardwire)](https://github.com/OpenGamingCollective/cardwire/blob/main/LICENSE)
 
-A GPU manager for Linux using eBPF LSM hooks to block GPUs
 
 ![Cardwire GUI screenshot](./assets/org.opengamingcollective.cardwire.screenshot.png)
 
-Creator and Main maintainer: @luytan
+Creator and main maintainer: @luytan
 
-# Disclaimer
+> [!IMPORTANT]
+> This project is in early development. Expect bugs and breakage.
+> 
+> Wayland only, X11 is not supported.
 
-- This project is in early development. Expect bugs and incomplete functionality
+## Benefits
+- **Instant App Startup:** Prevents applications (like Electron apps or GTK apps) from attempting to initialize the GPU, this eliminates the 3–4 second "hang" typically caused by waiting for a sleeping GPU to power up
+- **Power Efficiency:** By blocking access at the syscall level, the GPU is never woken from its lowest power state (D3cold), extending battery life on laptops
+- **Non-Invasive:** Unlike traditional methods that might require driver unloading, risky unbind or complex Wayland setups, this approach is transparent to the rest of the system and easy to toggle
+- **Application Forcing:** Launch any app on the GPU you choose with `cardwire launch <APP>`
+- **Application Policy (Smart Mode)** Keep the dGPU blocked by default, and gran access only to the ones you allow
 
 ## Getting Started
 
 Head to the [docs](https://opengamingcollective.github.io/cardwire) to see how to install and use Cardwire on your system
 
+## Modes
+Modes are available depending on your system type:
+**Laptop:**
+- Integrated
+- Hybrid
+- Smart
+
+**Desktop**
+- Hybrid(kept as a default mode, everything goes back to unblocked)
+- Manual
+
 ## How it works
 
 Cardwire uses eBPF with LSM hooks to intercept file operations on GPU device nodes, such as `/dev/dri/renderDX`, `/dev/dri/cardX`, sysfs `config`, `nvidiaX` and other GPU-related files.
 
-When a GPU is "blocked," the eBPF program returns `-ENOENT` for any syscall targeting that device, effectively hiding it from apps. This provides several key benefits:
-
-- **Instant App Startup:** Prevents applications (like Electron apps or GTK apps) from attempting to initialize the GPU, this eliminates the 3–4 second "hang" typically caused by waiting for a sleeping GPU to power up
-- **Power Efficiency:** By blocking access at the syscall level, the GPU is never woken from its lowest power state (D3cold), extending battery life on laptops
-- **Non-Invasive:** Unlike traditional methods that might require driver unloading, risky unbind or complex Wayland setups, this approach is transparent to the rest of the system and easy to toggle
-
-Cardwire can also forces apps to be launched on a specific GPU !
-
-_Note: X11 is not supported. Cardwire requires Wayland._
+When a GPU is "blocked," the eBPF program returns `-ENOENT` for any syscall targeting that device, effectively hiding it from apps.
 
 ## Community projects:
 
