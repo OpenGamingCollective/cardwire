@@ -1,3 +1,4 @@
+pub mod app_instance;
 pub mod app_resolver;
 mod dbus;
 

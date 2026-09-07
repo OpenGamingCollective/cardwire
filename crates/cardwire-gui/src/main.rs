@@ -10,13 +10,19 @@ mod tray;
 mod ui;
 
 use app::AppState;
+use args::CardwireArgs;
+use clap::Parser;
 use env_logger::Env;
+use helpers::app_instance::AppInstance;
+use message::Message;
 
-fn main() -> iced::Result {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info"))
         .format_target(false)
         .format_timestamp(None)
         .init();
+
+    let args = CardwireArgs::parse();
 
     unsafe {
         // Vulkan wakes the dGPU
@@ -25,10 +31,27 @@ fn main() -> iced::Result {
         std::env::set_var("WGPU_POWER_PREF", "low");
     }
 
-    iced::daemon(AppState::new, AppState::update, AppState::view)
-        .title(AppState::title)
-        .theme(iced::Theme::Dark)
-        .subscription(AppState::subscription)
-        .default_font(gtk_font::default_font())
-        .run()
+    // Keep D-Bus processing alive while Iced runs its event loop on this thread.
+    let runtime = tokio::runtime::Runtime::new()?;
+    let Some(instance) = runtime.block_on(AppInstance::acquire(args.background != Some(true)))?
+    else {
+        return Ok(());
+    };
+
+    iced::daemon(
+        move || AppState::new(&args),
+        AppState::update,
+        AppState::view,
+    )
+    .title(AppState::title)
+    .theme(iced::Theme::Dark)
+    .subscription(move |state: &AppState| {
+        iced::Subscription::batch([
+            state.subscription(),
+            instance.subscription().map(|()| Message::Activate),
+        ])
+    })
+    .default_font(gtk_font::default_font())
+    .run()?;
+    Ok(())
 }
