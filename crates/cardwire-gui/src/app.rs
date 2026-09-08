@@ -571,14 +571,14 @@ impl AppState {
 
     fn open_or_focus_window(&mut self) -> Task<Message> {
         if let Some(id) = self.window_id {
-            window::minimize(id, false)
-                .chain(window::gain_focus(id))
-                // Wayland does not implement gain_focus; request activation
-                // through the compositor's attention protocol as well.
-                .chain(window::request_user_attention(
-                    id,
-                    Some(window::UserAttention::Informational),
-                ))
+            // Wayland does not implement gain_focus; request activation
+            // through the compositor's attention protocol as well.
+            // source: iced_runtime::window::Action::GainFocus(Id)
+            window::minimize(id, false).chain(window::request_user_attention(
+                id,
+                Some(window::UserAttention::Informational),
+            ))
+            // window::gain_focus(id)
         } else {
             let (id, task) = window::open(default_window_settings());
             self.window_id = Some(id);
