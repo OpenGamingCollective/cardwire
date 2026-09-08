@@ -1,5 +1,6 @@
 mod app;
 mod args;
+mod errors;
 mod gtk_font;
 mod gui_config;
 mod helpers;
@@ -13,9 +14,10 @@ use app::AppState;
 use args::CardwireArgs;
 use clap::Parser;
 use env_logger::Env;
+use errors::Result;
 use helpers::AppInstance;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info"))
         .format_target(false)
         .format_timestamp(None)
