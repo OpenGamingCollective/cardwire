@@ -21,6 +21,7 @@ CIs must pass before merging, this includes:
 - Nix VM 2 GPUs (Laptop conf)
 - Nix VM 3 GPUs
 - Nix VM 15 GPUs
+- Nix GUI D-Bus Test
 
 If none of these CIs passes, the PR won't be merged
 
