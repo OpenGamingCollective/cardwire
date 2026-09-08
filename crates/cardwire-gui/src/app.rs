@@ -5,7 +5,7 @@ use log::error;
 use std::collections::BTreeMap;
 
 use crate::{
-    args::CardwireArgs, gui_config::{GuiConfig, PrimaryClickAction}, helpers::{CardwireDbus, GpuDevice}, message::Message, models::{
+    args::CardwireArgs, gui_config::{GuiConfig, PrimaryClickAction}, helpers::{AppInstance, CardwireDbus, GpuDevice}, message::Message, models::{
         DaemonSettings, LogState, MainState, Mode, Page, PciDevice, SettingState, SmartState
     }, tray::{self, TrayAction, TrayHandle}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
 };
@@ -536,10 +536,11 @@ impl AppState {
         }
     }
 
-    pub fn subscription(&self) -> Subscription<Message> {
+    pub fn subscription(&self, instance: &AppInstance) -> Subscription<Message> {
         Subscription::batch([
             crate::subscription::dbus_sub(),
             crate::subscription::tray_sub(),
+            crate::subscription::activation_sub(instance),
             window::close_events().map(Message::WindowClosed),
         ])
     }

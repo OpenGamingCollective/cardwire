@@ -1,7 +1,10 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap}, hash::{Hash, Hasher}, sync::Arc, time::Duration
+};
 
+use tokio::sync::Notify;
 use zbus::{
-    self, Connection, fdo, names::OwnedInterfaceName, zvariant::{OwnedObjectPath, OwnedValue}
+    self, Connection, connection::Builder, fdo::{self, RequestNameFlags}, names::OwnedInterfaceName, zvariant::{OwnedObjectPath, OwnedValue}
 };
 
 use crate::models::{DaemonSettings, DbusAppMetadata, LsofData, Mode};
@@ -242,5 +245,108 @@ impl CardwireDbus {
         )
         .await?;
         proxy.call("SetAppPolicy", &(app_id, policy)).await
+    }
+}
+
+const BUS_NAME: &str = "org.opengamingcollective.cardwire.Gui";
+const OBJECT_PATH: &str = "/org/opengamingcollective/cardwire/Gui";
+
+struct ActivationInterface(Arc<Notify>);
+
+#[zbus::interface(name = "org.opengamingcollective.cardwire.Gui")]
+impl ActivationInterface {
+    fn activate(&self) {
+        // Keep a permit if the GUI has not started listening yet. Repeated
+        // requests can be coalesced because they all open the same window.
+        self.0.notify_one();
+    }
+}
+
+/// Owns the session bus name for as long as the GUI is running.
+#[derive(Debug, Clone)]
+pub struct AppInstance {
+    connection: Connection,
+    activation: Arc<Notify>,
+}
+
+impl Hash for AppInstance {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.connection.unique_name().hash(state);
+    }
+}
+
+impl AppInstance {
+    /// Returns the shared notification source for activation requests.
+    pub fn activation(&self) -> Arc<Notify> {
+        Arc::clone(&self.activation)
+    }
+
+    /// Returns `None` when another instance owns the name. Explicit background
+    /// launches leave that instance hidden; normal launches ask it to open.
+    pub async fn acquire(activate_existing: bool) -> zbus::Result<Option<Self>> {
+        let activation = Arc::new(Notify::new());
+        let connection = Builder::session()?
+            .method_timeout(Duration::from_secs(5))
+            // Export before claiming the name so simultaneous launches can
+            // immediately call Activate on the winner.
+            .serve_at(OBJECT_PATH, ActivationInterface(Arc::clone(&activation)))?
+            .build()
+            .await?;
+
+        match connection
+            .request_name_with_flags(BUS_NAME, RequestNameFlags::DoNotQueue.into())
+            .await
+        {
+            Ok(_) => Ok(Some(Self {
+                connection,
+                activation,
+            })),
+            Err(zbus::Error::NameTaken) => {
+                if activate_existing {
+                    connection
+                        .call_method(Some(BUS_NAME), OBJECT_PATH, Some(BUS_NAME), "Activate", &())
+                        .await?;
+                }
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
+    async fn exclusive_ownership_activation_and_release() {
+        let primary = AppInstance::acquire(true).await.unwrap().unwrap();
+
+        assert!(AppInstance::acquire(false).await.unwrap().is_none());
+        tokio::select! {
+            biased;
+            _ = primary.activation.notified() => panic!("background launch requested activation"),
+            _ = std::future::ready(()) => {}
+        }
+
+        // Activation must survive arrival before the GUI subscribes.
+        assert!(AppInstance::acquire(true).await.unwrap().is_none());
+        tokio::time::timeout(Duration::from_secs(1), primary.activation.notified())
+            .await
+            .unwrap();
+
+        primary.connection.close().await.unwrap();
+
+        // Concurrent startups elect exactly one owner, without stale locks.
+        let (first, second) = tokio::join!(AppInstance::acquire(true), AppInstance::acquire(true));
+        let first = first.unwrap();
+        let second = second.unwrap();
+        assert_ne!(first.is_some(), second.is_some());
+        let winner = first.or(second).unwrap();
+        tokio::time::timeout(Duration::from_secs(1), winner.activation.notified())
+            .await
+            .unwrap();
+        winner.connection.close().await.unwrap();
     }
 }

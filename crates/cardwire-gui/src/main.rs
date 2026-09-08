@@ -13,8 +13,7 @@ use app::AppState;
 use args::CardwireArgs;
 use clap::Parser;
 use env_logger::Env;
-use helpers::app_instance::AppInstance;
-use message::Message;
+use helpers::AppInstance;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info"))
@@ -45,12 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .title(AppState::title)
     .theme(iced::Theme::Dark)
-    .subscription(move |state: &AppState| {
-        iced::Subscription::batch([
-            state.subscription(),
-            instance.subscription().map(|()| Message::Activate),
-        ])
-    })
+    .subscription(move |state: &AppState| state.subscription(&instance))
     .default_font(gtk_font::default_font())
     .run()?;
     Ok(())
