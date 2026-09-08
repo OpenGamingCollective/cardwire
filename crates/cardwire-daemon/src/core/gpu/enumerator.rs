@@ -7,7 +7,7 @@ use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 
 use crate::core::{
     gpu::{
-        GpuDevice, GpuVendor, check_default_drm_class, device_info::{amd_get_device_model, nvidia_get_device_model, nvidia_get_minor}, display::drm_node_ids, egl::is_discrete_egl, vulkan::vlk_enumerate
+        GpuDevice, GpuVendor, check_default_drm_class, device_info::{amd_get_device_model, nvidia_get_device_model, nvidia_get_minor}, display::drm_node_ids, models::GpuType, vulkan::vlk_enumerate
     }, pci::PciDevice
 };
 
@@ -72,7 +72,9 @@ impl GpuEnumerator {
             .map(|name| name.split('(').next().unwrap_or(&name).trim().to_string())
             //  Fallback to vendor-specific lookup
             .or_else(|| match gpu_vendor {
+                // Use the driver info
                 GpuVendor::Nvidia => nvidia_get_device_model(device.pci_address()),
+                // use amdgpu.ids
                 GpuVendor::Amd => device
                     .device_id()
                     .as_ref()
@@ -90,6 +92,7 @@ impl GpuEnumerator {
                 "Unknown Device".to_string()
             });
 
+        // If the GPU is bound to vfio, mark it as unavailable
         if let Some(driver) = device.driver()
             && driver.contains("vfio-")
         {
@@ -102,10 +105,7 @@ impl GpuEnumerator {
                 None,
                 gpu_vendor,
                 None,
-                false,
-                true,
-                false,
-                false,
+                GpuType::Unavailable,
             ));
         }
 
@@ -123,17 +123,12 @@ impl GpuEnumerator {
             }
         };
 
-        // Skip the EGL probe for unavailable GPUs: the render node is unknown (u32::MAX) and the
-        // lookup would always fail on a phantom /dev/dri/renderD4294967295 path
-        let discrete = self.is_discrete_vulkan(device.pci_address())
-            || (available
-                && match is_discrete_egl(render) {
-                    Ok(discrete) => discrete,
-                    Err(err) => {
-                        warn!("{}: EGL discrete check failed: {}", device_name, err);
-                        false
-                    }
-                });
+        // Get the device type using vulkan
+        let mut device_type = self.get_gpu_type_vulkan(device.pci_address());
+        // Mark non-available device
+        if !available {
+            device_type = GpuType::Unavailable
+        };
 
         Ok(GpuDevice::new(
             device_name,
@@ -143,35 +138,32 @@ impl GpuEnumerator {
             None,
             gpu_vendor,
             nvidia_minor,
-            discrete,
-            false,
-            available,
-            self.is_virtual_gpu(device),
+            device_type,
         ))
     }
-    fn is_discrete_vulkan(&self, pci_id: &str) -> bool {
+    /// get the gpu type using vulkan
+    fn get_gpu_type_vulkan(&self, pci_id: &str) -> GpuType {
         if let Some(vlk_map) = &self.vlk_physical_devices
             && let Some(vlk_dev) = vlk_map.get(pci_id)
         {
-            return vlk_dev.properties().device_type == PhysicalDeviceType::DiscreteGpu;
+            match vlk_dev.properties().device_type {
+                PhysicalDeviceType::Cpu => GpuType::Cpu,
+                PhysicalDeviceType::DiscreteGpu => GpuType::Discrete,
+                PhysicalDeviceType::IntegratedGpu => GpuType::Integrated,
+                PhysicalDeviceType::VirtualGpu => GpuType::Virtual,
+                PhysicalDeviceType::Other => GpuType::Other,
+                _ => {
+                    // List is non-exhaustive, warn and give it the unknown type
+                    warn!(
+                        "{} Unknown GPU type: {:?}",
+                        pci_id,
+                        vlk_dev.properties().device_type
+                    );
+                    GpuType::Unknown
+                }
+            }
+        } else {
+            GpuType::Unknown
         }
-
-        false
-    }
-    /// Detect virtual GPUs (e.g. virtio-gpu in qemu) through Vulkan when available, falling
-    /// back to the virtio PCI vendor id.
-    fn is_virtual_gpu(&self, device: &PciDevice) -> bool {
-        const VIRTIO_VENDOR_ID: &str = "0x1af4";
-
-        if let Some(vlk_map) = &self.vlk_physical_devices
-            && let Some(vlk_dev) = vlk_map.get(device.pci_address())
-        {
-            return vlk_dev.properties().device_type == PhysicalDeviceType::VirtualGpu;
-        }
-
-        device
-            .vendor_id()
-            .as_deref()
-            .is_some_and(|id| id == VIRTIO_VENDOR_ID)
     }
 }
