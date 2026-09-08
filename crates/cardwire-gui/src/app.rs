@@ -578,7 +578,6 @@ impl AppState {
                 id,
                 Some(window::UserAttention::Informational),
             ))
-            // window::gain_focus(id)
         } else {
             let (id, task) = window::open(default_window_settings());
             self.window_id = Some(id);
