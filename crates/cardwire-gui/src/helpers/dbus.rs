@@ -318,9 +318,14 @@ impl AppInstance {
 mod tests {
     use super::*;
 
+    // These tests deliberately contend for the real application name. Serialize
+    // them within the private bus created by dbus-run-session.
+    static INSTANCE_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     #[tokio::test]
     #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
     async fn exclusive_ownership_activation_and_release() {
+        let _guard = INSTANCE_TEST_LOCK.lock().await;
         let primary = AppInstance::acquire(true).await.unwrap().unwrap();
 
         assert!(AppInstance::acquire(false).await.unwrap().is_none());
@@ -348,5 +353,93 @@ mod tests {
             .await
             .unwrap();
         winner.connection.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
+    async fn repeated_activations_coalesce_and_remain_usable() {
+        let _guard = INSTANCE_TEST_LOCK.lock().await;
+        let primary = AppInstance::acquire(true).await.unwrap().unwrap();
+        let activation = primary.activation();
+
+        for _ in 0..3 {
+            assert!(AppInstance::acquire(true).await.unwrap().is_none());
+        }
+        tokio::time::timeout(Duration::from_secs(1), activation.notified())
+            .await
+            .unwrap();
+        tokio::select! {
+            biased;
+            _ = activation.notified() => panic!("activation requests were not coalesced"),
+            _ = std::future::ready(()) => {}
+        }
+
+        // Consuming one request must not stop subsequent launches from working.
+        assert!(AppInstance::acquire(true).await.unwrap().is_none());
+        tokio::time::timeout(Duration::from_secs(1), activation.notified())
+            .await
+            .unwrap();
+        primary.connection.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
+    async fn ownership_lasts_until_the_last_clone_is_dropped() {
+        let _guard = INSTANCE_TEST_LOCK.lock().await;
+        let primary = AppInstance::acquire(true).await.unwrap().unwrap();
+        let retained = primary.clone();
+        let activation = primary.activation();
+        drop(primary);
+
+        assert!(AppInstance::acquire(true).await.unwrap().is_none());
+        tokio::time::timeout(Duration::from_secs(1), activation.notified())
+            .await
+            .unwrap();
+        drop(retained);
+
+        // Socket closure is asynchronous. Wait for the bus to observe it before
+        // checking that a fresh launch can own the name, without explicit close().
+        let observer = Connection::session().await.unwrap();
+        let bus = zbus::fdo::DBusProxy::new(&observer).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while bus
+                .name_has_owner(BUS_NAME.try_into().unwrap())
+                .await
+                .unwrap()
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+
+        let replacement = AppInstance::acquire(true).await.unwrap().unwrap();
+        replacement.connection.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
+    async fn activation_failure_does_not_start_another_instance() {
+        let _guard = INSTANCE_TEST_LOCK.lock().await;
+        // Simulate an owner that cannot handle Activate (e.g. an incompatible
+        // implementation). A failed call must be reported, not bypass the lock.
+        let owner = Builder::session()
+            .unwrap()
+            .serve_at(OBJECT_PATH, zbus::fdo::ObjectManager)
+            .unwrap()
+            .build()
+            .await
+            .unwrap();
+        owner
+            .request_name_with_flags(BUS_NAME, RequestNameFlags::DoNotQueue.into())
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            AppInstance::acquire(true).await,
+            Err(zbus::Error::MethodError(..))
+        ));
+        assert!(AppInstance::acquire(false).await.unwrap().is_none());
+        owner.close().await.unwrap();
     }
 }
