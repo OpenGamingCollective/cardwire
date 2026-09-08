@@ -32,6 +32,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Keep D-Bus processing alive while Iced runs its event loop on this thread.
     let runtime = tokio::runtime::Runtime::new()?;
+    // Claim the exclusive session D-Bus name before starting the GUI. If another
+    // instance owns it, ask that instance to open (unless --background=true),
+    // then exit successfully. Some(instance) keeps our ownership alive while the
+    // GUI runs; D-Bus or activation errors propagate via `?` and prevent startup.
     let Some(instance) = runtime.block_on(AppInstance::acquire(args.background != Some(true)))?
     else {
         return Ok(());
