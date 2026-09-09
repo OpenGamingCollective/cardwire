@@ -125,7 +125,8 @@
           nativeCheckInputs = (old.nativeCheckInputs or [ ]) ++ [ (pkgs system).dbus ];
           checkPhase = ''
             runHook preCheck
-            dbus-run-session -- cargo test --release --offline --locked \
+            dbus-run-session --config-file=${(pkgs system).dbus}/share/dbus-1/session.conf \
+              -- cargo test --release --offline --locked \
               -p cardwire-gui helpers::dbus::tests:: -- --ignored
             runHook postCheck
           '';
