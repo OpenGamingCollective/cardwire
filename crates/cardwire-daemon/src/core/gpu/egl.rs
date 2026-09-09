@@ -3,6 +3,8 @@ use std::ffi::{c_char, c_int, c_void};
 use khronos_egl::DynamicInstance;
 
 // For legacy device, use egl EXT to check if it's discrete or not
+#[deprecated]
+#[allow(dead_code, deprecated)]
 pub fn is_discrete_egl(render: u32) -> Result<bool, String> {
     // Unsafe is required, khronos_egl doesnt include EGL EXT
     // reference:
