@@ -1,10 +1,10 @@
 # Introduction
 
-Cardwire is a GPU manager for Linux systems with multiple GPUs. It allows users to smoothly and safely switch between "integrated", "hybrid" and more GPU modes. It was created as the successor to the deprecated [supergfxctl](https://gitlab.com/asus-linux/supergfxctl) project.
+Cardwire is a GPU manager for Linux laptops and multi-GPU desktops. It allows users to block the GPU of their choice, and to route applications on a specific GPU.
 
 ## Why Cardwire?
 
-Traditional GPU managers for Linux (like envycontrol, optimus-manager, supergfxctl) often require system restarts or display manager logouts. And other built-in tools (like switcheroo-control) are great for launching apps but don't actively protect the dedicated GPU from being woken up, and cannot force an APP to run on a specific GPU.
+Traditional GPU managers for Linux (like envycontrol, optimus-manager, supergfxctl) often require system restarts or display manager logouts, and were made with laptops in mind. And other built-in tools (like switcheroo-control) are great for launching apps but don't actively protect the dedicated GPU from being woken up, cannot force an application to run on a specific GPU.
 
 Cardwire solves this by using **eBPF and LSM** to dynamically block access to the GPU (more info about those [here](https://youtu.be/eVsMkXDE_5I)). This ensures the GPU is blocked at a userspace level.
 
