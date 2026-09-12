@@ -231,6 +231,8 @@ mod tests {
             Some(1),
             Some("0x1002".to_string()),
             Some("0x1234".to_string()),
+            Some("0x1002".to_string()),
+            Some("0x5678".to_string()),
             Some("AMD".to_string()),
             Some("RX 7900".to_string()),
             Some("amdgpu".to_string()),

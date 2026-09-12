@@ -34,6 +34,11 @@ impl GpuEnumerator {
                 .as_ref()
                 .is_some_and(|class| class.starts_with("0x03"))
         }) {
+            info!(
+                "GPU {} fingerprint: {}",
+                pci_device.pci_address(),
+                pci_device.hardware_fingerprint()
+            );
             match self.build_gpu(pci_device) {
                 Ok(gpu) => {
                     gpu_list.insert(id, gpu);

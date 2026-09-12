@@ -4,6 +4,8 @@ pub struct PciDevice {
     iommu_group: Option<usize>,
     vendor_id: Option<String>,
     device_id: Option<String>,
+    subsystem_vendor_id: Option<String>,
+    subsystem_device_id: Option<String>,
     vendor_name: Option<String>,
     device_name: Option<String>,
     driver: Option<String>,
@@ -24,6 +26,12 @@ impl PciDevice {
     }
     pub fn device_id(&self) -> &Option<String> {
         &self.device_id
+    }
+    pub fn subsystem_vendor_id(&self) -> &Option<String> {
+        &self.subsystem_vendor_id
+    }
+    pub fn subsystem_device_id(&self) -> &Option<String> {
+        &self.subsystem_device_id
     }
     pub fn vendor_name(&self) -> &Option<String> {
         &self.vendor_name
@@ -49,6 +57,8 @@ impl PciDevice {
         iommu_group: Option<usize>,
         vendor_id: Option<String>,
         device_id: Option<String>,
+        subsystem_vendor_id: Option<String>,
+        subsystem_device_id: Option<String>,
         vendor_name: Option<String>,
         device_name: Option<String>,
         driver: Option<String>,
@@ -61,6 +71,8 @@ impl PciDevice {
             iommu_group,
             vendor_id,
             device_id,
+            subsystem_vendor_id,
+            subsystem_device_id,
             vendor_name,
             device_name,
             driver,
@@ -68,6 +80,16 @@ impl PciDevice {
             parent_pci,
             child_pci,
         }
+    }
+
+    pub fn hardware_fingerprint(&self) -> String {
+        format!(
+            "{}:{}:{}:{}",
+            self.vendor_id().as_deref().unwrap_or("unknown"),
+            self.device_id().as_deref().unwrap_or("unknown"),
+            self.subsystem_vendor_id().as_deref().unwrap_or("unknown"),
+            self.subsystem_device_id().as_deref().unwrap_or("unknown"),
+        )
     }
 }
 
@@ -122,6 +144,8 @@ mod tests {
             Some(5),
             Some("0x1002".to_string()),
             Some("0x7480".to_string()),
+            Some("0x1002".to_string()),
+            Some("0x1234".to_string()),
             Some("AMD".to_string()),
             Some("Navi 31".to_string()),
             Some("amdgpu".to_string()),
@@ -133,6 +157,8 @@ mod tests {
         assert_eq!(*pci.iommu_group(), Some(5));
         assert_eq!(pci.vendor_id().as_deref(), Some("0x1002"));
         assert_eq!(pci.device_id().as_deref(), Some("0x7480"));
+        assert_eq!(pci.subsystem_vendor_id().as_deref(), Some("0x1002"));
+        assert_eq!(pci.subsystem_device_id().as_deref(), Some("0x1234"));
         assert_eq!(pci.vendor_name().as_deref(), Some("AMD"));
         assert_eq!(pci.device_name().as_deref(), Some("Navi 31"));
         assert_eq!(pci.driver().as_deref(), Some("amdgpu"));
@@ -154,16 +180,64 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
         );
         assert_eq!(pci.pci_address(), "0000:02:00.0");
         assert_eq!(*pci.iommu_group(), None);
         assert_eq!(pci.vendor_id().as_deref(), None);
         assert_eq!(pci.device_id().as_deref(), None);
+        assert_eq!(pci.subsystem_vendor_id().as_deref(), None);
+        assert_eq!(pci.subsystem_device_id().as_deref(), None);
         assert_eq!(pci.vendor_name().as_deref(), None);
         assert_eq!(pci.device_name().as_deref(), None);
         assert_eq!(pci.driver().as_deref(), None);
         assert_eq!(pci.class().as_deref(), None);
         assert_eq!(pci.parent_pci().as_deref(), None);
         assert_eq!(pci.child_pci().as_deref(), None);
+    }
+
+    #[test]
+    fn test_hardware_fingerprint_is_deterministic() {
+        let pci = PciDevice::new(
+            "0000:01:00.0".to_string(),
+            None,
+            Some("0x10de".to_string()),
+            Some("0x2786".to_string()),
+            Some("0x1458".to_string()),
+            Some("0x40f5".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(pci.hardware_fingerprint(), "0x10de:0x2786:0x1458:0x40f5");
+        assert_eq!(pci.hardware_fingerprint(), pci.hardware_fingerprint());
+    }
+
+    #[test]
+    fn test_hardware_fingerprint_handles_missing_ids() {
+        let pci = PciDevice::new(
+            "0000:02:00.0".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(
+            pci.hardware_fingerprint(),
+            "unknown:unknown:unknown:unknown"
+        );
     }
 }
