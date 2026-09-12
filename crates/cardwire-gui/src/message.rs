@@ -47,5 +47,6 @@ pub enum Message {
     OpenUrl(String),
     ClearError,
     ClearInfo,
+    GlobalShortcutTriggered(String),
     None,
 }

@@ -15,6 +15,10 @@ use zbus::{
     Connection, Proxy, names::OwnedInterfaceName, proxy, zvariant::{OwnedObjectPath, OwnedValue}
 };
 
+use ashpd::desktop::{
+    CreateSessionOptions, global_shortcuts::{BindShortcutsOptions, GlobalShortcuts, NewShortcut}
+};
+
 pub fn tray_sub() -> Subscription<Message> {
     Subscription::run_with("cardwire_tray_subscription", |_id| {
         stream::channel(10, |mut output: Sender<Message>| async move {
@@ -720,6 +724,99 @@ fn smart_sub() -> Subscription<Message> {
     })
 }
 
+pub fn shortcuts_sub() -> Subscription<Message> {
+    Subscription::run_with("cardwire_shortcuts_subscription", |_id| {
+        stream::channel(10, |mut output: Sender<Message>| async move {
+            let conn = match Connection::session().await {
+                Ok(c) => c,
+                Err(err) => {
+                    log::warn!("Failed to open session bus for shortcuts: {err}");
+                    std::future::pending::<()>().await;
+                    return;
+                }
+            };
+
+            // Register this connection as cardwire-gui with the portal
+            let options = HashMap::<String, zbus::zvariant::Value>::new();
+            if let Err(err) = conn
+                .call_method(
+                    Some("org.freedesktop.portal.Desktop"),
+                    "/org/freedesktop/portal/desktop",
+                    Some("org.freedesktop.host.portal.Registry"),
+                    "Register",
+                    &("cardwire-gui", options),
+                )
+                .await
+            {
+                log::warn!("Failed to register app ID with portal: {err}");
+            }
+
+            // Connect to GlobalShortcuts using the same connection
+            let proxy = match GlobalShortcuts::with_connection(conn).await {
+                Ok(p) => p,
+                Err(err) => {
+                    log::warn!("Global shortcuts portal unavailable: {err}");
+                    std::future::pending::<()>().await;
+                    return;
+                }
+            };
+
+            // Create session with the portal
+            let session = match proxy.create_session(CreateSessionOptions::default()).await {
+                Ok(s) => s,
+                Err(err) => {
+                    log::warn!("Failed to create global shortcuts session: {err}");
+                    std::future::pending::<()>().await;
+                    return;
+                }
+            };
+
+            // Define the shortcuts
+            let shortcuts = [
+                NewShortcut::new("cycle_mode", "Cycle GPU Mode"),
+                NewShortcut::new("set_hybrid", "Switch to Hybrid Mode"),
+                NewShortcut::new("set_integrated", "Switch to Integrated Mode"),
+                NewShortcut::new("set_smart", "Switch to Smart Mode"),
+                NewShortcut::new("set_manual", "Switch to Manual Mode"),
+                NewShortcut::new("toggle_gui", "Open / Focus Cardwire Window"),
+            ];
+
+            if let Err(err) = proxy
+                .bind_shortcuts(&session, &shortcuts, None, BindShortcutsOptions::default())
+                .await
+            {
+                log::warn!("Failed to bind global shortcuts: {err}");
+                std::future::pending::<()>().await;
+                return;
+            }
+
+            // Listen for activation signals
+            let mut stream = match proxy.receive_activated().await {
+                Ok(s) => s,
+                Err(err) => {
+                    log::warn!("Failed to receive activated stream: {err}");
+                    std::future::pending::<()>().await;
+                    return;
+                }
+            };
+
+            // keep session alive while listening
+            let _keep_session = session;
+
+            while let Some(activated) = stream.next().await {
+                let shortcut_id = activated.shortcut_id().to_string();
+                if output
+                    .send(Message::GlobalShortcutTriggered(shortcut_id))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+            }
+        })
+    })
+}
+
 pub fn dbus_sub() -> Subscription<Message> {
     Subscription::batch([
         config_sub(),
@@ -728,5 +825,6 @@ pub fn dbus_sub() -> Subscription<Message> {
         pci_sub(),
         logger_sub(),
         smart_sub(),
+        shortcuts_sub(),
     ])
 }
