@@ -67,6 +67,7 @@
             (pkgs system).bpftools
             (pkgs system).udev
             (pkgs system).pkg-config
+            (pkgs system).dbus
             (pkgs system).mdbook
             (pkgs system).mdbook-mermaid
             (pkgs system).wayland
@@ -119,6 +120,17 @@
           inherit pkgs system self;
           lib = nixpkgs.lib;
         };
+        gui-dbus = self.packages.${system}.default.overrideAttrs (old: {
+          doCheck = true;
+          nativeCheckInputs = (old.nativeCheckInputs or [ ]) ++ [ (pkgs system).dbus ];
+          checkPhase = ''
+            runHook preCheck
+            dbus-run-session --config-file=${(pkgs system).dbus}/share/dbus-1/session.conf \
+              -- cargo test --release --offline --locked \
+              -p cardwire-gui helpers::dbus::tests:: -- --ignored
+            runHook postCheck
+          '';
+        });
         pre-commit-check = git-hooks.lib.${system}.run {
           src = ./.;
           hooks = {

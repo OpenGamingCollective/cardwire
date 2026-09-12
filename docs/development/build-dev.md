@@ -19,6 +19,9 @@ nix build .#checks.x86_64-linux.vm-ci-2gpu
 nix build .#checks.x86_64-linux.vm-ci-3gpu
 nix build .#checks.x86_64-linux.vm-ci-15gpu
 
+# Run GUI D-Bus tests on a private session bus
+nix build .#checks.x86_64-linux.gui-dbus
+
 # Build the vm and enter
 nix run .#nixosConfigurations.x86_64-linux.config.system.build.vm
 ```
@@ -33,6 +36,23 @@ Formatting requires nightly `rustfmt` (the project uses nightly-only formatting 
 rustup toolchain install nightly --component rustfmt
 cargo +nightly fmt --all --check
 ```
+
+Run the regular Rust tests from the repository root:
+
+```sh
+cargo test --locked
+```
+
+The GUI instance D-Bus tests are ignored by default because they claim the real
+`org.opengamingcollective.cardwire.Gui` session bus name. Run them on a private bus
+so they cannot interact with a running Cardwire GUI:
+
+```sh
+dbus-run-session -- cargo test --locked -p cardwire-gui helpers::dbus::tests:: -- --ignored
+```
+
+These tests need `dbus-run-session` and `dbus-daemon` (the `dbus-daemon` package on
+Ubuntu, or `dbus` in the Nix development shell).
 
 ```bash
 # Build the project

@@ -1,7 +1,10 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap}, hash::{Hash, Hasher}, sync::Arc, time::Duration
+};
 
+use tokio::sync::Notify;
 use zbus::{
-    self, Connection, fdo, names::OwnedInterfaceName, zvariant::{OwnedObjectPath, OwnedValue}
+    self, Connection, connection::Builder, fdo::{self, RequestNameFlags}, names::OwnedInterfaceName, zvariant::{OwnedObjectPath, OwnedValue}
 };
 
 use crate::models::{DaemonSettings, DbusAppMetadata, LsofData, Mode};
@@ -242,5 +245,397 @@ impl CardwireDbus {
         )
         .await?;
         proxy.call("SetAppPolicy", &(app_id, policy)).await
+    }
+}
+
+const BUS_NAME: &str = "org.opengamingcollective.cardwire.Gui";
+const OBJECT_PATH: &str = "/org/opengamingcollective/cardwire/Gui";
+
+struct ActivationInterface(Arc<Notify>);
+
+#[zbus::interface(name = "org.opengamingcollective.cardwire.Gui")]
+impl ActivationInterface {
+    fn activate(&self) {
+        // Keep a permit if the GUI has not started listening yet. Repeated
+        // requests can be coalesced because they all open the same window.
+        self.0.notify_one();
+    }
+}
+
+/// Owns the session bus name for as long as the GUI is running.
+#[derive(Debug, Clone)]
+pub struct AppInstance {
+    connection: Connection,
+    activation: Arc<Notify>,
+}
+
+impl Hash for AppInstance {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.connection.unique_name().hash(state);
+    }
+}
+
+impl AppInstance {
+    /// Returns the shared notification source for activation requests.
+    pub fn activation(&self) -> Arc<Notify> {
+        Arc::clone(&self.activation)
+    }
+
+    /// Returns `None` when another instance owns the name. Explicit background
+    /// launches leave that instance hidden; normal launches ask it to open.
+    ///
+    /// If the bus reports that the owner disappeared during activation, retries
+    /// name acquisition once.
+    pub async fn acquire(activate_existing: bool) -> zbus::Result<Option<Self>> {
+        Self::acquire_with_activation(activate_existing, activate_instance).await
+    }
+
+    // Keep activation injectable so tests can reproduce an owner exiting between
+    // RequestName and Activate without depending on scheduling or sleeps.
+    async fn acquire_with_activation<F, Fut>(
+        activate_existing: bool,
+        mut activate: F,
+    ) -> zbus::Result<Option<Self>>
+    where
+        F: FnMut(Connection) -> Fut,
+        Fut: std::future::Future<Output = zbus::Result<()>>,
+    {
+        let activation = Arc::new(Notify::new());
+        let connection = Builder::session()?
+            .method_timeout(Duration::from_secs(5))
+            // Export before claiming the name so simultaneous launches can
+            // immediately call Activate on the winner.
+            .serve_at(OBJECT_PATH, ActivationInterface(Arc::clone(&activation)))?
+            .build()
+            .await?;
+
+        let mut retry_available = true;
+        loop {
+            match connection
+                .request_name_with_flags(BUS_NAME, RequestNameFlags::DoNotQueue.into())
+                .await
+            {
+                Ok(_) => {
+                    return Ok(Some(Self {
+                        connection,
+                        activation,
+                    }));
+                }
+                Err(zbus::Error::NameTaken) => {
+                    if activate_existing {
+                        match activate(connection.clone()).await {
+                            Ok(()) => {}
+                            Err(error) if retry_available && owner_disappeared(&error) => {
+                                // The owner exited after RequestName. Try claiming
+                                // the name again, or activate its replacement, once.
+                                retry_available = false;
+                                continue;
+                            }
+                            Err(error) => return Err(error),
+                        }
+                    }
+                    return Ok(None);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+}
+
+async fn activate_instance(connection: Connection) -> zbus::Result<()> {
+    connection
+        .call_method(Some(BUS_NAME), OBJECT_PATH, Some(BUS_NAME), "Activate", &())
+        .await?;
+    Ok(())
+}
+
+fn owner_disappeared(error: &zbus::Error) -> bool {
+    let zbus::Error::MethodError(_, _, reply) = error else {
+        return false;
+    };
+    if reply.header().sender().map(|sender| sender.as_str()) != Some("org.freedesktop.DBus") {
+        return false;
+    }
+    matches!(
+        fdo::Error::from(error.clone()),
+        fdo::Error::NameHasNoOwner(_) | fdo::Error::ServiceUnknown(_)
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // These tests deliberately contend for the real application name. Serialize
+    // them within the private bus created by dbus-run-session.
+    static INSTANCE_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
+    async fn missing_owner_errors_retry_acquisition() {
+        let _guard = INSTANCE_TEST_LOCK.lock().await;
+        for query_owner in [false, true] {
+            let owner = AppInstance::acquire(false).await.unwrap().unwrap();
+            let mut attempts = 0;
+            let recovered = AppInstance::acquire_with_activation(true, |connection| {
+                attempts += 1;
+                let owner_connection = owner.connection.clone();
+                async move {
+                    // RequestName has already found this owner. Remove it before
+                    // the activation call to deterministically reproduce the race.
+                    owner_connection.close().await.unwrap();
+                    let result = if query_owner {
+                        // GetNameOwner produces the other standard missing-owner
+                        // reply, with a real bus sender and message header.
+                        connection
+                            .call_method(
+                                Some("org.freedesktop.DBus"),
+                                "/org/freedesktop/DBus",
+                                Some("org.freedesktop.DBus"),
+                                "GetNameOwner",
+                                &(BUS_NAME,),
+                            )
+                            .await
+                            .map(|_| ())
+                    } else {
+                        activate_instance(connection).await
+                    };
+                    let error = result.unwrap_err();
+                    match fdo::Error::from(error.clone()) {
+                        fdo::Error::NameHasNoOwner(_) => assert!(query_owner),
+                        fdo::Error::ServiceUnknown(_) => assert!(!query_owner),
+                        other => panic!("unexpected missing-owner error: {other}"),
+                    }
+                    Err(error)
+                }
+            })
+            .await
+            .unwrap()
+            .unwrap();
+            assert_eq!(attempts, 1);
+            recovered.connection.close().await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
+    async fn retry_handles_a_replacement_but_stops_after_another_failure() {
+        let _guard = INSTANCE_TEST_LOCK.lock().await;
+        for fail_again in [false, true] {
+            let owner = Arc::new(tokio::sync::Mutex::new(
+                AppInstance::acquire(false).await.unwrap(),
+            ));
+            let mut attempts = 0;
+            let result = AppInstance::acquire_with_activation(true, |connection| {
+                attempts += 1;
+                assert!(attempts <= 2, "acquisition retried more than once");
+                let disappear = attempts == 1 || fail_again;
+                let owner = Arc::clone(&owner);
+                async move {
+                    if !disappear {
+                        return activate_instance(connection).await;
+                    }
+                    let mut owner = owner.lock().await;
+                    owner.take().unwrap().connection.close().await.unwrap();
+                    let error = activate_instance(connection).await.unwrap_err();
+                    // A replacement claims the name before acquisition retries.
+                    *owner = AppInstance::acquire(false).await.unwrap();
+                    Err(error)
+                }
+            })
+            .await;
+            assert_eq!(attempts, 2);
+            let owner = owner.lock().await.take().unwrap();
+            if fail_again {
+                let zbus::Error::MethodError(name, _, reply) = result.unwrap_err() else {
+                    panic!("the second activation error was not preserved");
+                };
+                assert_eq!(name.as_str(), "org.freedesktop.DBus.Error.ServiceUnknown");
+                assert_eq!(
+                    reply.header().sender().unwrap().as_str(),
+                    "org.freedesktop.DBus"
+                );
+            } else {
+                assert!(result.unwrap().is_none());
+                tokio::time::timeout(Duration::from_secs(1), owner.activation.notified())
+                    .await
+                    .unwrap();
+            }
+            owner.connection.close().await.unwrap();
+        }
+    }
+
+    struct RefusingActivation {
+        error: fdo::Error,
+        attempts: Arc<AtomicUsize>,
+    }
+
+    #[zbus::interface(name = "org.opengamingcollective.cardwire.Gui")]
+    impl RefusingActivation {
+        fn activate(&self) -> fdo::Result<()> {
+            self.attempts.fetch_add(1, Ordering::SeqCst);
+            Err(self.error.clone())
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
+    async fn application_errors_are_preserved_without_retry() {
+        let _guard = INSTANCE_TEST_LOCK.lock().await;
+        for expected in [
+            fdo::Error::NameHasNoOwner("application error".into()),
+            fdo::Error::ServiceUnknown("application error".into()),
+            fdo::Error::Failed("application error".into()),
+        ] {
+            let attempts = Arc::new(AtomicUsize::new(0));
+            let owner = Builder::session()
+                .unwrap()
+                .serve_at(
+                    OBJECT_PATH,
+                    RefusingActivation {
+                        error: expected.clone(),
+                        attempts: Arc::clone(&attempts),
+                    },
+                )
+                .unwrap()
+                .name(BUS_NAME)
+                .unwrap()
+                .build()
+                .await
+                .unwrap();
+            let error = AppInstance::acquire(true).await.unwrap_err();
+            assert_eq!(attempts.load(Ordering::SeqCst), 1);
+            let zbus::Error::MethodError(_, _, reply) = &error else {
+                panic!("application error was not preserved");
+            };
+            assert_eq!(
+                reply.header().sender().unwrap().as_str(),
+                owner.unique_name().unwrap().as_str()
+            );
+            assert_eq!(fdo::Error::from(error), expected);
+            owner.close().await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
+    async fn exclusive_ownership_activation_and_release() {
+        let _guard = INSTANCE_TEST_LOCK.lock().await;
+        let primary = AppInstance::acquire(true).await.unwrap().unwrap();
+
+        assert!(AppInstance::acquire(false).await.unwrap().is_none());
+        tokio::select! {
+            biased;
+            _ = primary.activation.notified() => panic!("background launch requested activation"),
+            _ = std::future::ready(()) => {}
+        }
+
+        // Activation must survive arrival before the GUI subscribes.
+        assert!(AppInstance::acquire(true).await.unwrap().is_none());
+        tokio::time::timeout(Duration::from_secs(1), primary.activation.notified())
+            .await
+            .unwrap();
+
+        primary.connection.close().await.unwrap();
+
+        // Concurrent startups elect exactly one owner, without stale locks.
+        let (first, second) = tokio::join!(AppInstance::acquire(true), AppInstance::acquire(true));
+        let first = first.unwrap();
+        let second = second.unwrap();
+        assert_ne!(first.is_some(), second.is_some());
+        let winner = first.or(second).unwrap();
+        tokio::time::timeout(Duration::from_secs(1), winner.activation.notified())
+            .await
+            .unwrap();
+        winner.connection.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
+    async fn repeated_activations_coalesce_and_remain_usable() {
+        let _guard = INSTANCE_TEST_LOCK.lock().await;
+        let primary = AppInstance::acquire(true).await.unwrap().unwrap();
+        let activation = primary.activation();
+
+        for _ in 0..3 {
+            assert!(AppInstance::acquire(true).await.unwrap().is_none());
+        }
+        tokio::time::timeout(Duration::from_secs(1), activation.notified())
+            .await
+            .unwrap();
+        tokio::select! {
+            biased;
+            _ = activation.notified() => panic!("activation requests were not coalesced"),
+            _ = std::future::ready(()) => {}
+        }
+
+        // Consuming one request must not stop subsequent launches from working.
+        assert!(AppInstance::acquire(true).await.unwrap().is_none());
+        tokio::time::timeout(Duration::from_secs(1), activation.notified())
+            .await
+            .unwrap();
+        primary.connection.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
+    async fn ownership_lasts_until_the_last_clone_is_dropped() {
+        let _guard = INSTANCE_TEST_LOCK.lock().await;
+        let primary = AppInstance::acquire(true).await.unwrap().unwrap();
+        let retained = primary.clone();
+        let activation = primary.activation();
+        drop(primary);
+
+        assert!(AppInstance::acquire(true).await.unwrap().is_none());
+        tokio::time::timeout(Duration::from_secs(1), activation.notified())
+            .await
+            .unwrap();
+        drop(retained);
+
+        // Socket closure is asynchronous. Wait for the bus to observe it before
+        // checking that a fresh launch can own the name, without explicit close().
+        let observer = Connection::session().await.unwrap();
+        let bus = zbus::fdo::DBusProxy::new(&observer).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while bus
+                .name_has_owner(BUS_NAME.try_into().unwrap())
+                .await
+                .unwrap()
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+
+        let replacement = AppInstance::acquire(true).await.unwrap().unwrap();
+        replacement.connection.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate the GUI bus name"]
+    async fn activation_failure_does_not_start_another_instance() {
+        let _guard = INSTANCE_TEST_LOCK.lock().await;
+        // Simulate an owner that cannot handle Activate (e.g. an incompatible
+        // implementation). A failed call must be reported, not bypass the lock.
+        let owner = Builder::session()
+            .unwrap()
+            .serve_at(OBJECT_PATH, zbus::fdo::ObjectManager)
+            .unwrap()
+            .build()
+            .await
+            .unwrap();
+        owner
+            .request_name_with_flags(BUS_NAME, RequestNameFlags::DoNotQueue.into())
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            AppInstance::acquire(true).await,
+            Err(zbus::Error::MethodError(..))
+        ));
+        assert!(AppInstance::acquire(false).await.unwrap().is_none());
+        owner.close().await.unwrap();
     }
 }

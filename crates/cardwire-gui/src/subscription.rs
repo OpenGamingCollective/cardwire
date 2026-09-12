@@ -9,7 +9,7 @@ use tokio::select;
 use tokio_stream::StreamMap;
 
 use crate::{
-    helpers::CardwireDbus, message::Message, models::{DaemonSettings, LogEntry, Mode, PciDevice}, tray
+    helpers::{AppInstance, CardwireDbus}, message::Message, models::{DaemonSettings, LogEntry, Mode, PciDevice}, tray
 };
 use zbus::{
     Connection, Proxy, names::OwnedInterfaceName, proxy, zvariant::{OwnedObjectPath, OwnedValue}
@@ -729,4 +729,13 @@ pub fn dbus_sub() -> Subscription<Message> {
         logger_sub(),
         smart_sub(),
     ])
+}
+
+pub fn activation_sub(instance: &AppInstance) -> Subscription<Message> {
+    Subscription::run_with(instance.clone(), |instance| {
+        iced::futures::stream::unfold(instance.activation(), |activation| async move {
+            activation.notified().await;
+            Some((Message::Activate, activation))
+        })
+    })
 }
