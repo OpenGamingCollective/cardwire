@@ -47,6 +47,7 @@ body:
     attributes:
       label: Cardwire GPU list
       description: Cardwire GPU list, fetched using `cardwire list --json`
+      render: json
     validations:
       required: true
 
@@ -57,6 +58,7 @@ body:
       description: A clear and concise description of the bug, please write it with your own words, if it's an LLM output, please put it in the `LLM output` section.
     validations:
       required: true
+
   - type: textarea
     id: expected-actual
     attributes:
@@ -70,6 +72,7 @@ body:
     attributes:
       label: Laptop Model / Board Name
       description: Please provide the daemon logs using `journalctl -eu cardwired.service --no-pager`.
+      render: shell
     validations:
       required: true
   - type: textarea
