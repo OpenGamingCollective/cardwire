@@ -1,40 +1,81 @@
----
-name: Bug report
-about: Create a report to help us improve
-title: ''
-labels: ''
-assignees: luytan
+name: Bug Report
+description: Create a bug report to help improve cardwire
+assignees:
+  - luytan
+title: "[Bug]: "
+type: bug
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill a bug report !
+        FYI:
+        Cardwire does not support X11.
+        Cardwire is currently not stable (< 1.0.0), only reports made with the latest version will be taken into account
 
----
+  - type: input
+    id: distribution
+    attributes:
+      label: Distribution
+      description: Please provide your distribution
+      placeholder: ex. Bazzite 45
+    validations:
+      required: true
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+  - type: input
+    id: kernel
+    attributes:
+      label: Kernel Version
+      description: The kernel version, fetched using `uname -r`
+      placeholder: ex. `7.2.3-cachyos-lto`
+    validations:
+      required: true
 
-**To Reproduce**
-Steps to reproduce the behavior:
+  - type: input
+    id: cardwire-version
+    attributes:
+      label: Cardwire Version
+      description: Cardwire version, fetched using `cardwire -V`
+      placeholder: ex. `cardwire-cli 0.12.1`
+    validations:
+      required: true
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+  - type: textarea
+    id: cardwire-list
+    attributes:
+      label: Cardwire GPU list
+      description: Cardwire GPU list, fetched using `cardwire list --json`
+    validations:
+      required: true
 
-**Environment details**
-Please provide your distro, kernel, and hardware details. The output of `fastfetch` (or `neofetch`) is preferred:
-```text
-```
-Cardwire version (`cardwire --version`):
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of the bug, please write it with your own words, if it's an LLM output, please put it in the `LLM output` section.
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected vs Actual Behavior
+      description: What did you expect to happen, and what actually happened?
+    validations:
+      required: true
 
-**`cardwire list --json` output**
-Please paste the text output (do not use a screenshot):
-```json
-```
-
-**`ls -la /dev/dri/by-path/`**
-```text
-```
-
-**cardwired logs**
-Please provide the daemon logs (e.g., run `journalctl -eu cardwired.service --no-pager`):
-```text
-```
-
-**Additional context**
-Add any other context about the problem here.
+  - type: textarea
+    id: cardwired-logs
+    attributes:
+      label: Laptop Model / Board Name
+      description: Please provide the daemon logs using `journalctl -eu cardwired.service --no-pager`.
+    validations:
+      required: true
+  - type: textarea
+    id: llm-output
+    attributes:
+      label: LLM Output
+      description: If you used an LLM to help you find the bug, please provide the LLM output here, this is better than having a whole AI written bug report
+    validations:
+      required: false
