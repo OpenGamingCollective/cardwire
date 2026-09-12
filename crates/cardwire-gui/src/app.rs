@@ -277,6 +277,23 @@ impl AppState {
                     return self.open_or_focus_window();
                 }
             }
+            Message::GlobalShortcutTriggered(id) => match id.as_str() {
+                "cycle_mode" => {
+                    let modes = &self.main_state.available_modes;
+                    if !modes.is_empty() {
+                        let current = self.main_state.current_mode.unwrap_or(modes[0]);
+                        let idx = modes.iter().position(|&m| m == current).unwrap_or(0);
+                        let next_mode = modes[(idx + 1) % modes.len()];
+                        return self.update(Message::SetMode(next_mode));
+                    }
+                }
+                "set_hybrid" => return self.update(Message::SetMode(Mode::Hybrid)),
+                "set_integrated" => return self.update(Message::SetMode(Mode::Integrated)),
+                "set_smart" => return self.update(Message::SetMode(Mode::Smart)),
+                "set_manual" => return self.update(Message::SetMode(Mode::Manual)),
+                "toggle_gui" => return self.open_or_focus_window(),
+                _ => {}
+            },
             Message::TrayShutdownComplete => return iced::exit(),
             Message::WindowClosed(id) => {
                 if self.window_id == Some(id) {
