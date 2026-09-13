@@ -44,6 +44,9 @@ pub enum CardwireError {
     #[error("Error with state_file {0}: {1}")]
     CardwireStateError(String, serde_json::Error),
 
+    #[error("Failed to query amdgpu info {0}")]
+    CardwireAmdGpuError(i32),
+
     // Mode errors
     #[error("unknown mode: {0}")]
     UnknownMode(u32),
