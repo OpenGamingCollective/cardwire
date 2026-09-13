@@ -377,6 +377,51 @@ impl GpuEnumerator {
                     Ok(gpu_device)
                 }
             }
+            // Just set the type to Virtual
+            GpuVendor::Virtio => {
+                let gpu_name = device
+                    .device_name()
+                    .clone()
+                    .unwrap_or_else(|| "Unknown Device".to_string());
+                let drm_res = sysfs_get_device_drm(pci_id);
+                match drm_res {
+                    Some((card, render)) => {
+                        let gpu_type = GpuType::Virtual;
+                        let gpu_device = GpuDevice::new(
+                            gpu_name,
+                            device.clone(),
+                            render,
+                            card,
+                            None,
+                            gpu_vendor,
+                            None,
+                            gpu_type,
+                        );
+                        info!("{}: Used Virtio to build", gpu_device.name());
+                        debug!("{:?}", gpu_device);
+                        Ok(gpu_device)
+                    }
+                    None => {
+                        // Couldn't get DRM, mark GPU as not available
+                        let gpu_type = GpuType::Unavailable;
+                        let gpu_device = GpuDevice::new(
+                            gpu_name,
+                            device.clone(),
+                            u32::MAX,
+                            u32::MAX,
+                            None,
+                            gpu_vendor,
+                            None,
+                            gpu_type,
+                        );
+                        error!(
+                            "{}: cannot fetch DRM nodes, marking as un-available",
+                            gpu_device.name()
+                        );
+                        Ok(gpu_device)
+                    }
+                }
+            }
             // Cardwire depends on knowing the GPU type for the modes, mark Other devices as
             // unknown, leaving only hybrid and manual available until support added
             GpuVendor::Other => {

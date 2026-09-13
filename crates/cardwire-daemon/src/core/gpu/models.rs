@@ -54,6 +54,7 @@ pub enum GpuVendor {
     Amd,
     Nvidia,
     Intel,
+    Virtio,
     #[default]
     Other,
 }
@@ -66,6 +67,7 @@ impl<T: AsRef<str>> From<T> for GpuVendor {
             "0x1002" => GpuVendor::Amd,
             "0x10de" | "0x104a" | "0x12d2" => GpuVendor::Nvidia,
             "0x8086" => GpuVendor::Intel,
+            "0x1AF4" => GpuVendor::Virtio,
             // Unknown id
             _ => GpuVendor::Other,
         }
@@ -78,6 +80,7 @@ impl Display for GpuVendor {
             GpuVendor::Amd => write!(f, "AMD"),
             GpuVendor::Nvidia => write!(f, "Nvidia"),
             GpuVendor::Intel => write!(f, "Intel"),
+            GpuVendor::Virtio => write!(f, "Virtio"),
             GpuVendor::Other => write!(f, "Unknown Vendor"),
         }
     }
