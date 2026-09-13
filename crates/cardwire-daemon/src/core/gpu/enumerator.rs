@@ -74,7 +74,7 @@ impl GpuEnumerator {
         let _ = wait_for_drm(pci_id, 5);
 
         // Check if the gpu info can be fetched using vulkan, if so use vulkan to build the GPU
-        if self.vulkan.vulkan_compatible(device.pci_address()) {
+        if self.vulkan.vulkan_compatible(pci_id) {
             let gpu_type = self.vulkan.get_gpu_type(pci_id);
             let gpu_name = self.vulkan.get_gpu_name(pci_id);
 
@@ -109,7 +109,6 @@ impl GpuEnumerator {
                        We first try to use NVML to build the GPU, using NVML allows us to have a good discrete detection
                        If NVML fails/GPU wasnt ready after 5 retries, fallback to the manual method that reads /proc/driver/nvidia
                     */
-                    let pci_id = device.pci_address();
                     // Wait for the driver to be ready using NVML
                     if let Some(nvml) = wait_for_nvidia(pci_id, 5) {
                         // The device is ready and nvml is available, use it for GPU construction
