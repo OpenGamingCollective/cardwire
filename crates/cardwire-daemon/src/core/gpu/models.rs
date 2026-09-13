@@ -89,15 +89,15 @@ impl Display for GpuVendor {
 #[derive(
     Clone, Debug, serde::Serialize, serde::Deserialize, Default, PartialEq, zvariant::Type,
 )]
+#[repr(u32)]
 pub enum GpuType {
-    Integrated,
-    Discrete,
-    Virtual,
-    Cpu,
-    Other,
-    Unavailable,
+    Integrated = 0,
+    Discrete = 1,
+    Virtual = 2,
+    Other = 3,
+    Unavailable = 4,
     #[default]
-    Unknown,
+    Unknown = 5,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
@@ -150,10 +150,6 @@ impl GpuDevice {
         self.device_type == GpuType::Discrete
     }
 
-    pub fn is_cpu(&self) -> bool {
-        self.device_type == GpuType::Cpu
-    }
-
     pub fn is_integrated(&self) -> bool {
         self.device_type == GpuType::Integrated
     }
@@ -204,7 +200,6 @@ pub struct DbusGpuDevice {
     pub device_type: GpuType,
     pub vendor: String,
     pub driver: String,
-    pub nvidia: bool,
     pub nvidia_minor: String,
 }
 
@@ -219,7 +214,6 @@ impl From<&GpuDevice> for DbusGpuDevice {
             device_type: gpu.device_type.clone(),
             vendor: gpu.gpu_vendor().to_string(),
             driver: gpu.pci.driver().clone().unwrap_or("none".to_string()),
-            nvidia: gpu.gpu_vendor() == GpuVendor::Nvidia,
             nvidia_minor: if let Some(minor) = gpu.nvidia_minor() {
                 minor.to_string()
             } else {

@@ -35,11 +35,10 @@ impl Vulkan {
             && let Some(vlk_dev) = vlk_map.get(pci_id)
         {
             match vlk_dev.properties().device_type {
-                PhysicalDeviceType::Cpu => GpuType::Cpu,
                 PhysicalDeviceType::DiscreteGpu => GpuType::Discrete,
                 PhysicalDeviceType::IntegratedGpu => GpuType::Integrated,
                 PhysicalDeviceType::VirtualGpu => GpuType::Virtual,
-                PhysicalDeviceType::Other => GpuType::Other,
+                PhysicalDeviceType::Other | PhysicalDeviceType::Cpu => GpuType::Other,
                 _ => {
                     // List is non-exhaustive, warn and give it the unknown type
                     warn!(
