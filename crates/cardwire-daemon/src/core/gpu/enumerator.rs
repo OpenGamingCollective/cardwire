@@ -1,28 +1,21 @@
-use std::{
-    collections::{BTreeMap, HashMap}, io, sync::Arc
-};
+use std::{collections::BTreeMap, io};
 
 use log::{error, info, warn};
-use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 
 use crate::core::{
     gpu::{
-        GpuDevice, GpuVendor, check_default_drm_class, device_info::{amd_get_device_model, nvidia_get_device_model, nvidia_get_minor}, display::drm_node_ids, models::GpuType, vulkan::vlk_enumerate
+        GpuDevice, GpuVendor, check_default_drm_class, device_info::nvidia_get_minor, display::drm_node_ids, models::GpuType, type_detection::vulkan::Vulkan
     }, pci::PciDevice
 };
 
 pub struct GpuEnumerator {
-    vlk_physical_devices: Option<HashMap<String, Arc<PhysicalDevice>>>,
+    vulkan: Vulkan,
 }
 
 impl GpuEnumerator {
     pub fn build() -> Self {
-        // Store the vulkan list to prevent calling vulkan everytime we look into it
-        let vlk_physical_devices = vlk_enumerate();
-
-        Self {
-            vlk_physical_devices,
-        }
+        let vulkan = Vulkan::build();
+        Self { vulkan }
     }
     pub fn enumerate(&self, pci_list: &BTreeMap<String, PciDevice>) -> BTreeMap<usize, GpuDevice> {
         let mut gpu_list: BTreeMap<usize, GpuDevice> = BTreeMap::new();
@@ -63,42 +56,61 @@ impl GpuEnumerator {
             None => GpuVendor::default(),
         };
 
+        // Check if the gpu info can be fetched using vulkan, if so use vulkan to build the GPU
+        if self.vulkan.vulkan_compatible(device.pci_address()) {
+            let pci_id = device.pci_address();
+            let gpu_type = self.vulkan.get_gpu_type(pci_id);
+            let gpu_name = self.vulkan.get_gpu_name(pci_id);
+
+            let gpu_card = self.vulkan.get_gpu_card(pci_id).unwrap_or_default();
+            let gpu_render = self.vulkan.get_gpu_render(pci_id).unwrap_or_default();
+
+            let gpu_device = GpuDevice::new(
+                gpu_name,
+                device.clone(),
+                gpu_render as u32,
+                gpu_card as u32,
+                None,
+                gpu_vendor,
+                None,
+                gpu_type,
+            );
+            return Ok(gpu_device);
+        }
+
+        // else, fallback to sysfs GPU building
+
         // Try with vulkan first
-        let device_name = self
-            .vlk_physical_devices
-            .as_ref()
-            .and_then(|map| map.get(device.pci_address()))
-            .map(|vlk_dev| vlk_dev.properties().device_name.clone())
-            .map(|name| name.split('(').next().unwrap_or(&name).trim().to_string())
-            //  Fallback to vendor-specific lookup
-            .or_else(|| match gpu_vendor {
-                // Use the driver info
-                GpuVendor::Nvidia => nvidia_get_device_model(device.pci_address()),
-                // use amdgpu.ids
-                GpuVendor::Amd => device
-                    .device_id()
-                    .as_ref()
-                    .and_then(|id| amd_get_device_model(id, device.pci_address())),
-                _ => None,
-            })
-            // Fallback to hwdata
-            .or_else(|| {
-                warn!("Couldn't get device_name, falling back to hwdata");
-                device.device_name().clone()
-            })
-            // fallback default
-            .unwrap_or_else(|| {
-                warn!("Couldn't get name using hwdata, falling back to default");
-                "Unknown Device".to_string()
-            });
+        //let device_name = (|| match gpu_vendor {
+        //        // Use the driver info
+        //        GpuVendor::Nvidia => nvidia_get_device_model(device.pci_address()),
+        //        // use amdgpu.ids
+        //        GpuVendor::Amd => device
+        //            .device_id()
+        //            .as_ref()
+        //            .and_then(|id| amd_get_device_model(id, device.pci_address())),
+        //        _ => None,
+        //    })
+        //    // Fallback to hwdata
+        //    .or_else(|| {
+        //        warn!("Couldn't get device_name, falling back to hwdata");
+        //        device.device_name().clone()
+        //    })
+        //    // fallback default
+        //    .unwrap_or_else(|| {
+        //        warn!("Couldn't get name using hwdata, falling back to default");
+        //        "Unknown Device".to_string()
+        //    });
+
+        let gpu_name = String::new();
 
         // If the GPU is bound to vfio, mark it as unavailable
         if let Some(driver) = device.driver()
             && driver.contains("vfio-")
         {
-            info!("Device: {} is bound to: {}", device_name, driver);
+            info!("Device: {} is bound to: {}", gpu_name, driver);
             return Ok(GpuDevice::new(
-                device_name,
+                gpu_name,
                 device.clone(),
                 u32::MAX,
                 u32::MAX,
@@ -115,23 +127,17 @@ impl GpuEnumerator {
         };
 
         // Available is used to know if the device should be used by cardwire or not
-        let (card, render, available) = match drm_node_ids(device.pci_address()) {
+        let (card, render, _available) = match drm_node_ids(device.pci_address()) {
             Ok((c, r)) => (c, r, true),
             Err(err) => {
-                error!("{}: Couldn't get drm node IDs: {}", device_name, err);
+                error!("{}: Couldn't get drm node IDs: {}", gpu_name, err);
                 (u32::MAX, u32::MAX, false)
             }
         };
-
-        // Get the device type using vulkan
-        let mut device_type = self.get_gpu_type_vulkan(device.pci_address());
-        // Mark non-available device
-        if !available {
-            device_type = GpuType::Unavailable
-        };
+        let device_type = GpuType::Unknown;
 
         Ok(GpuDevice::new(
-            device_name,
+            gpu_name,
             device.clone(),
             render,
             card,
@@ -140,30 +146,5 @@ impl GpuEnumerator {
             nvidia_minor,
             device_type,
         ))
-    }
-    /// get the gpu type using vulkan
-    fn get_gpu_type_vulkan(&self, pci_id: &str) -> GpuType {
-        if let Some(vlk_map) = &self.vlk_physical_devices
-            && let Some(vlk_dev) = vlk_map.get(pci_id)
-        {
-            match vlk_dev.properties().device_type {
-                PhysicalDeviceType::Cpu => GpuType::Cpu,
-                PhysicalDeviceType::DiscreteGpu => GpuType::Discrete,
-                PhysicalDeviceType::IntegratedGpu => GpuType::Integrated,
-                PhysicalDeviceType::VirtualGpu => GpuType::Virtual,
-                PhysicalDeviceType::Other => GpuType::Other,
-                _ => {
-                    // List is non-exhaustive, warn and give it the unknown type
-                    warn!(
-                        "{} Unknown GPU type: {:?}",
-                        pci_id,
-                        vlk_dev.properties().device_type
-                    );
-                    GpuType::Unknown
-                }
-            }
-        } else {
-            GpuType::Unknown
-        }
     }
 }
