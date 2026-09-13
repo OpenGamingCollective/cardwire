@@ -1,6 +1,10 @@
 [Unit]
 Description=Cardwire Daemon
-After=dbus.service
+Before=graphical.target
+# drm-module-load.target is from cachyos
+# <https://github.com/CachyOS/CachyOS-PKGBUILDS/pull/1695>
+After=multi-user.target drm-module-load.target
+Wants=multi-user.target drm-module-load.target
 
 
 [Service]
@@ -38,4 +42,4 @@ SystemCallFilter=~@cpu-emulation @module @obsolete @raw-io @reboot @swap
 
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
