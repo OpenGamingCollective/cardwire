@@ -1,12 +1,19 @@
 use std::{path::Path, thread, time::Duration};
 
+use log::{info, warn};
+
 /// Wait for the device to be initialized
 pub fn wait_for_drm(pci_id: &str, retries: usize) -> bool {
     let drm = Path::new("/sys/bus/pci/devices").join(pci_id).join("drm");
 
-    for _attempt in 0..retries {
+    for attempt in 0..retries {
+        warn!(
+            "[{}/{}] waiting for {} DRM subsystem to init...",
+            attempt, retries, pci_id
+        );
         if drm.read_dir().is_ok_and(|mut d| d.next().is_some()) {
-            return false;
+            info!("{} DRM subsystem is ready", pci_id);
+            return true;
         }
         thread::sleep(Duration::from_millis(250));
     }
