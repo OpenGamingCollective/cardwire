@@ -97,7 +97,7 @@ pub enum GpuType {
     Unknown,
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
 pub struct GpuDevice {
     name: String,
     pub pci: PciDevice,
