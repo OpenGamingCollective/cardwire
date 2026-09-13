@@ -1,7 +1,51 @@
-use std::time::Duration;
+use crate::core::gpu::models::GpuType;
+
+use std::{fs, path::Path, time::Duration};
 
 use log::{error, info, warn};
 use tokio::{process::Command, time::timeout};
+
+#[allow(unused, dead_code)]
+pub fn get_nvidia_type(pci_id: &str, gpu_name: &str) -> GpuType {
+    GpuType::Unknown
+}
+
+/// Get nvidia minor id
+#[allow(unused, dead_code)]
+pub fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
+    let nvidia_driver_proc = Path::new("/proc/driver/nvidia/gpus/")
+        .join(pci_address)
+        .join("information");
+    let information = fs::read_to_string(nvidia_driver_proc).ok()?;
+    information
+        .lines()
+        .find(|line| line.starts_with("Device Minor:"))?
+        .split_once(':')?
+        .1
+        .trim()
+        .parse::<u32>()
+        .ok()
+}
+
+/// find the nvidia model using the device information file
+#[allow(unused, dead_code)]
+pub fn nvidia_get_device_model(pci_address: &str) -> Option<String> {
+    let nvidia_driver_proc = Path::new("/proc/driver/nvidia/gpus/")
+        .join(pci_address)
+        .join("information");
+    let information = fs::read_to_string(nvidia_driver_proc).ok()?;
+    let model = information
+        .lines()
+        .find(|line| line.starts_with("Model:"))?
+        .split_once(':')?
+        .1
+        .trim()
+        .to_string();
+    match !model.is_empty() {
+        true => Some(model),
+        false => None,
+    }
+}
 
 const SERVICE: &str = "nvidia-powerd.service";
 

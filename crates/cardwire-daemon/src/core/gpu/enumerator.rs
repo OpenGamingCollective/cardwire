@@ -4,7 +4,7 @@ use log::{error, info, warn};
 
 use crate::core::{
     gpu::{
-        GpuDevice, GpuVendor, check_default_drm_class, device_info::nvidia_get_minor, display::drm_node_ids, models::GpuType, type_detection::vulkan::Vulkan
+        GpuDevice, GpuVendor, check_default_drm_class, generic::{display::drm_node_ids, vulkan::Vulkan}, models::GpuType
     }, pci::PciDevice
 };
 
@@ -121,11 +121,6 @@ impl GpuEnumerator {
             ));
         }
 
-        let nvidia_minor = match gpu_vendor {
-            GpuVendor::Nvidia => nvidia_get_minor(device.pci_address()),
-            _ => None,
-        };
-
         // Available is used to know if the device should be used by cardwire or not
         let (card, render, _available) = match drm_node_ids(device.pci_address()) {
             Ok((c, r)) => (c, r, true),
@@ -143,7 +138,7 @@ impl GpuEnumerator {
             card,
             None,
             gpu_vendor,
-            nvidia_minor,
+            None,
             device_type,
         ))
     }

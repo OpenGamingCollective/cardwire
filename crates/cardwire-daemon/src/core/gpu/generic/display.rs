@@ -8,14 +8,9 @@ const NON_PHYSICAL: &[&str] = &["Virtual-", "Unknown-", "Writeback-"];
 const INTERNAL_PANELS: &[&str] = &["eDP-", "LVDS-", "DSI-", "DPI-", "SPI-"];
 
 /// Return whether a DRM card currently owns a connected physical external display.
-///
-/// Connector ownership is encoded in sysfs names such as `card1-HDMI-A-1`. Internal panels and
-/// virtual connectors are excluded so only physical external outputs keep the card available.
 #[allow(dead_code)]
 pub fn external_display_connected(card: u32) -> io::Result<bool> {
     let card_prefix = format!("card{card}-");
-    // An unreadable status is not proof of a disconnect. Keep the first error while checking
-    // whether another connector can still confirm that the card is in use.
     let mut status_error = None;
 
     for entry in fs::read_dir("/sys/class/drm")? {
@@ -37,7 +32,6 @@ pub fn external_display_connected(card: u32) -> io::Result<bool> {
         }
 
         match fs::read_to_string(entry.path().join("status")) {
-            // A confirmed connection takes precedence over errors from other connectors.
             Ok(status) if status.trim() == "connected" => return Ok(true),
             Ok(_) => {}
             Err(err) => {
@@ -46,7 +40,6 @@ pub fn external_display_connected(card: u32) -> io::Result<bool> {
         }
     }
 
-    // Fail safely instead of allowing incomplete topology information to block a display GPU.
     match status_error {
         Some(err) => Err(err),
         None => Ok(false),
