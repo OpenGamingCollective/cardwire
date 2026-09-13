@@ -1,8 +1,13 @@
-use crate::core::gpu::models::GpuType;
+use crate::{
+    Result, core::{errors::CardwireError::CardwireNvmlError, gpu::models::GpuType}
+};
 
-use std::{fs, path::Path, time::Duration};
+use std::{fs, path::Path, thread, time::Duration};
 
 use log::{error, info, warn};
+use nvml_wrapper::{
+    Device, Nvml, enum_wrappers::device::{Brand, GpuVirtualizationMode}, enums::device::DeviceArchitecture, error::NvmlError
+};
 use tokio::{process::Command, time::timeout};
 
 #[allow(unused, dead_code)]
@@ -135,4 +140,102 @@ async fn nvidia_powerd_enabled() -> bool {
     } else {
         false
     }
+}
+
+/// Wait for the nvidia device is be initialized and return the lib
+pub fn wait_for_nvidia(pci_id: &str, retries: usize) -> Option<Nvml> {
+    for _attempt in 0..retries {
+        if let Ok(nvml) = Nvml::init()
+            && let Ok(nvidia_dev) = nvml.device_by_pci_bus_id(pci_id)
+            && let Ok(_) = nvidia_dev.architecture()
+        {
+            return Some(nvml);
+        } else {
+            thread::sleep(Duration::from_millis(250));
+        }
+    }
+    None
+}
+/// Get the device name using NVML
+pub fn nvidia_get_device_name_nvml(nvml: &Nvml, pci_id: &str) -> Option<String> {
+    if let Ok(nvidia_dev) = nvml.device_by_pci_bus_id(pci_id)
+        && let Ok(name) = nvidia_dev.name()
+    {
+        return Some(name);
+    }
+    None
+}
+/// Get the device minor using NVML
+pub fn nvidia_get_device_minor_nvml(nvml: &Nvml, pci_id: &str) -> Option<u32> {
+    if let Ok(nvidia_dev) = nvml.device_by_pci_bus_id(pci_id)
+        && let Ok(minor) = nvidia_dev.minor_number()
+    {
+        return Some(minor);
+    }
+    None
+}
+/// Get the device type using NVML
+pub fn nvidia_get_device_type_nvml(nvml: &Nvml, pci_id: &str) -> GpuType {
+    if let Ok(nvidia_dev) = nvml.device_by_pci_bus_id(pci_id) {
+        if let Ok(virt_mode) = nvidia_dev.virtualization_mode() {
+            match virt_mode {
+                GpuVirtualizationMode::Vgpu => return GpuType::Virtual,
+                // Do not want to assume this one
+                GpuVirtualizationMode::Bare => {}
+                // Others SHOULD be discrete
+                _ => return GpuType::Discrete,
+            }
+        }
+        match nvidia_dev.architecture() {
+            Ok(
+                DeviceArchitecture::Kepler
+                | DeviceArchitecture::Maxwell
+                | DeviceArchitecture::Pascal
+                | DeviceArchitecture::Turing
+                | DeviceArchitecture::Volta
+                | DeviceArchitecture::Ampere
+                | DeviceArchitecture::Ada
+                | DeviceArchitecture::Hopper
+                | DeviceArchitecture::Blackwell,
+            ) => {
+                return GpuType::Discrete;
+            }
+            // Architecture not implemented by nvml_wrapper yet
+            // 11 is DLA
+            // 12 is DLA2
+            // 15 is NPU3
+            // 13 is RUBIN
+            // <https://github.com/NVIDIA/nvidia-settings/blob/df684ed9c29fd116c24a68198b681ef69e4f2c53/src/nvml.h#L1759-L1779>
+            Err(NvmlError::UnexpectedVariant(raw)) => match raw {
+                11 | 12 | 15 => return GpuType::Integrated,
+                13 => return GpuType::Discrete,
+                _ => {}
+            },
+            _ => {}
+        }
+        // Pretty much a fallback, i hope it doesnt get used
+        if let Ok(brand) = nvidia_dev.brand() {
+            match brand {
+                Brand::Quadro
+                | Brand::Tesla
+                | Brand::GeForce
+                | Brand::Titan
+                | Brand::QuadroRTX
+                | Brand::NvidiaRTX
+                | Brand::GeForceRTX
+                | Brand::NVS
+                | Brand::TitanRTX => return GpuType::Discrete,
+                Brand::GRID
+                | Brand::VApps
+                | Brand::VPC
+                | Brand::VCS
+                | Brand::VWS
+                | Brand::CloudGaming => return GpuType::Virtual,
+                _ => {
+                    return GpuType::Unknown;
+                }
+            }
+        }
+    }
+    GpuType::Unknown
 }

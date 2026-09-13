@@ -7,7 +7,9 @@ use crate::core::{
         GpuDevice, GpuVendor, check_default_drm_class, generic::{
             udev::{sysfs_get_device_drm, wait_for_drm}, vulkan::Vulkan
         }, models::GpuType, vendor_specific::{
-            amd::AmdGpuDev, intel::intel_get_device_type, nvidia::{nvidia_get_device_minor, nvidia_get_device_name, nvidia_get_device_type}
+            amd::AmdGpuDev, intel::intel_get_device_type, nvidia::{
+                nvidia_get_device_minor, nvidia_get_device_minor_nvml, nvidia_get_device_name, nvidia_get_device_name_nvml, nvidia_get_device_type, nvidia_get_device_type_nvml, wait_for_nvidia
+            }
         }
     }, pci::PciDevice
 };
@@ -26,6 +28,7 @@ impl GpuEnumerator {
         let mut gpu_list: BTreeMap<usize, GpuDevice> = BTreeMap::new();
 
         let mut id = 0;
+
         for pci_device in pci_list.values().filter(|dev| {
             // Check if the class is tied to graphics
             dev.class()
@@ -97,11 +100,72 @@ impl GpuEnumerator {
 
         // For now only support the popular GPU vendors, more can be added inthe future
         match gpu_vendor {
-            // We use /proc/driver/nvidia/gpus for nvidia devices
             // TODO: add another match for nova driver
             GpuVendor::Nvidia => {
                 // Proprietary nvidia driver, supported by cardwire
                 if device.driver().clone().is_some_and(|d| d == "nvidia") {
+                    /*
+                       This part may sound confusing
+                       We first try to use NVML to build the GPU, using NVML allows us to have a good discrete detection
+                       If NVML fails/GPU wasnt ready after 5 retries, fallback to the manual method that reads /proc/driver/nvidia
+                    */
+                    let pci_id = device.pci_address();
+                    // Wait for the driver to be ready using NVML
+                    if let Some(nvml) = wait_for_nvidia(pci_id, 5) {
+                        // The device is ready and nvml is available, use it for GPU construction
+                        let gpu_name =
+                            nvidia_get_device_name_nvml(&nvml, pci_id).unwrap_or_else(|| {
+                                device
+                                    .device_name()
+                                    .clone()
+                                    .unwrap_or_else(|| "Unknown Device".to_string())
+                            });
+                        let gpu_type = nvidia_get_device_type_nvml(&nvml, pci_id);
+                        let nvidia_minor = nvidia_get_device_minor_nvml(&nvml, pci_id);
+                        let drm_res = sysfs_get_device_drm(pci_id);
+                        // return a working GPU if drm available, else return a non-available GPU
+                        match drm_res {
+                            Some((card, render)) => {
+                                let gpu_device = GpuDevice::new(
+                                    gpu_name,
+                                    device.clone(),
+                                    render,
+                                    card,
+                                    None,
+                                    gpu_vendor,
+                                    nvidia_minor,
+                                    gpu_type,
+                                );
+                                info!("{}: Used Nvidia+NVML to build", gpu_device.name());
+                                debug!("{:?}", gpu_device);
+                                return Ok(gpu_device);
+                            }
+                            None => {
+                                // Couldn't get DRM, mark GPU as not available
+                                // this shouldn't happen unless nvidia-drm is not loaded?
+                                let gpu_type = GpuType::Unavailable;
+                                let gpu_device = GpuDevice::new(
+                                    gpu_name,
+                                    device.clone(),
+                                    u32::MAX,
+                                    u32::MAX,
+                                    None,
+                                    gpu_vendor,
+                                    None,
+                                    gpu_type,
+                                );
+                                error!(
+                                    "{}: Cannot fetch DRM nodes, marking as un-available",
+                                    gpu_device.name()
+                                );
+                                return Ok(gpu_device);
+                            }
+                        }
+                    }
+
+                    // If we are here, it means the NVML failed, this is odd, but will still try
+                    // using the good old sysfs + /proc
+
                     // Try to get the device name using nvidia driver, if fail, use hwdata, then
                     // fallback to unknown
                     let gpu_name = nvidia_get_device_name(pci_id).unwrap_or_else(|| {
@@ -127,7 +191,7 @@ impl GpuEnumerator {
                                 nvidia_minor,
                                 gpu_type,
                             );
-                            info!("{}: Used Nvidia to build", gpu_device.name());
+                            info!("{}: Used Nvidia+SysFS to build", gpu_device.name());
                             debug!("{:?}", gpu_device);
                             return Ok(gpu_device);
                         }

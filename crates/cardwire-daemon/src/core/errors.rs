@@ -1,3 +1,4 @@
+use nvml_wrapper::error::NvmlError;
 use std::{io, path};
 use thiserror::Error;
 
@@ -46,6 +47,9 @@ pub enum CardwireError {
 
     #[error("Failed to query amdgpu info {0}")]
     CardwireAmdGpuError(i32),
+
+    #[error("Failed to init Nvml {0}")]
+    CardwireNvmlError(NvmlError),
 
     // Mode errors
     #[error("unknown mode: {0}")]

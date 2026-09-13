@@ -29,6 +29,7 @@ khronos-egl.workspace = true
 rusqlite.workspace = true
 inotify.workspace = true
 libdrm_amdgpu_sys.workspace = true
+nvml-wrapper.workspace = true
 
 [[bin]]
 name = "cardwired"
