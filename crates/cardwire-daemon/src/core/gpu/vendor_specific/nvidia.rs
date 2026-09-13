@@ -6,13 +6,12 @@ use log::{error, info, warn};
 use tokio::{process::Command, time::timeout};
 
 #[allow(unused, dead_code)]
-pub fn get_nvidia_type(pci_id: &str, gpu_name: &str) -> GpuType {
+pub fn nvidia_get_device_type(pci_id: &str, gpu_name: &str) -> GpuType {
     GpuType::Unknown
 }
 
 /// Get nvidia minor id
-#[allow(unused, dead_code)]
-pub fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
+pub fn nvidia_get_device_minor(pci_address: &str) -> Option<u32> {
     let nvidia_driver_proc = Path::new("/proc/driver/nvidia/gpus/")
         .join(pci_address)
         .join("information");
@@ -28,8 +27,7 @@ pub fn nvidia_get_minor(pci_address: &str) -> Option<u32> {
 }
 
 /// find the nvidia model using the device information file
-#[allow(unused, dead_code)]
-pub fn nvidia_get_device_model(pci_address: &str) -> Option<String> {
+pub fn nvidia_get_device_name(pci_address: &str) -> Option<String> {
     let nvidia_driver_proc = Path::new("/proc/driver/nvidia/gpus/")
         .join(pci_address)
         .join("information");
