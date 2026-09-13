@@ -65,7 +65,7 @@ pub fn compute_switcheroo_env(
             env.push("VK_LOADER_DRIVERS_SELECT".to_string());
             env.push("*intel*".to_string());
         }
-        GpuVendor::Other => {
+        GpuVendor::Other | _ => {
             env.push("DRI_PRIME".to_string());
             env.push(dri_prime_val);
         }
