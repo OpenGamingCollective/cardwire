@@ -1,12 +1,10 @@
-use crate::{
-    Result, core::{errors::CardwireError::CardwireNvmlError, gpu::models::GpuType}
-};
+use crate::core::gpu::models::GpuType;
 
 use std::{fs, path::Path, thread, time::Duration};
 
 use log::{error, info, warn};
 use nvml_wrapper::{
-    Device, Nvml, enum_wrappers::device::{Brand, GpuVirtualizationMode}, enums::device::DeviceArchitecture, error::NvmlError
+    Nvml, enum_wrappers::device::{Brand, GpuVirtualizationMode}, enums::device::DeviceArchitecture, error::NvmlError
 };
 use tokio::{process::Command, time::timeout};
 

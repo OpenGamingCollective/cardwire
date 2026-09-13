@@ -1,8 +1,6 @@
 //! DRM display connector detection and node resolution.
 
-use log::{info, warn};
-use std::{fs, io, path::Path, time::Duration};
-use udev::{Device, Enumerator};
+use std::{fs, io};
 
 const NON_PHYSICAL: &[&str] = &["Virtual-", "Unknown-", "Writeback-"];
 const INTERNAL_PANELS: &[&str] = &["eDP-", "LVDS-", "DSI-", "DPI-", "SPI-"];
@@ -44,70 +42,6 @@ pub fn external_display_connected(card: u32) -> io::Result<bool> {
         Some(err) => Err(err),
         None => Ok(false),
     }
-}
-
-/// Reads both the card and render node IDs (e.g., (1, 128)) for a given PCI address.
-/// Retries until both DRM nodes are spawned by the kernel and initialized by udev
-pub fn drm_node_ids(pci_address: &str) -> io::Result<(u32, u32)> {
-    const MAX_RETRIES: u32 = 10;
-    const RETRY_INTERVAL: Duration = Duration::from_millis(500);
-
-    let pci_syspath = Path::new("/sys/bus/pci/devices").join(pci_address);
-
-    for attempt in 1..=MAX_RETRIES {
-        let mut card_id = None;
-        let mut render_id = None;
-
-        if let Ok(parent) = Device::from_syspath(&pci_syspath)
-            && let Ok(mut enumerator) = Enumerator::new()
-        {
-            let _ = enumerator.match_parent(&parent);
-            let _ = enumerator.match_subsystem("drm");
-
-            if let Ok(devices) = enumerator.scan_devices() {
-                for dev in devices {
-                    // Skip if uninitialized
-                    if !dev.is_initialized() {
-                        continue;
-                    }
-
-                    let sysname = dev.sysname().to_string_lossy();
-
-                    if let Some(num) = dev.sysnum() {
-                        if sysname == format!("card{num}") {
-                            card_id = Some(num as u32);
-                        } else if sysname == format!("renderD{num}") {
-                            render_id = Some(num as u32);
-                        }
-                    }
-                }
-            }
-        }
-
-        if let (Some(card), Some(render)) = (card_id, render_id) {
-            info!(
-                "Successfully resolved card{} and renderD{} for PCI {}",
-                card, render, pci_address
-            );
-            return Ok((card, render));
-        }
-
-        if attempt < MAX_RETRIES {
-            warn!(
-                "DRM nodes (card/render) for PCI {} not fully ready, attempt {}/{MAX_RETRIES}, retrying in 500ms...",
-                pci_address, attempt
-            );
-            std::thread::sleep(RETRY_INTERVAL);
-        }
-    }
-
-    Err(io::Error::new(
-        io::ErrorKind::NotFound,
-        format!(
-            "Failed to find both initialized card and render DRM nodes for PCI {}",
-            pci_address
-        ),
-    ))
 }
 
 /// Check whether the given DRM card currently has any connected display.

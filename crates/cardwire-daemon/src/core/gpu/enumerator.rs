@@ -193,7 +193,7 @@ impl GpuEnumerator {
                             );
                             info!("{}: Used Nvidia+SysFS to build", gpu_device.name());
                             debug!("{:?}", gpu_device);
-                            return Ok(gpu_device);
+                            Ok(gpu_device)
                         }
                         None => {
                             // Couldn't get DRM, mark GPU as not available
@@ -212,7 +212,7 @@ impl GpuEnumerator {
                                 "{}: Cannot fetch DRM nodes, marking as un-available",
                                 gpu_device.name()
                             );
-                            return Ok(gpu_device);
+                            Ok(gpu_device)
                         }
                     }
                 } else {
@@ -238,7 +238,7 @@ impl GpuEnumerator {
                         gpu_device.name(),
                         device.driver()
                     );
-                    return Ok(gpu_device);
+                    Ok(gpu_device)
                 }
             }
             GpuVendor::Intel => {
@@ -263,7 +263,7 @@ impl GpuEnumerator {
                         );
                         info!("{}: Used Intel to build", gpu_device.name());
                         debug!("{:?}", gpu_device);
-                        return Ok(gpu_device);
+                        Ok(gpu_device)
                     }
                     None => {
                         // Couldn't get DRM, mark GPU as not available
@@ -282,7 +282,7 @@ impl GpuEnumerator {
                             "{}: Cannot fetch DRM nodes, marking as un-available",
                             gpu_device.name()
                         );
-                        return Ok(gpu_device);
+                        Ok(gpu_device)
                     }
                 }
             }
@@ -332,7 +332,7 @@ impl GpuEnumerator {
                                 )
                             };
                             debug!("{:?}", gpu_device);
-                            return Ok(gpu_device);
+                            Ok(gpu_device)
                         }
                         None => {
                             // Couldn't get DRM, mark GPU as not available
@@ -351,7 +351,7 @@ impl GpuEnumerator {
                                 "{}: cannot fetch DRM nodes, marking as un-available",
                                 gpu_device.name()
                             );
-                            return Ok(gpu_device);
+                            Ok(gpu_device)
                         }
                     }
                 } else {
@@ -375,7 +375,7 @@ impl GpuEnumerator {
                         gpu_device.name(),
                         device.driver()
                     );
-                    return Ok(gpu_device);
+                    Ok(gpu_device)
                 }
             }
             // Cardwire depends on knowing the GPU type for the modes, mark Other devices as
@@ -406,7 +406,7 @@ impl GpuEnumerator {
                             device.vendor_name()
                         );
                         debug!("{:?}", gpu_device);
-                        return Ok(gpu_device);
+                        Ok(gpu_device)
                     }
                     None => {
                         // Couldn't get DRM, mark GPU as not available
@@ -425,10 +425,10 @@ impl GpuEnumerator {
                             "{}: cannot fetch DRM nodes, marking as un-available",
                             gpu_device.name()
                         );
-                        return Ok(gpu_device);
+                        Ok(gpu_device)
                     }
                 }
             }
-        };
+        }
     }
 }

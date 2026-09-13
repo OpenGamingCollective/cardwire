@@ -62,8 +62,7 @@ impl Vulkan {
         {
             name = vlk_dev.properties().device_name.clone();
         }
-        let cleaned_name = name.split('(').next().unwrap_or(&name).trim().to_string();
-        cleaned_name
+        name.split('(').next().unwrap_or(&name).trim().to_string()
     }
     /// Get the gpu render node using vulkan
     pub fn get_gpu_render(&self, pci_id: &str) -> Option<i64> {
