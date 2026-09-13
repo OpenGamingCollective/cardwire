@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::display::GpuDevice;
+use crate::{dbus::GpuType, display::GpuDevice};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SystemType {
@@ -12,8 +12,8 @@ impl SystemType {
     pub fn from_gpulist(gpu_list: &BTreeMap<usize, GpuDevice>) -> Self {
         let available_gpus: Vec<(usize, bool, bool)> = gpu_list
             .iter()
-            .filter(|(_, gpu)| gpu.available)
-            .map(|(id, gpu)| (*id, gpu.default, gpu.discrete))
+            .filter(|(_, gpu)| gpu.device_type != GpuType::Unavailable)
+            .map(|(id, gpu)| (*id, gpu.default, gpu.device_type == GpuType::Discrete))
             .collect();
 
         if available_gpus.len() != 2 {
