@@ -5,7 +5,7 @@ use log::{error, info, warn};
 use crate::core::{
     gpu::{
         GpuDevice, GpuVendor, check_default_drm_class, generic::{
-            display::drm_node_ids, udev::{sysfs_get_device_drm, wait_for_drm}, vulkan::Vulkan
+            udev::{sysfs_get_device_drm, wait_for_drm}, vulkan::Vulkan
         }, models::GpuType, vendor_specific::{
             amd::AmdGpuDev, intel::intel_get_device_type, nvidia::{nvidia_get_device_minor, nvidia_get_device_name, nvidia_get_device_type}
         }
@@ -21,6 +21,7 @@ impl GpuEnumerator {
         let vulkan = Vulkan::build();
         Self { vulkan }
     }
+    /// Enumerate the GPUS on the host system
     pub fn enumerate(&self, pci_list: &BTreeMap<String, PciDevice>) -> BTreeMap<usize, GpuDevice> {
         let mut gpu_list: BTreeMap<usize, GpuDevice> = BTreeMap::new();
 
@@ -180,112 +181,86 @@ impl GpuEnumerator {
                 }
             }
             GpuVendor::Amd => {
-                // For AMD, we fetch infos using libdrm_amdgpu if DRM nodes are availables
-                let gpu_name = device
-                    .device_name()
-                    .clone()
-                    .unwrap_or_else(|| "Unknown Device".to_string());
-                let drm_res = sysfs_get_device_drm(pci_id);
-                match drm_res {
-                    Some((card, render)) => {
-                        let amdgpu = AmdGpuDev::new(render);
-
-                        let gpu_type = amdgpu.amd_get_device_type();
-                        // amdgpu is more precise
-                        let gpu_name = amdgpu.amd_get_device_name();
-                        let gpu_device = GpuDevice::new(
-                            gpu_name,
-                            device.clone(),
-                            render,
-                            card,
-                            None,
-                            gpu_vendor,
-                            None,
-                            gpu_type,
-                        );
-                        println!("{}: {:?}", gpu_device.name(), gpu_device.device_type());
-                        return Ok(gpu_device);
+                // Only support for amdgpu will be added, radeon will be considered on user demand
+                if device.driver().clone().is_some_and(|d| d == "amdgpu") {
+                    // For AMD, we fetch infos using libdrm_amdgpu if DRM nodes are availables
+                    let gpu_name = device
+                        .device_name()
+                        .clone()
+                        .unwrap_or_else(|| "Unknown Device".to_string());
+                    let drm_res = sysfs_get_device_drm(pci_id);
+                    match drm_res {
+                        Some((card, render)) => {
+                            let gpu_device = if let Ok(amdgpu) = AmdGpuDev::new(render) {
+                                let gpu_type = amdgpu.amd_get_device_type();
+                                // amdgpu is more precise
+                                let gpu_name = amdgpu.amd_get_device_name();
+                                GpuDevice::new(
+                                    gpu_name,
+                                    device.clone(),
+                                    render,
+                                    card,
+                                    None,
+                                    gpu_vendor,
+                                    None,
+                                    gpu_type,
+                                )
+                            } else {
+                                // If we cannot use AMDGPU, mark device is unknown until i find a
+                                // reliable way to detect discrete using sysfs
+                                let gpu_type = GpuType::Unknown;
+                                GpuDevice::new(
+                                    gpu_name,
+                                    device.clone(),
+                                    render,
+                                    card,
+                                    None,
+                                    gpu_vendor,
+                                    None,
+                                    gpu_type,
+                                )
+                            };
+                            println!("{}: {:?}", gpu_device.name(), gpu_device.device_type());
+                            return Ok(gpu_device);
+                        }
+                        None => {
+                            // Couldn't get DRM, mark GPU as not available
+                            let gpu_type = GpuType::Unavailable;
+                            let gpu_device = GpuDevice::new(
+                                gpu_name,
+                                device.clone(),
+                                u32::MAX,
+                                u32::MAX,
+                                None,
+                                gpu_vendor,
+                                None,
+                                gpu_type,
+                            );
+                            return Ok(gpu_device);
+                        }
                     }
-                    None => {
-                        // Couldn't get DRM, mark GPU as not available
-                        let gpu_type = GpuType::Unavailable;
-                        let gpu_device = GpuDevice::new(
-                            gpu_name,
-                            device.clone(),
-                            u32::MAX,
-                            u32::MAX,
-                            None,
-                            gpu_vendor,
-                            None,
-                            gpu_type,
-                        );
-                        return Ok(gpu_device);
-                    }
+                } else {
+                    println!("not amdgpu");
+                    // Couldn't get DRM, mark GPU as not available
+                    let gpu_type = GpuType::Unavailable;
+                    let gpu_name = device
+                        .device_name()
+                        .clone()
+                        .unwrap_or_else(|| "Unknown Device".to_string());
+                    let gpu_device = GpuDevice::new(
+                        gpu_name,
+                        device.clone(),
+                        u32::MAX,
+                        u32::MAX,
+                        None,
+                        gpu_vendor,
+                        None,
+                        gpu_type,
+                    );
+                    return Ok(gpu_device);
                 }
             }
             _ => todo!(),
         };
-
-        // Try with vulkan first
-        //let device_name = (|| match gpu_vendor {
-        //        // Use the driver info
-        //        GpuVendor::Nvidia => nvidia_get_device_model(device.pci_address()),
-        //        // use amdgpu.ids
-        //        GpuVendor::Amd => device
-        //            .device_id()
-        //            .as_ref()
-        //            .and_then(|id| amd_get_device_model(id, device.pci_address())),
-        //        _ => None,
-        //    })
-        //    // Fallback to hwdata
-        //    .or_else(|| {
-        //        warn!("Couldn't get device_name, falling back to hwdata");
-        //        device.device_name().clone()
-        //    })
-        //    // fallback default
-        //    .unwrap_or_else(|| {
-        //        warn!("Couldn't get name using hwdata, falling back to default");
-        //        "Unknown Device".to_string()
-        //    });
-
-        let gpu_name = String::new();
-
-        // If the GPU is bound to vfio, mark it as unavailable
-        if let Some(driver) = device.driver()
-            && driver.contains("vfio-")
-        {
-            info!("Device: {} is bound to: {}", gpu_name, driver);
-            return Ok(GpuDevice::new(
-                gpu_name,
-                device.clone(),
-                u32::MAX,
-                u32::MAX,
-                None,
-                gpu_vendor,
-                None,
-                GpuType::Unavailable,
-            ));
-        }
-
-        // Available is used to know if the device should be used by cardwire or not
-        let (card, render, _available) = match drm_node_ids(device.pci_address()) {
-            Ok((c, r)) => (c, r, true),
-            Err(err) => {
-                error!("{}: Couldn't get drm node IDs: {}", gpu_name, err);
-                (u32::MAX, u32::MAX, false)
-            }
-        };
-        let device_type = GpuType::Unknown;
-
-        Ok(GpuDevice::new(
-            gpu_name,
-            device.clone(),
-            render,
-            card,
-            None,
-            gpu_vendor,
-            None,
-            device_type,
-        ))
     }
 }
