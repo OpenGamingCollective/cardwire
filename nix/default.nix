@@ -40,6 +40,7 @@ pkgs.rustPlatform.buildRustPackage {
     pkgs.libxkbcommon
     pkgs.vulkan-loader
     pkgs.libglvnd
+    pkgs.libdrm
   ];
 
   doCheck = false;
@@ -64,9 +65,6 @@ pkgs.rustPlatform.buildRustPackage {
     # Point to the correct hwdata location
     substituteInPlace crates/cardwire-daemon/src/core/pci/pci_device.rs \
       --replace-fail "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
-
-    substituteInPlace crates/cardwire-daemon/src/core/gpu/device_info.rs \
-      --replace-fail "/usr/share/libdrm/amdgpu.ids" "${pkgs.libdrm}/share/libdrm/amdgpu.ids"
   '';
 
   env = {
@@ -98,6 +96,7 @@ pkgs.rustPlatform.buildRustPackage {
         pkgs.upower
         pkgs.vulkan-loader
         pkgs.libglvnd
+        pkgs.libdrm
       ]
     }
 
