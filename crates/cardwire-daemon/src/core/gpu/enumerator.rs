@@ -53,6 +53,16 @@ impl GpuEnumerator {
         // Check which device is the default
         let _ = check_default_drm_class(&mut gpu_list);
 
+        // For cardwire CI, make GPU 0 integrated, and GPU 1 discrete
+        if std::env::var_os("CARDWIRE_TESTING").is_some() {
+            info!("CARDWIRE TESTING DETECTED");
+            // panic if any of them is missing
+            let gpu0 = gpu_list.get_mut(&0).unwrap();
+            gpu0.set_type(GpuType::Integrated);
+            let gpu1 = gpu_list.get_mut(&1).unwrap();
+            gpu1.set_type(GpuType::Discrete);
+        }
+
         gpu_list
     }
 
