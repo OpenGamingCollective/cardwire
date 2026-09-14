@@ -67,7 +67,7 @@ impl<T: AsRef<str>> From<T> for GpuVendor {
             "0x1002" => GpuVendor::Amd,
             "0x10de" | "0x104a" | "0x12d2" => GpuVendor::Nvidia,
             "0x8086" => GpuVendor::Intel,
-            "0x1AF4" => GpuVendor::Virtio,
+            "0x1af4" => GpuVendor::Virtio,
             // Unknown id
             _ => GpuVendor::Other,
         }
@@ -160,6 +160,10 @@ impl GpuDevice {
 
     pub fn is_available(&self) -> bool {
         self.device_type != GpuType::Unavailable
+    }
+
+    pub fn set_type(&mut self, gpu_type: GpuType) {
+        self.device_type = gpu_type
     }
 
     #[allow(clippy::too_many_arguments)]
