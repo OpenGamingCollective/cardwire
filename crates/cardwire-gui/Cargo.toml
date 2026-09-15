@@ -9,6 +9,7 @@ license.workspace = true
 description = "GUI for cardwire GPU management"
 
 [dependencies]
+thiserror.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
 zbus.workspace = true

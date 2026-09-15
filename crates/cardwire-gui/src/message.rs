@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    Activate,
     SwitchPage(Page),
     FetchedMode(Result<Mode, String>),
     FetchedAvailableModes(Result<Vec<Mode>, String>),
