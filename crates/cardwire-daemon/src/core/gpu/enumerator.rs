@@ -81,7 +81,7 @@ impl GpuEnumerator {
         };
         let pci_id = device.pci_address();
         // Wait for DRM to be ready, each attempt take 250ms
-        let _ = wait_for_drm(pci_id, 5);
+        let _ = wait_for_drm(pci_id, 15);
 
         // Check if the gpu info can be fetched using vulkan, if so use vulkan to build the GPU
         if self.vulkan.vulkan_compatible(pci_id) {
