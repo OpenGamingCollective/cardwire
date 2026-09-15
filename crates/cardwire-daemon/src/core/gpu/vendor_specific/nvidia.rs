@@ -8,11 +8,6 @@ use nvml_wrapper::{
 };
 use tokio::{process::Command, time::timeout};
 
-#[allow(unused, dead_code)]
-pub fn nvidia_get_device_type(pci_id: &str, gpu_name: &str) -> GpuType {
-    GpuType::Unknown
-}
-
 /// Get nvidia minor id
 pub fn nvidia_get_device_minor(pci_address: &str) -> Option<u32> {
     let nvidia_driver_proc = Path::new("/proc/driver/nvidia/gpus/")
@@ -45,6 +40,17 @@ pub fn nvidia_get_device_name(pci_address: &str) -> Option<String> {
     match !model.is_empty() {
         true => Some(model),
         false => None,
+    }
+}
+
+/// Get the gpu type by using its name
+pub fn nvidia_get_device_type(name: &str) -> GpuType {
+    // I hate this
+    // This is probably temporary until i come up with a more reliable way to detect without nvml
+    if name.contains("Geforce") | name.contains("RTX") {
+        GpuType::Discrete
+    } else {
+        GpuType::Unknown
     }
 }
 

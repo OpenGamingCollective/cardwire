@@ -131,65 +131,8 @@ impl GpuEnumerator {
                             });
                         let gpu_type = nvidia_get_device_type_nvml(&nvml, pci_id);
                         let nvidia_minor = nvidia_get_device_minor_nvml(&nvml, pci_id);
-                        let drm_res = sysfs_get_device_drm(pci_id);
-                        // return a working GPU if drm available, else return a non-available GPU
-                        match drm_res {
-                            Some((card, render)) => {
-                                let gpu_device = GpuDevice::new(
-                                    gpu_name,
-                                    device.clone(),
-                                    render,
-                                    card,
-                                    None,
-                                    gpu_vendor,
-                                    nvidia_minor,
-                                    gpu_type,
-                                );
-                                info!("{}: Used Nvidia+NVML to build", gpu_device.name());
-                                debug!("{:?}", gpu_device);
-                                return Ok(gpu_device);
-                            }
-                            None => {
-                                // Couldn't get DRM, mark GPU as not available
-                                // this shouldn't happen unless nvidia-drm is not loaded?
-                                let gpu_type = GpuType::Unavailable;
-                                let gpu_device = GpuDevice::new(
-                                    gpu_name,
-                                    device.clone(),
-                                    u32::MAX,
-                                    u32::MAX,
-                                    None,
-                                    gpu_vendor,
-                                    None,
-                                    gpu_type,
-                                );
-                                error!(
-                                    "{}: Cannot fetch DRM nodes, marking as un-available",
-                                    gpu_device.name()
-                                );
-                                return Ok(gpu_device);
-                            }
-                        }
-                    }
-
-                    // If we are here, it means the NVML failed, this is odd, but will still try
-                    // using the good old sysfs + /proc
-
-                    // Try to get the device name using nvidia driver, if fail, use hwdata, then
-                    // fallback to unknown
-                    let gpu_name = nvidia_get_device_name(pci_id).unwrap_or_else(|| {
-                        device
-                            .device_name()
-                            .clone()
-                            .unwrap_or_else(|| "Unknown Device".to_string())
-                    });
-
-                    let drm_res = sysfs_get_device_drm(pci_id);
-                    // return a working GPU if drm available, else return a non-available GPU
-                    match drm_res {
-                        Some((card, render)) => {
-                            let gpu_type = nvidia_get_device_type(pci_id, &gpu_name);
-                            let nvidia_minor = nvidia_get_device_minor(pci_id);
+                        // return a working GPU if drm available
+                        if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
                             let gpu_device = GpuDevice::new(
                                 gpu_name,
                                 device.clone(),
@@ -200,54 +143,49 @@ impl GpuEnumerator {
                                 nvidia_minor,
                                 gpu_type,
                             );
-                            info!("{}: Used Nvidia+SysFS to build", gpu_device.name());
+                            info!("{}: Used Nvidia+NVML to build", gpu_device.name());
                             debug!("{:?}", gpu_device);
-                            Ok(gpu_device)
-                        }
-                        None => {
-                            // Couldn't get DRM, mark GPU as not available
-                            let gpu_type = GpuType::Unavailable;
-                            let gpu_device = GpuDevice::new(
-                                gpu_name,
-                                device.clone(),
-                                u32::MAX,
-                                u32::MAX,
-                                None,
-                                gpu_vendor,
-                                None,
-                                gpu_type,
-                            );
-                            error!(
-                                "{}: Cannot fetch DRM nodes, marking as un-available",
-                                gpu_device.name()
-                            );
-                            Ok(gpu_device)
+                            return Ok(gpu_device);
                         }
                     }
+
+                    // If we are here, it means the NVML failed, this is odd, but will still try
+                    // using the good old sysfs + /proc
+                    // Try to get the device name using nvidia driver, if fail, use hwdata, then
+                    // fallback to unknown
+                    let gpu_name = nvidia_get_device_name(pci_id).unwrap_or_else(|| {
+                        device
+                            .device_name()
+                            .clone()
+                            .unwrap_or_else(|| "Unknown Device".to_string())
+                    });
+
+                    // return a working GPU if drm available, else return a non-available GPU
+                    // The type detection for this one is kinda dirty, TODO: find a better way
+                    if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
+                        let gpu_type = nvidia_get_device_type(&gpu_name);
+                        let nvidia_minor = nvidia_get_device_minor(pci_id);
+                        let gpu_device = GpuDevice::new(
+                            gpu_name,
+                            device.clone(),
+                            render,
+                            card,
+                            None,
+                            gpu_vendor,
+                            nvidia_minor,
+                            gpu_type,
+                        );
+                        info!("{}: Used Nvidia+SysFS to build", gpu_device.name());
+                        debug!("{:?}", gpu_device);
+                        return Ok(gpu_device);
+                    }
                 } else {
-                    // Not a driver cardwire supports (eg nova), mark GPU as not available until
-                    // support is added
-                    let gpu_type = GpuType::Unavailable;
-                    let gpu_name = device
-                        .device_name()
-                        .clone()
-                        .unwrap_or_else(|| "Unknown Device".to_string());
-                    let gpu_device = GpuDevice::new(
-                        gpu_name,
-                        device.clone(),
-                        u32::MAX,
-                        u32::MAX,
-                        None,
-                        gpu_vendor,
-                        None,
-                        gpu_type,
-                    );
+                    // Not a driver we support (eg. nova), will be marked as not available
                     error!(
                         "{}: driver {:?} is not supported by Cardwire, please request it on Github",
-                        gpu_device.name(),
+                        device.pci_address(),
                         device.driver()
                     );
-                    Ok(gpu_device)
                 }
             }
             GpuVendor::Intel => {
@@ -256,10 +194,37 @@ impl GpuEnumerator {
                     .device_name()
                     .clone()
                     .unwrap_or_else(|| "Unknown Device".to_string());
-                let drm_res = sysfs_get_device_drm(pci_id);
-                match drm_res {
-                    Some((card, render)) => {
-                        let gpu_type = intel_get_device_type(pci_id);
+                if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
+                    let gpu_type = intel_get_device_type(pci_id);
+                    let gpu_device = GpuDevice::new(
+                        gpu_name,
+                        device.clone(),
+                        render,
+                        card,
+                        None,
+                        gpu_vendor,
+                        None,
+                        gpu_type,
+                    );
+                    info!("{}: Used Intel to build", gpu_device.name());
+                    debug!("{:?}", gpu_device);
+                    return Ok(gpu_device);
+                }
+                // DRM couldn't be fetched
+                error!(
+                    "{}: Cannot fetch DRM nodes, marking as un-available",
+                    device.pci_address()
+                );
+            }
+            GpuVendor::Amd => {
+                // Only support for amdgpu will be added, radeon will be considered on user demand
+                if device.driver().clone().is_some_and(|d| d == "amdgpu") {
+                    // For AMD, we fetch infos using libdrm_amdgpu if DRM nodes are availables
+                    if let Some((card, render)) = sysfs_get_device_drm(pci_id)
+                        && let Ok(amdgpu) = AmdGpuDev::new(render)
+                    {
+                        let gpu_type = amdgpu.amd_get_device_type();
+                        let gpu_name = amdgpu.amd_get_device_name();
                         let gpu_device = GpuDevice::new(
                             gpu_name,
                             device.clone(),
@@ -270,121 +235,22 @@ impl GpuEnumerator {
                             None,
                             gpu_type,
                         );
-                        info!("{}: Used Intel to build", gpu_device.name());
+                        info!("{}: Used AMDGPU to build", gpu_device.name());
                         debug!("{:?}", gpu_device);
-                        Ok(gpu_device)
+                        return Ok(gpu_device);
                     }
-                    None => {
-                        // Couldn't get DRM, mark GPU as not available
-                        let gpu_type = GpuType::Unavailable;
-                        let gpu_device = GpuDevice::new(
-                            gpu_name,
-                            device.clone(),
-                            u32::MAX,
-                            u32::MAX,
-                            None,
-                            gpu_vendor,
-                            None,
-                            gpu_type,
-                        );
-                        error!(
-                            "{}: Cannot fetch DRM nodes, marking as un-available",
-                            gpu_device.name()
-                        );
-                        Ok(gpu_device)
-                    }
-                }
-            }
-            GpuVendor::Amd => {
-                // Only support for amdgpu will be added, radeon will be considered on user demand
-                if device.driver().clone().is_some_and(|d| d == "amdgpu") {
-                    // For AMD, we fetch infos using libdrm_amdgpu if DRM nodes are availables
-                    let gpu_name = device
-                        .device_name()
-                        .clone()
-                        .unwrap_or_else(|| "Unknown Device".to_string());
-                    let drm_res = sysfs_get_device_drm(pci_id);
-                    match drm_res {
-                        Some((card, render)) => {
-                            let gpu_device = if let Ok(amdgpu) = AmdGpuDev::new(render) {
-                                let gpu_type = amdgpu.amd_get_device_type();
-                                // amdgpu is more precise
-                                let gpu_name = amdgpu.amd_get_device_name();
-                                info!("{}: Used AMDGPU to build", gpu_name);
-                                GpuDevice::new(
-                                    gpu_name,
-                                    device.clone(),
-                                    render,
-                                    card,
-                                    None,
-                                    gpu_vendor,
-                                    None,
-                                    gpu_type,
-                                )
-                            } else {
-                                // If we cannot use AMDGPU, mark device as unknown until i find a
-                                // reliable way to detect discrete using sysfs
-                                let gpu_type = GpuType::Unknown;
-                                error!(
-                                    "{}: cannot use amdgpu for type detection, please report on Github",
-                                    gpu_name
-                                );
-                                GpuDevice::new(
-                                    gpu_name,
-                                    device.clone(),
-                                    render,
-                                    card,
-                                    None,
-                                    gpu_vendor,
-                                    None,
-                                    gpu_type,
-                                )
-                            };
-                            debug!("{:?}", gpu_device);
-                            Ok(gpu_device)
-                        }
-                        None => {
-                            // Couldn't get DRM, mark GPU as not available
-                            let gpu_type = GpuType::Unavailable;
-                            let gpu_device = GpuDevice::new(
-                                gpu_name,
-                                device.clone(),
-                                u32::MAX,
-                                u32::MAX,
-                                None,
-                                gpu_vendor,
-                                None,
-                                gpu_type,
-                            );
-                            error!(
-                                "{}: cannot fetch DRM nodes, marking as un-available",
-                                gpu_device.name()
-                            );
-                            Ok(gpu_device)
-                        }
-                    }
-                } else {
-                    let gpu_type = GpuType::Unavailable;
-                    let gpu_name = device
-                        .device_name()
-                        .clone()
-                        .unwrap_or_else(|| "Unknown Device".to_string());
-                    let gpu_device = GpuDevice::new(
-                        gpu_name,
-                        device.clone(),
-                        u32::MAX,
-                        u32::MAX,
-                        None,
-                        gpu_vendor,
-                        None,
-                        gpu_type,
-                    );
+                    // DRM couldn't be fetched or AMDGPU ioctl error
                     error!(
-                        "{}: driver {:?} is not supported by Cardwire, please request support for it on Github",
-                        gpu_device.name(),
+                        "{}: Cannot fetch DRM nodes or amdgpu ioctl error, marking as un-available",
+                        device.pci_address()
+                    );
+                } else {
+                    // Not a driver we support (eg. radeon), will be marked as not available
+                    error!(
+                        "{}: driver {:?} is not supported by Cardwire, please request it on Github",
+                        device.pci_address(),
                         device.driver()
                     );
-                    Ok(gpu_device)
                 }
             }
             // Just set the type to Virtual
@@ -393,43 +259,21 @@ impl GpuEnumerator {
                     .device_name()
                     .clone()
                     .unwrap_or_else(|| "Unknown Device".to_string());
-                let drm_res = sysfs_get_device_drm(pci_id);
-                match drm_res {
-                    Some((card, render)) => {
-                        let gpu_type = GpuType::Virtual;
-                        let gpu_device = GpuDevice::new(
-                            gpu_name,
-                            device.clone(),
-                            render,
-                            card,
-                            None,
-                            gpu_vendor,
-                            None,
-                            gpu_type,
-                        );
-                        info!("{}: Used Virtio to build", gpu_device.name());
-                        debug!("{:?}", gpu_device);
-                        Ok(gpu_device)
-                    }
-                    None => {
-                        // Couldn't get DRM, mark GPU as not available
-                        let gpu_type = GpuType::Unavailable;
-                        let gpu_device = GpuDevice::new(
-                            gpu_name,
-                            device.clone(),
-                            u32::MAX,
-                            u32::MAX,
-                            None,
-                            gpu_vendor,
-                            None,
-                            gpu_type,
-                        );
-                        error!(
-                            "{}: cannot fetch DRM nodes, marking as un-available",
-                            gpu_device.name()
-                        );
-                        Ok(gpu_device)
-                    }
+                if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
+                    let gpu_type = GpuType::Virtual;
+                    let gpu_device = GpuDevice::new(
+                        gpu_name,
+                        device.clone(),
+                        render,
+                        card,
+                        None,
+                        gpu_vendor,
+                        None,
+                        gpu_type,
+                    );
+                    info!("{}: Used Virtio to build", gpu_device.name());
+                    debug!("{:?}", gpu_device);
+                    return Ok(gpu_device);
                 }
             }
             // Cardwire depends on knowing the GPU type for the modes, mark Other devices as
@@ -439,50 +283,43 @@ impl GpuEnumerator {
                     .device_name()
                     .clone()
                     .unwrap_or_else(|| "Unknown Device".to_string());
-                let drm_res = sysfs_get_device_drm(pci_id);
-                match drm_res {
-                    Some((card, render)) => {
-                        let gpu_type = GpuType::Unknown;
-                        let gpu_device = GpuDevice::new(
-                            gpu_name,
-                            device.clone(),
-                            render,
-                            card,
-                            None,
-                            gpu_vendor,
-                            None,
-                            gpu_type,
-                        );
-                        warn!(
-                            "{}: unknown device vendor ({:?}/{:?}), please request support for it on Github",
-                            gpu_device.name(),
-                            device.vendor_id(),
-                            device.vendor_name()
-                        );
-                        debug!("{:?}", gpu_device);
-                        Ok(gpu_device)
-                    }
-                    None => {
-                        // Couldn't get DRM, mark GPU as not available
-                        let gpu_type = GpuType::Unavailable;
-                        let gpu_device = GpuDevice::new(
-                            gpu_name,
-                            device.clone(),
-                            u32::MAX,
-                            u32::MAX,
-                            None,
-                            gpu_vendor,
-                            None,
-                            gpu_type,
-                        );
-                        error!(
-                            "{}: cannot fetch DRM nodes, marking as un-available",
-                            gpu_device.name()
-                        );
-                        Ok(gpu_device)
-                    }
+                if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
+                    let gpu_type = GpuType::Unknown;
+                    let gpu_device = GpuDevice::new(
+                        gpu_name,
+                        device.clone(),
+                        render,
+                        card,
+                        None,
+                        gpu_vendor,
+                        None,
+                        gpu_type,
+                    );
+                    warn!(
+                        "{}: unknown device vendor ({:?}/{:?}), please request support for it on Github",
+                        gpu_device.name(),
+                        device.vendor_id(),
+                        device.vendor_name()
+                    );
+                    debug!("{:?}", gpu_device);
+                    return Ok(gpu_device);
                 }
             }
         }
+        // If we are here, an error happend (mostly DRM or libraries), build an un-available GPU
+        let gpu_name = device
+            .device_name()
+            .clone()
+            .unwrap_or_else(|| "Unknown Device".to_string());
+        Ok(GpuDevice::new(
+            gpu_name,
+            device.clone(),
+            u32::MAX,
+            u32::MAX,
+            None,
+            gpu_vendor,
+            None,
+            GpuType::Unavailable,
+        ))
     }
 }
