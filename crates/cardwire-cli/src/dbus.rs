@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use zbus::{Proxy, connection::Connection};
+use zbus::{Proxy, connection::Connection, zvariant};
 
 use crate::display::PciDevice;
 
@@ -12,13 +12,23 @@ pub struct DbusGpuDevice {
     pub render: u32,
     pub card: u32,
     pub default: bool,
-    pub discrete: bool,
-    pub virtual_gpu: bool,
-    pub available: bool,
+    pub device_type: GpuType,
     pub vendor: String,
     pub driver: String,
-    pub nvidia: bool,
     pub nvidia_minor: String,
+}
+#[derive(
+    Clone, Debug, serde::Serialize, serde::Deserialize, Default, PartialEq, zvariant::Type,
+)]
+#[repr(u32)]
+pub enum GpuType {
+    Integrated = 0,
+    Discrete = 1,
+    Virtual = 2,
+    Other = 3,
+    Unavailable = 4,
+    #[default]
+    Unknown = 5,
 }
 
 pub struct DaemonClient<'a> {

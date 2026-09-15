@@ -1,4 +1,4 @@
-#[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
 pub struct PciDevice {
     pci_address: String,
     iommu_group: Option<usize>,

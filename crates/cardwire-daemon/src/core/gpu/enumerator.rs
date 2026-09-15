@@ -1,33 +1,34 @@
-use std::{
-    collections::{BTreeMap, HashMap}, io, sync::Arc
-};
+use std::{collections::BTreeMap, io};
 
-use log::{error, info, warn};
-use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
+use log::{debug, error, info, warn};
 
 use crate::core::{
     gpu::{
-        GpuDevice, GpuVendor, check_default_drm_class, device_info::{amd_get_device_model, nvidia_get_device_model, nvidia_get_minor}, display::drm_node_ids, egl::is_discrete_egl, vulkan::vlk_enumerate
+        GpuDevice, GpuVendor, check_default_drm_class, generic::{
+            udev::{sysfs_get_device_drm, wait_for_drm}, vulkan::Vulkan
+        }, models::GpuType, vendor_specific::{
+            amd::AmdGpuDev, intel::intel_get_device_type, nvidia::{
+                nvidia_get_device_minor, nvidia_get_device_minor_nvml, nvidia_get_device_name, nvidia_get_device_name_nvml, nvidia_get_device_type, nvidia_get_device_type_nvml, wait_for_nvidia
+            }
+        }
     }, pci::PciDevice
 };
 
 pub struct GpuEnumerator {
-    vlk_physical_devices: Option<HashMap<String, Arc<PhysicalDevice>>>,
+    vulkan: Vulkan,
 }
 
 impl GpuEnumerator {
     pub fn build() -> Self {
-        // Store the vulkan list to prevent calling vulkan everytime we look into it
-        let vlk_physical_devices = vlk_enumerate();
-
-        Self {
-            vlk_physical_devices,
-        }
+        let vulkan = Vulkan::build();
+        Self { vulkan }
     }
+    /// Enumerate the GPUS on the host system
     pub fn enumerate(&self, pci_list: &BTreeMap<String, PciDevice>) -> BTreeMap<usize, GpuDevice> {
         let mut gpu_list: BTreeMap<usize, GpuDevice> = BTreeMap::new();
 
         let mut id = 0;
+
         for pci_device in pci_list.values().filter(|dev| {
             // Check if the class is tied to graphics
             dev.class()
@@ -52,8 +53,24 @@ impl GpuEnumerator {
         // Check which device is the default
         let _ = check_default_drm_class(&mut gpu_list);
 
+        // For cardwire CI, make GPU 0 integrated, and GPU 1 discrete
+        if std::env::var_os("CARDWIRE_TESTING").is_some() {
+            info!("CARDWIRE TESTING DETECTED");
+            // panic if any of them is missing
+            let gpu0 = gpu_list.get_mut(&0).unwrap();
+            gpu0.set_type(GpuType::Integrated);
+            let gpu1 = gpu_list.get_mut(&1).unwrap();
+            gpu1.set_type(GpuType::Discrete);
+        }
+
         gpu_list
     }
+
+    /*
+       Gpu building:
+           first attempt is to use vulkan, this is easier and more precise for type detection, if not available
+           use per-vendor + generic methods
+    */
 
     /// Take a pci device and build a GpuDevice
     fn build_gpu(&self, device: &PciDevice) -> io::Result<GpuDevice> {
@@ -62,116 +79,247 @@ impl GpuEnumerator {
             // Default to "Other"
             None => GpuVendor::default(),
         };
+        let pci_id = device.pci_address();
+        // Wait for DRM to be ready, each attempt take 250ms
+        let _ = wait_for_drm(pci_id, 5);
 
-        // Try with vulkan first
-        let device_name = self
-            .vlk_physical_devices
-            .as_ref()
-            .and_then(|map| map.get(device.pci_address()))
-            .map(|vlk_dev| vlk_dev.properties().device_name.clone())
-            .map(|name| name.split('(').next().unwrap_or(&name).trim().to_string())
-            //  Fallback to vendor-specific lookup
-            .or_else(|| match gpu_vendor {
-                GpuVendor::Nvidia => nvidia_get_device_model(device.pci_address()),
-                GpuVendor::Amd => device
-                    .device_id()
-                    .as_ref()
-                    .and_then(|id| amd_get_device_model(id, device.pci_address())),
-                _ => None,
-            })
-            // Fallback to hwdata
-            .or_else(|| {
-                warn!("Couldn't get device_name, falling back to hwdata");
-                device.device_name().clone()
-            })
-            // fallback default
-            .unwrap_or_else(|| {
-                warn!("Couldn't get name using hwdata, falling back to default");
-                "Unknown Device".to_string()
-            });
+        // Check if the gpu info can be fetched using vulkan, if so use vulkan to build the GPU
+        if self.vulkan.vulkan_compatible(pci_id) {
+            let gpu_type = self.vulkan.get_gpu_type(pci_id);
+            let gpu_name = self.vulkan.get_gpu_name(pci_id);
 
-        if let Some(driver) = device.driver()
-            && driver.contains("vfio-")
-        {
-            info!("Device: {} is bound to: {}", device_name, driver);
-            return Ok(GpuDevice::new(
-                device_name,
+            let gpu_card = self.vulkan.get_gpu_card(pci_id).unwrap_or_default();
+            let gpu_render = self.vulkan.get_gpu_render(pci_id).unwrap_or_default();
+
+            let gpu_device = GpuDevice::new(
+                gpu_name,
                 device.clone(),
-                u32::MAX,
-                u32::MAX,
+                gpu_render as u32,
+                gpu_card as u32,
                 None,
                 gpu_vendor,
                 None,
-                false,
-                true,
-                false,
-                false,
-            ));
+                gpu_type,
+            );
+            info!("{}: Used Vulkan to build", gpu_device.name());
+            debug!("{:?}", gpu_device);
+            return Ok(gpu_device);
         }
 
-        let nvidia_minor = match gpu_vendor {
-            GpuVendor::Nvidia => nvidia_get_minor(device.pci_address()),
-            _ => None,
-        };
+        // else, fallback to sysfs GPU building
 
-        // Available is used to know if the device should be used by cardwire or not
-        let (card, render, available) = match drm_node_ids(device.pci_address()) {
-            Ok((c, r)) => (c, r, true),
-            Err(err) => {
-                error!("{}: Couldn't get drm node IDs: {}", device_name, err);
-                (u32::MAX, u32::MAX, false)
-            }
-        };
-
-        // Skip the EGL probe for unavailable GPUs: the render node is unknown (u32::MAX) and the
-        // lookup would always fail on a phantom /dev/dri/renderD4294967295 path
-        let discrete = self.is_discrete_vulkan(device.pci_address())
-            || (available
-                && match is_discrete_egl(render) {
-                    Ok(discrete) => discrete,
-                    Err(err) => {
-                        warn!("{}: EGL discrete check failed: {}", device_name, err);
-                        false
+        // For now only support the popular GPU vendors, more can be added inthe future
+        match gpu_vendor {
+            // TODO: add another match for nova driver
+            GpuVendor::Nvidia => {
+                // Proprietary nvidia driver, supported by cardwire
+                if device.driver().clone().is_some_and(|d| d == "nvidia") {
+                    /*
+                       This part may sound confusing
+                       We first try to use NVML to build the GPU, using NVML allows us to have a good discrete detection
+                       If NVML fails/GPU wasnt ready after 5 retries, fallback to the manual method that reads /proc/driver/nvidia
+                    */
+                    // Wait for the driver to be ready using NVML
+                    if let Some(nvml) = wait_for_nvidia(pci_id, 5) {
+                        // The device is ready and nvml is available, use it for GPU construction
+                        let gpu_name =
+                            nvidia_get_device_name_nvml(&nvml, pci_id).unwrap_or_else(|| {
+                                device
+                                    .device_name()
+                                    .clone()
+                                    .unwrap_or_else(|| "Unknown Device".to_string())
+                            });
+                        let gpu_type = nvidia_get_device_type_nvml(&nvml, pci_id);
+                        let nvidia_minor = nvidia_get_device_minor_nvml(&nvml, pci_id);
+                        // return a working GPU if drm available
+                        if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
+                            let gpu_device = GpuDevice::new(
+                                gpu_name,
+                                device.clone(),
+                                render,
+                                card,
+                                None,
+                                gpu_vendor,
+                                nvidia_minor,
+                                gpu_type,
+                            );
+                            info!("{}: Used Nvidia+NVML to build", gpu_device.name());
+                            debug!("{:?}", gpu_device);
+                            return Ok(gpu_device);
+                        }
                     }
-                });
 
+                    // If we are here, it means the NVML failed, this is odd, but will still try
+                    // using the good old sysfs + /proc
+                    // Try to get the device name using nvidia driver, if fail, use hwdata, then
+                    // fallback to unknown
+                    let gpu_name = nvidia_get_device_name(pci_id).unwrap_or_else(|| {
+                        device
+                            .device_name()
+                            .clone()
+                            .unwrap_or_else(|| "Unknown Device".to_string())
+                    });
+
+                    // return a working GPU if drm available, else return a non-available GPU
+                    // The type detection for this one is kinda dirty, TODO: find a better way
+                    if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
+                        let gpu_type = nvidia_get_device_type(&gpu_name);
+                        let nvidia_minor = nvidia_get_device_minor(pci_id);
+                        let gpu_device = GpuDevice::new(
+                            gpu_name,
+                            device.clone(),
+                            render,
+                            card,
+                            None,
+                            gpu_vendor,
+                            nvidia_minor,
+                            gpu_type,
+                        );
+                        info!("{}: Used Nvidia+SysFS to build", gpu_device.name());
+                        debug!("{:?}", gpu_device);
+                        return Ok(gpu_device);
+                    }
+                } else {
+                    // Not a driver we support (eg. nova), will be marked as not available
+                    error!(
+                        "{}: driver {:?} is not supported by Cardwire, please request it on Github",
+                        device.pci_address(),
+                        device.driver()
+                    );
+                }
+            }
+            GpuVendor::Intel => {
+                // I think i915 and Xe should work the same
+                let gpu_name = device
+                    .device_name()
+                    .clone()
+                    .unwrap_or_else(|| "Unknown Device".to_string());
+                if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
+                    let gpu_type = intel_get_device_type(pci_id);
+                    let gpu_device = GpuDevice::new(
+                        gpu_name,
+                        device.clone(),
+                        render,
+                        card,
+                        None,
+                        gpu_vendor,
+                        None,
+                        gpu_type,
+                    );
+                    info!("{}: Used Intel to build", gpu_device.name());
+                    debug!("{:?}", gpu_device);
+                    return Ok(gpu_device);
+                }
+                // DRM couldn't be fetched
+                error!(
+                    "{}: Cannot fetch DRM nodes, marking as un-available",
+                    device.pci_address()
+                );
+            }
+            GpuVendor::Amd => {
+                // Only support for amdgpu will be added, radeon will be considered on user demand
+                if device.driver().clone().is_some_and(|d| d == "amdgpu") {
+                    // For AMD, we fetch infos using libdrm_amdgpu if DRM nodes are availables
+                    if let Some((card, render)) = sysfs_get_device_drm(pci_id)
+                        && let Ok(amdgpu) = AmdGpuDev::new(render)
+                    {
+                        let gpu_type = amdgpu.amd_get_device_type();
+                        let gpu_name = amdgpu.amd_get_device_name();
+                        let gpu_device = GpuDevice::new(
+                            gpu_name,
+                            device.clone(),
+                            render,
+                            card,
+                            None,
+                            gpu_vendor,
+                            None,
+                            gpu_type,
+                        );
+                        info!("{}: Used AMDGPU to build", gpu_device.name());
+                        debug!("{:?}", gpu_device);
+                        return Ok(gpu_device);
+                    }
+                    // DRM couldn't be fetched or AMDGPU ioctl error
+                    error!(
+                        "{}: Cannot fetch DRM nodes or amdgpu ioctl error, marking as un-available",
+                        device.pci_address()
+                    );
+                } else {
+                    // Not a driver we support (eg. radeon), will be marked as not available
+                    error!(
+                        "{}: driver {:?} is not supported by Cardwire, please request it on Github",
+                        device.pci_address(),
+                        device.driver()
+                    );
+                }
+            }
+            // Just set the type to Virtual
+            GpuVendor::Virtio => {
+                let gpu_name = device
+                    .device_name()
+                    .clone()
+                    .unwrap_or_else(|| "Unknown Device".to_string());
+                if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
+                    let gpu_type = GpuType::Virtual;
+                    let gpu_device = GpuDevice::new(
+                        gpu_name,
+                        device.clone(),
+                        render,
+                        card,
+                        None,
+                        gpu_vendor,
+                        None,
+                        gpu_type,
+                    );
+                    info!("{}: Used Virtio to build", gpu_device.name());
+                    debug!("{:?}", gpu_device);
+                    return Ok(gpu_device);
+                }
+            }
+            // Cardwire depends on knowing the GPU type for the modes, mark Other devices as
+            // unknown, leaving only hybrid and manual available until support added
+            GpuVendor::Other => {
+                let gpu_name = device
+                    .device_name()
+                    .clone()
+                    .unwrap_or_else(|| "Unknown Device".to_string());
+                if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
+                    let gpu_type = GpuType::Unknown;
+                    let gpu_device = GpuDevice::new(
+                        gpu_name,
+                        device.clone(),
+                        render,
+                        card,
+                        None,
+                        gpu_vendor,
+                        None,
+                        gpu_type,
+                    );
+                    warn!(
+                        "{}: unknown device vendor ({:?}/{:?}), please request support for it on Github",
+                        gpu_device.name(),
+                        device.vendor_id(),
+                        device.vendor_name()
+                    );
+                    debug!("{:?}", gpu_device);
+                    return Ok(gpu_device);
+                }
+            }
+        }
+        // If we are here, an error happend (mostly DRM or libraries), build an un-available GPU
+        let gpu_name = device
+            .device_name()
+            .clone()
+            .unwrap_or_else(|| "Unknown Device".to_string());
         Ok(GpuDevice::new(
-            device_name,
+            gpu_name,
             device.clone(),
-            render,
-            card,
+            u32::MAX,
+            u32::MAX,
             None,
             gpu_vendor,
-            nvidia_minor,
-            discrete,
-            false,
-            available,
-            self.is_virtual_gpu(device),
+            None,
+            GpuType::Unavailable,
         ))
-    }
-    fn is_discrete_vulkan(&self, pci_id: &str) -> bool {
-        if let Some(vlk_map) = &self.vlk_physical_devices
-            && let Some(vlk_dev) = vlk_map.get(pci_id)
-        {
-            return vlk_dev.properties().device_type == PhysicalDeviceType::DiscreteGpu;
-        }
-
-        false
-    }
-    /// Detect virtual GPUs (e.g. virtio-gpu in qemu) through Vulkan when available, falling
-    /// back to the virtio PCI vendor id.
-    fn is_virtual_gpu(&self, device: &PciDevice) -> bool {
-        const VIRTIO_VENDOR_ID: &str = "0x1af4";
-
-        if let Some(vlk_map) = &self.vlk_physical_devices
-            && let Some(vlk_dev) = vlk_map.get(device.pci_address())
-        {
-            return vlk_dev.properties().device_type == PhysicalDeviceType::VirtualGpu;
-        }
-
-        device
-            .vendor_id()
-            .as_deref()
-            .is_some_and(|id| id == VIRTIO_VENDOR_ID)
     }
 }
