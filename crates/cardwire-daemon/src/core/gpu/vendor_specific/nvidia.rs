@@ -47,7 +47,7 @@ pub fn nvidia_get_device_name(pci_address: &str) -> Option<String> {
 pub fn nvidia_get_device_type(name: &str) -> GpuType {
     // I hate this
     // This is probably temporary until i come up with a more reliable way to detect without nvml
-    if name.contains("Geforce") | name.contains("RTX") {
+    if name.contains("GeForce") | name.contains("RTX") | name.contains("GTX") {
         GpuType::Discrete
     } else {
         GpuType::Unknown
