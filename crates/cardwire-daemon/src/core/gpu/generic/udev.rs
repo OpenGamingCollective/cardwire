@@ -25,9 +25,8 @@ pub fn sysfs_get_device_drm(pci_id: &str) -> Option<(u32, u32)> {
     let syspath = Path::new("/sys/bus/pci/devices").join(pci_id).join("drm");
     let drm = syspath.read_dir().ok()?;
 
-    // index 0 = card
-    // index 1 = render
-    let mut drm_nodes: Vec<u32> = vec![0; 2];
+    let mut render: Option<u32> = None;
+    let mut card: Option<u32> = None;
 
     for entry in drm.flatten() {
         if let Some(str) = entry.file_name().to_str()
@@ -37,7 +36,7 @@ pub fn sysfs_get_device_drm(pci_id: &str) -> Option<(u32, u32)> {
             if let Some(minor_s) = minor_s_opt
                 && let Ok(minor_int) = minor_s.parse::<u32>()
             {
-                drm_nodes[0] = minor_int;
+                card = Some(minor_int);
                 continue;
             }
         }
@@ -48,15 +47,11 @@ pub fn sysfs_get_device_drm(pci_id: &str) -> Option<(u32, u32)> {
             if let Some(minor_s) = minor_s_opt
                 && let Ok(minor_int) = minor_s.parse::<u32>()
             {
-                drm_nodes[1] = minor_int;
+                render = Some(minor_int);
                 continue;
             }
         }
     }
 
-    if drm_nodes.is_empty() {
-        None
-    } else {
-        Some((drm_nodes[0] as u32, drm_nodes[1] as u32))
-    }
+    Some((card?, render?))
 }
