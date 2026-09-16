@@ -17,13 +17,11 @@ impl AmdGpuDev {
         let (amdgpu_dev, _drm_major, _drm_minor) = {
             use std::fs::OpenOptions;
             let path = format!("/dev/dri/renderD{}", render);
-            let f = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(path)
-                .unwrap();
+            let f = OpenOptions::new().read(true).write(true).open(path)?;
 
-            libdrm_amdgpu.init_device_handle_with_fd(f).unwrap()
+            libdrm_amdgpu
+                .init_device_handle_with_fd(f)
+                .map_err(CardwireAmdGpuError)?
         };
         let gpu_info = amdgpu_dev.query_gpu_info().map_err(CardwireAmdGpuError)?;
         Ok(Self {
