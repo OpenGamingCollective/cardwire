@@ -88,22 +88,28 @@ impl GpuEnumerator {
             let gpu_type = self.vulkan.get_gpu_type(pci_id);
             let gpu_name = self.vulkan.get_gpu_name(pci_id);
 
-            let gpu_card = self.vulkan.get_gpu_card(pci_id).unwrap_or_default();
-            let gpu_render = self.vulkan.get_gpu_render(pci_id).unwrap_or_default();
-
-            let gpu_device = GpuDevice::new(
-                gpu_name,
-                device.clone(),
-                gpu_render as u32,
-                gpu_card as u32,
-                None,
-                gpu_vendor,
-                None,
-                gpu_type,
-            );
-            info!("{}: Used Vulkan to build", gpu_device.name());
-            debug!("{:?}", gpu_device);
-            return Ok(gpu_device);
+            match (
+                self.vulkan.get_gpu_card(pci_id),
+                self.vulkan.get_gpu_render(pci_id),
+            ) {
+                (Some(card), Some(render)) => {
+                    let gpu_device = GpuDevice::new(
+                        gpu_name,
+                        device.clone(),
+                        render as u32,
+                        card as u32,
+                        None,
+                        gpu_vendor,
+                        None,
+                        gpu_type,
+                    );
+                    info!("{}: Used Vulkan to build", gpu_device.name());
+                    debug!("{:?}", gpu_device);
+                    return Ok(gpu_device);
+                }
+                // Fallback to vendor match
+                _ => {}
+            }
         }
 
         // else, fallback to sysfs GPU building
