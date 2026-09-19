@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     Result, core::{
-        env::is_gpu_launchable, gpu::{DbusGpuDevice, GpuDevice, is_gpu_active}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
+        env::is_gpu_launchable, gpu::{DbusGpuDevice, GpuDevice, GpuType, is_gpu_active}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
     }, file::{CardwireGpuState, CardwireModeState}, interface::{Modes, SwitcherooInterface}
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
@@ -251,6 +251,10 @@ impl GpuInterface {
     #[zbus(property)]
     /// Check if the GPU is blocked
     pub async fn block(&self) -> fdo::Result<bool> {
+        // Directly return for non-available GPUs
+        if *self.device.device_type() == GpuType::Unavailable {
+            return Ok(false);
+        }
         self.gpu_blocked().await
     }
 

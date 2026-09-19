@@ -10,7 +10,7 @@ use args::{Args, CliMode, Commands, ConfigAction, DebugAction, ManagerAction};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
 
-use crate::{display::print_devices_pci, types::SystemType};
+use crate::{dbus::GpuType, display::print_devices_pci, types::SystemType};
 
 const BIN_NAME: &str = "cardwire";
 
@@ -281,7 +281,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Launch { gpu, program } => {
             let mut available_gpu = get_gpu_list(&client).await;
 
-            available_gpu.retain(|_, gpu| gpu.available);
+            available_gpu.retain(|_, gpu| gpu.device_type != GpuType::Unavailable);
 
             let target_gpu = if let Some(gpu_id) = gpu {
                 let target = available_gpu.get(&(gpu_id as usize));
@@ -302,23 +302,28 @@ async fn main() -> anyhow::Result<()> {
                 target
             // No gpu specified
             } else {
-                available_gpu.retain(|_, gpu| gpu.available && gpu.launchable);
+                available_gpu
+                    .retain(|_, gpu| gpu.device_type != GpuType::Unavailable && gpu.launchable);
                 let system_type = SystemType::from_gpulist(&available_gpu);
                 match system_type {
                     // 2 GPUs, one iGPU and one dGPU
                     SystemType::Laptop => available_gpu
                         .iter()
-                        .find(|(_, gpu)| !gpu.default && gpu.discrete),
+                        .find(|(_, gpu)| !gpu.default && gpu.device_type == GpuType::Discrete),
                     // 2 GPUs, use default discrete GPU
                     SystemType::Desktop => available_gpu
                         .iter()
-                        .find(|(_, gpu)| gpu.default && gpu.discrete),
+                        .find(|(_, gpu)| gpu.default && gpu.device_type == GpuType::Discrete),
                     // 1 GPU or 3+ GPUs, get in this priority:
                     // 0. Default Discrete GPU
                     // 1. non-Default discrete GPU
                     // 2. Others
                     SystemType::Manual => available_gpu.iter().max_by_key(|(_, gpu)| {
-                        (gpu.default && gpu.discrete, gpu.discrete, gpu.default)
+                        (
+                            gpu.default && gpu.device_type == GpuType::Discrete,
+                            gpu.device_type == GpuType::Discrete,
+                            gpu.default,
+                        )
                     }),
                 }
                 .map(|(_, gpu)| gpu)
@@ -447,14 +452,11 @@ async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::
                     render: dbus_dev.render,
                     card: dbus_dev.card,
                     default: dbus_dev.default,
-                    discrete: dbus_dev.discrete,
-                    virtual_gpu: dbus_dev.virtual_gpu,
-                    available: dbus_dev.available,
+                    device_type: dbus_dev.device_type,
                     vendor: dbus_dev.vendor,
                     driver: dbus_dev.driver,
                     blocked,
                     launchable,
-                    nvidia: dbus_dev.nvidia,
                     nvidia_minor: dbus_dev.nvidia_minor,
                 };
                 map.insert(id as usize, dev);

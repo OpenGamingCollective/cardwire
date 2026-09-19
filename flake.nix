@@ -76,6 +76,7 @@
             (pkgs system).egl-wayland
             (pkgs system).egl-x11
             (pkgs system).libglvnd
+            (pkgs system).libdrm
           ]
           ++ self.checks.${system}.pre-commit-check.enabledPackages;
           LD_LIBRARY_PATH = (pkgs system).lib.makeLibraryPath [
@@ -89,6 +90,7 @@
             (pkgs system).egl-wayland
             (pkgs system).egl-x11
             (pkgs system).libglvnd
+            (pkgs system).libdrm
           ];
           LIBCLANG_PATH = "${(pkgs system).llvmPackages.libclang.lib}/lib";
           RUST_SRC_PATH = "${toolchainFor system}/lib/rustlib/src/rust/library";

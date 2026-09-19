@@ -4,6 +4,8 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Ok, Result};
+
+use crate::dbus::GpuType;
 // Define the struct here instead of importing from cardwire_core,
 // I want cardwire-cli to be independent of the rest of cardwire
 // This allow other dev to make their own client for cardwire
@@ -16,14 +18,11 @@ pub struct GpuDevice {
     pub render: u32,
     pub card: u32,
     pub default: bool,
-    pub discrete: bool,
-    pub virtual_gpu: bool,
-    pub available: bool,
+    pub device_type: GpuType,
     pub vendor: String,
     pub driver: String,
     pub blocked: bool,
     pub launchable: bool,
-    pub nvidia: bool,
     pub nvidia_minor: String,
 }
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type)]
@@ -119,7 +118,11 @@ fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
             render_full,
             card_full,
             if gpu.default { "(*)" } else { "( )" },
-            if gpu.discrete { "(*)" } else { "( )" },
+            if gpu.device_type == GpuType::Discrete {
+                "(*)"
+            } else {
+                "( )"
+            },
             gpu.blocked,
             id_w = id_w,
             name_w = name_w,
@@ -144,9 +147,7 @@ mod tests {
         name: &str,
         pci: &str,
         default: bool,
-        discrete: bool,
-        virtual_gpu: bool,
-        available: bool,
+        device_type: GpuType,
         vendor: &str,
         driver: &str,
         blocked: bool,
@@ -158,14 +159,11 @@ mod tests {
             render: 128,
             card: 0,
             default,
-            discrete,
-            virtual_gpu,
-            available,
+            device_type: device_type.clone(),
             vendor: vendor.to_string(),
             driver: driver.to_string(),
             blocked,
-            launchable: !blocked && available,
-            nvidia: false,
+            launchable: !blocked && device_type != GpuType::Unavailable,
             nvidia_minor: String::new(),
         }
     }
@@ -180,9 +178,7 @@ mod tests {
                 "Intel UHD",
                 "0000:00:02.0",
                 true,
-                false,
-                false,
-                true,
+                GpuType::Integrated,
                 "Intel",
                 "xe",
                 false,
@@ -195,9 +191,7 @@ mod tests {
                 "RTX 4060",
                 "0000:01:00.0",
                 false,
-                true,
-                false,
-                true,
+                GpuType::Discrete,
                 "Nvidia",
                 "nouveau",
                 true,
@@ -226,9 +220,7 @@ mod tests {
             "RX 7900 XTX",
             "0000:03:00.0",
             false,
-            true,
-            false,
-            true,
+            GpuType::Discrete,
             "AMD",
             "amdgpu",
             false,
@@ -242,6 +234,6 @@ mod tests {
         assert_eq!(parsed.card, 0);
         assert!(!parsed.default);
         assert!(!parsed.blocked);
-        assert!(!parsed.nvidia);
+        assert!(parsed.vendor != "Nvidia");
     }
 }

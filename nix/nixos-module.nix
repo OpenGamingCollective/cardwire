@@ -63,10 +63,9 @@ in
     systemd.services.cardwired = {
       unitConfig = {
         Description = "Cardwire Daemon";
-        Wants = [ "systemd-udev-settle.service" ];
-        After = [
-          "dbus.service"
-          "systemd-udev-settle.service"
+        Before = [
+          "graphical.target"
+          "display-manager.service"
         ];
       };
       serviceConfig = {

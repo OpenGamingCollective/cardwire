@@ -129,12 +129,6 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
                 gpu.set_default(Some(true));
             } else {
                 gpu.set_default(Some(false));
-                // Virtual GPUs (e.g. virtio-gpu in qemu) are reported as VirtualGpu by Vulkan and
-                // don't count as discrete. Keep the historical behavior of treating a non-default
-                // virtual GPU as a dGPU.
-                if gpu.is_virtual() && !gpu.is_discrete() {
-                    gpu.set_discrete(true);
-                }
             }
         }
     }
