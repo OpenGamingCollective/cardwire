@@ -63,10 +63,10 @@ in
     systemd.services.cardwired = {
       unitConfig = {
         Description = "Cardwire Daemon";
-        Wants = [ "systemd-udev-settle.service" ];
+        Wants = [ "multi-user.target" ];
+        Before = [ "graphical.target" ];
         After = [
-          "dbus.service"
-          "systemd-udev-settle.service"
+          "multi-user.target"
         ];
       };
       serviceConfig = {
@@ -111,7 +111,7 @@ in
           "~`@cpu-emulation` `@module` `@obsolete` `@raw-io` `@reboot` `@swap`"
         ];
       };
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = [ "graphical.target" ];
     };
   };
 }
