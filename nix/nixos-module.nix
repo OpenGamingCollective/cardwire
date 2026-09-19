@@ -63,10 +63,9 @@ in
     systemd.services.cardwired = {
       unitConfig = {
         Description = "Cardwire Daemon";
-        Wants = [ "multi-user.target" ];
-        Before = [ "graphical.target" ];
-        After = [
-          "multi-user.target"
+        Before = [
+          "graphical.target"
+          "display-manager.service"
         ];
       };
       serviceConfig = {
@@ -111,7 +110,7 @@ in
           "~`@cpu-emulation` `@module` `@obsolete` `@raw-io` `@reboot` `@swap`"
         ];
       };
-      wantedBy = [ "graphical.target" ];
+      wantedBy = [ "multi-user.target" ];
     };
   };
 }
