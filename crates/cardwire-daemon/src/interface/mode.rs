@@ -163,7 +163,7 @@ impl ModeInterface {
             // Else apply the gpu_state but still unblock other gpus
             Modes::Manual => {
                 // Manual is only allowed on Desktop or Manual
-                if system_type != SystemType::Manual && system_type != SystemType::Desktop {
+                if system_type != SystemType::Manual {
                     let error_message = format!(
                         "Couldn't set mode to {}, Manual mode is only available on Desktop or system with either 1 GPU or 3+ GPUs",
                         mode
@@ -240,7 +240,7 @@ impl ModeInterface {
             SystemType::Laptop => {
                 vec![Modes::Integrated, Modes::Hybrid, Modes::Smart]
             }
-            SystemType::Desktop | SystemType::Manual => {
+            SystemType::Manual => {
                 vec![Modes::Hybrid, Modes::Manual]
             }
         })

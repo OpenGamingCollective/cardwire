@@ -3,7 +3,9 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt, sync::Arc};
 
-use crate::{Result, core::errors::CardwireError, interface::GpuInterface};
+use crate::{
+    Result, core::{errors::CardwireError, gpu::GpuType}, interface::GpuInterface
+};
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -56,42 +58,43 @@ impl From<Modes> for u32 {
     }
 }
 
+/*
+    Laptop = 1 integrated default + 1 discrete/eGPU non default
+    Manual = Others
+*/
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum SystemType {
     Laptop,
-    Desktop,
     Manual,
 }
 impl SystemType {
     pub fn from_gpulist(gpu_list: &BTreeMap<usize, Arc<GpuInterface>>) -> Self {
-        let available_gpus: Vec<(usize, bool, bool)> = gpu_list
+        // Sort to keep available GPUs, and only keep id, default and gpu type
+        let available_gpus: Vec<(usize, bool, GpuType)> = gpu_list
             .iter()
             .filter(|(_, gpu)| gpu.device.is_available())
-            .map(|(id, gpu)| (*id, gpu.device.is_default(), gpu.device.is_discrete()))
+            .map(|(id, gpu)| {
+                (
+                    *id,
+                    gpu.device.is_default(),
+                    gpu.device.device_type().clone(),
+                )
+            })
             .collect();
 
+        // Directly assign system with less or more than 2 GPUs
         if available_gpus.len() != 2 {
             Self::Manual
-        } else if available_gpus
+        } else if available_gpus.iter().any(|(_, default, gpu_type)| {
+            *gpu_type == GpuType::Discrete || *gpu_type == GpuType::External && !*default
+        }) && available_gpus
             .iter()
-            .any(|(_, default, discrete)| *default && *discrete)
-            && available_gpus
-                .iter()
-                .any(|(_, default, discrete)| !*discrete && !*default)
+            .any(|(_, default, gpu_type)| *gpu_type == GpuType::Integrated && *default)
         {
-            // Has a default discrete GPU and a non-default non-discrete GPU
-            Self::Desktop
-        } else if available_gpus
-            .iter()
-            .any(|(_, default, discrete)| *discrete && !*default)
-            && available_gpus
-                .iter()
-                .any(|(_, default, discrete)| !*discrete && *default)
-        {
-            // Has a non-default discrete GPU and a default non-discrete GPU
+            // Has a non-default discrete/external GPU and a default integrated GPU
             Self::Laptop
         } else {
-            // Even if it's a desktop, we treat it as a Manual if it doesn't have the iGPU
             Self::Manual
         }
     }
