@@ -98,6 +98,7 @@ pub enum GpuType {
     Unavailable = 4,
     #[default]
     Unknown = 5,
+    External = 6,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
