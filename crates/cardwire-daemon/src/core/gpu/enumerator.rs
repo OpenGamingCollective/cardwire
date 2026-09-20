@@ -80,6 +80,27 @@ impl GpuEnumerator {
             None => GpuVendor::default(),
         };
         let pci_id = device.pci_address();
+
+        if device.driver().as_ref().is_some_and(|d| d.contains("vfio")) {
+            let gpu_name = device
+                .device_name()
+                .clone()
+                .unwrap_or_else(|| "Unknown Device".to_string());
+
+            let gpu_type = GpuType::Unavailable;
+            let gpu_device = GpuDevice::new(
+                gpu_name,
+                device.clone(),
+                u32::MAX,
+                u32::MAX,
+                None,
+                gpu_vendor,
+                None,
+                gpu_type,
+            );
+            return Ok(gpu_device);
+        }
+
         // Wait for DRM to be ready, each attempt take 250ms
         let _ = wait_for_drm(pci_id, 15);
 
