@@ -2,7 +2,7 @@ use crate::core::gpu::models::GpuType;
 
 use std::{fs, path::Path, thread, time::Duration};
 
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use nvml_wrapper::{
     Nvml, enum_wrappers::device::{Brand, GpuVirtualizationMode}, enums::device::DeviceArchitecture, error::NvmlError
 };
@@ -182,6 +182,7 @@ pub fn nvidia_get_device_minor_nvml(nvml: &Nvml, pci_id: &str) -> Option<u32> {
 pub fn nvidia_get_device_type_nvml(nvml: &Nvml, pci_id: &str) -> GpuType {
     if let Ok(nvidia_dev) = nvml.device_by_pci_bus_id(pci_id) {
         if let Ok(virt_mode) = nvidia_dev.virtualization_mode() {
+            debug!("[{}]: nvml virt_mode: {:?}", pci_id, virt_mode);
             match virt_mode {
                 GpuVirtualizationMode::Vgpu => return GpuType::Virtual,
                 // Do not want to assume this one
@@ -202,6 +203,7 @@ pub fn nvidia_get_device_type_nvml(nvml: &Nvml, pci_id: &str) -> GpuType {
                 | DeviceArchitecture::Hopper
                 | DeviceArchitecture::Blackwell,
             ) => {
+                debug!("[{}]: nvml arch: {:?}", pci_id, nvidia_dev.architecture());
                 return GpuType::Discrete;
             }
             // Architecture not implemented by nvml_wrapper yet
@@ -210,15 +212,19 @@ pub fn nvidia_get_device_type_nvml(nvml: &Nvml, pci_id: &str) -> GpuType {
             // 15 is NPU3
             // 13 is RUBIN
             // <https://github.com/NVIDIA/nvidia-settings/blob/df684ed9c29fd116c24a68198b681ef69e4f2c53/src/nvml.h#L1759-L1779>
-            Err(NvmlError::UnexpectedVariant(raw)) => match raw {
-                11 | 12 | 15 => return GpuType::Integrated,
-                13 => return GpuType::Discrete,
-                _ => {}
-            },
+            Err(NvmlError::UnexpectedVariant(raw)) => {
+                debug!("[{}]: nvml arch raw: {:?}", pci_id, raw);
+                match raw {
+                    11 | 12 | 15 => return GpuType::Integrated,
+                    13 => return GpuType::Discrete,
+                    _ => {}
+                }
+            }
             _ => {}
         }
         // Pretty much a fallback, i hope it doesnt get used
         if let Ok(brand) = nvidia_dev.brand() {
+            debug!("[{}]: nvml brand: {:?}", pci_id, brand);
             match brand {
                 Brand::Quadro
                 | Brand::Tesla
@@ -241,5 +247,6 @@ pub fn nvidia_get_device_type_nvml(nvml: &Nvml, pci_id: &str) -> GpuType {
             }
         }
     }
+    debug!("[{}]: nvml fallback", pci_id);
     GpuType::Unknown
 }
