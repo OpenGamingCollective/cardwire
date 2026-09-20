@@ -1,4 +1,3 @@
-use clap::Parser;
 use iced::{
     Alignment, Element, Length::{Fill, Fixed}, Subscription, Task, widget::{column, container, row, stack}, window
 };
@@ -6,7 +5,7 @@ use log::error;
 use std::collections::BTreeMap;
 
 use crate::{
-    args::CardwireArgs, gui_config::{GuiConfig, PrimaryClickAction}, helpers::{CardwireDbus, GpuDevice}, message::Message, models::{
+    args::CardwireArgs, gui_config::{GuiConfig, PrimaryClickAction}, helpers::{AppInstance, CardwireDbus, GpuDevice}, message::Message, models::{
         DaemonSettings, LogState, MainState, Mode, Page, PciDevice, SettingState, SmartState
     }, tray::{self, TrayAction, TrayHandle}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
 };
@@ -37,7 +36,7 @@ fn default_window_settings() -> window::Settings {
 }
 
 impl AppState {
-    pub fn new() -> (Self, Task<Message>) {
+    pub fn new(args: &CardwireArgs) -> (Self, Task<Message>) {
         let (gui_config, error) = match GuiConfig::load() {
             Ok(config) => (config, None),
             Err(error) => (
@@ -45,7 +44,6 @@ impl AppState {
                 Some(format!("Could not load GUI settings: {error}")),
             ),
         };
-        let args = CardwireArgs::parse();
         // Hide the GUI if launched with --background, or if the start_in_tray setting is set
         let (window_id, open_window) = if args.background.is_some_and(|b| b)
             || (args.background.is_none() && gui_config.start_in_tray)
@@ -89,6 +87,7 @@ impl AppState {
                 | Message::GpuBlockResult(_)
         );
         match message {
+            Message::Activate => return self.open_or_focus_window(),
             // Switch to a new page, clearing the pop-ups at the same time
             Message::SwitchPage(page) => {
                 self.current_tab = page;
@@ -537,10 +536,11 @@ impl AppState {
         }
     }
 
-    pub fn subscription(&self) -> Subscription<Message> {
+    pub fn subscription(&self, instance: &AppInstance) -> Subscription<Message> {
         Subscription::batch([
             crate::subscription::dbus_sub(),
             crate::subscription::tray_sub(),
+            crate::subscription::activation_sub(instance),
             window::close_events().map(Message::WindowClosed),
         ])
     }
@@ -571,7 +571,13 @@ impl AppState {
 
     fn open_or_focus_window(&mut self) -> Task<Message> {
         if let Some(id) = self.window_id {
-            window::gain_focus(id)
+            // Wayland does not implement gain_focus; request activation
+            // through the compositor's attention protocol as well.
+            // source: iced_runtime::window::Action::GainFocus(Id)
+            window::minimize(id, false).chain(window::request_user_attention(
+                id,
+                Some(window::UserAttention::Informational),
+            ))
         } else {
             let (id, task) = window::open(default_window_settings());
             self.window_id = Some(id);
