@@ -43,7 +43,7 @@ section = "utils"
 priority = "optional"
 extended-description = """\
  GPU manager for Linux using eBPF LSM hooks."""
-depends = "hwdata, dbus, systemd, upower, udev, libgcc-s1, libc6, libudev1, libdrm2"
+depends = "hwdata, dbus, systemd, upower, udev, libgcc-s1, libc6, libudev1, libdrm2, libdrm-amdgpu1"
 
 assets = [
     ["target/release/cardwired", "usr/bin/", "755"],
