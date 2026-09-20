@@ -2,7 +2,7 @@
 
 pkgbase=cardwire
 pkgname=cardwire
-pkgver=0.12.2
+pkgver=0.12.3
 pkgrel=1
 pkgdesc='GPU manager for Linux using eBPF LSM hooks'
 arch=('x86_64')

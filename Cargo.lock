@@ -750,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "cardwire-cli"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -763,7 +763,7 @@ dependencies = [
 
 [[package]]
 name = "cardwire-daemon"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "aya",
  "aya-log",
@@ -788,7 +788,7 @@ dependencies = [
 
 [[package]]
 name = "cardwire-ebpf"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "aya-ebpf",
  "aya-log-ebpf",
@@ -797,7 +797,7 @@ dependencies = [
 
 [[package]]
 name = "cardwire-ebpf-userspace"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "aya",
@@ -814,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "cardwire-gui"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "chrono",
  "clap",
