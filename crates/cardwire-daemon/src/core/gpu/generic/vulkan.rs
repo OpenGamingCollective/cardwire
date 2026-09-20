@@ -20,13 +20,9 @@ impl Vulkan {
 
     /// Verify if the device pci id is in the vulkan enum map
     pub fn vulkan_compatible(&self, pci_id: &str) -> bool {
-        if let Some(vlk_map) = &self.vlk_physical_devices
-            && vlk_map.contains_key(pci_id)
-        {
-            true
-        } else {
-            false
-        }
+        self.vlk_physical_devices
+            .as_ref()
+            .is_some_and(|map| map.contains_key(pci_id))
     }
 
     /// get the gpu type using vulkan
