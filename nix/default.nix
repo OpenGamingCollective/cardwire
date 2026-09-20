@@ -13,34 +13,18 @@ pkgs.rustPlatform.buildRustPackage {
   src = ./..;
   cargoLock.lockFile = ../Cargo.lock;
 
+  __structuredAttrs = true;
+
   nativeBuildInputs = [
-    pkgs.clang
-    pkgs.installShellFiles
-    pkgs.makeWrapper
     pkgs.pkg-config
     pkgs.bpf-linker
+    pkgs.makeBinaryWrapper
+    pkgs.installShellFiles
   ];
 
   buildInputs = [
-    pkgs.hwdata
-    pkgs.libbpf
     pkgs.udev
-    pkgs.vulkan-headers
-    pkgs.libglvnd
-    pkgs.egl-wayland
-    pkgs.egl-x11
     pkgs.libxcb
-  ];
-
-  runtimeDeps = [
-    pkgs.hwdata
-    pkgs.upower
-    pkgs.udev
-    pkgs.wayland
-    pkgs.libxkbcommon
-    pkgs.vulkan-loader
-    pkgs.libglvnd
-    pkgs.libdrm
   ];
 
   doCheck = false;
@@ -74,40 +58,42 @@ pkgs.rustPlatform.buildRustPackage {
 
   postInstall = ''
     install -Dm444 ./assets/org.opengamingcollective.cardwire.conf \
-       $out/share/dbus-1/system.d/org.opengamingcollective.cardwire.conf
-
-    install -Dm444 ./assets/cardwire-gui.desktop \
-       $out/share/applications/cardwire-gui.desktop
+      $out/share/dbus-1/system.d/org.opengamingcollective.cardwire.conf
 
     install -Dm444 ./assets/org.opengamingcollective.cardwire.metainfo.xml \
-       $out/share/metainfo/org.opengamingcollective.cardwire.metainfo.xml
+      $out/share/metainfo/org.opengamingcollective.cardwire.metainfo.xml
+
+    install -Dm444 ./assets/cardwire-gui.desktop \
+      $out/share/applications/cardwire-gui.desktop
 
     for icon in ./assets/icons/*.svg; do
       install -Dm444 "$icon" "$out/share/icons/hicolor/scalable/apps/$(basename "$icon")"
     done
 
-    installShellCompletion --cmd cardwire \
-       --fish <($out/bin/cardwire completion fish)
-
     wrapProgram $out/bin/cardwired \
-    --prefix LD_LIBRARY_PATH : ${
-      lib.makeLibraryPath [
-        pkgs.udev
-        pkgs.upower
-        pkgs.vulkan-loader
-        pkgs.libglvnd
-        pkgs.libdrm
-      ]
-    }
+      --prefix LD_LIBRARY_PATH : ${
+        lib.makeLibraryPath [
+          pkgs.vulkan-loader
+          pkgs.libglvnd
+          pkgs.libdrm
+        ]
+      }
 
     wrapProgram $out/bin/cardwire-gui \
-    --prefix LD_LIBRARY_PATH : ${
-      lib.makeLibraryPath [
-        pkgs.wayland
-        pkgs.libxkbcommon
-        pkgs.vulkan-loader
-        pkgs.libGL
-      ]
-    }
+      --prefix LD_LIBRARY_PATH : ${
+        lib.makeLibraryPath [
+          pkgs.wayland
+          pkgs.libxkbcommon
+          pkgs.vulkan-loader
+          pkgs.libGL
+        ]
+      }
+
+  ''
+  + lib.optionalString (pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform) ''
+    installShellCompletion --cmd cardwire \
+      --fish <($out/bin/cardwire completion fish) \
+      --bash <($out/bin/cardwire completion bash) \
+      --zsh <($out/bin/cardwire completion zsh)
   '';
 }
