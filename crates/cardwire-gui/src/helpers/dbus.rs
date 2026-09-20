@@ -6,6 +6,28 @@ use zbus::{
 
 use crate::models::{DaemonSettings, DbusAppMetadata, LsofData, Mode};
 
+#[derive(
+    Clone,
+    Debug,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    PartialEq,
+    zbus::zvariant::Type,
+    Copy,
+)]
+#[repr(u32)]
+pub enum GpuType {
+    Integrated = 0,
+    Discrete = 1,
+    Virtual = 2,
+    Other = 3,
+    Unavailable = 4,
+    #[default]
+    Unknown = 5,
+    External = 6,
+}
+
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct GpuDevice {
     pub id: u32,
@@ -14,13 +36,10 @@ pub struct GpuDevice {
     pub render: u32,
     pub card: u32,
     pub default: bool,
-    pub discrete: bool,
-    pub virtual_gpu: bool,
-    pub available: bool,
+    pub device_type: GpuType,
     pub vendor: String,
     pub driver: String,
     pub blocked: bool,
-    pub nvidia: bool,
     pub nvidia_minor: String,
     pub power_state: Option<String>,
 }
@@ -32,12 +51,9 @@ pub struct DbusGpuDevice {
     pub render: u32,
     pub card: u32,
     pub default: bool,
-    pub discrete: bool,
-    pub virtual_gpu: bool,
-    pub available: bool,
+    pub device_type: GpuType,
     pub vendor: String,
     pub driver: String,
-    pub nvidia: bool,
     pub nvidia_minor: String,
 }
 
@@ -98,13 +114,10 @@ impl CardwireDbus {
                         render: dbus_dev.render,
                         card: dbus_dev.card,
                         default: dbus_dev.default,
-                        discrete: dbus_dev.discrete,
-                        virtual_gpu: dbus_dev.virtual_gpu,
-                        available: dbus_dev.available,
+                        device_type: dbus_dev.device_type,
                         vendor: dbus_dev.vendor,
                         driver: dbus_dev.driver,
                         blocked,
-                        nvidia: dbus_dev.nvidia,
                         nvidia_minor: dbus_dev.nvidia_minor,
                         power_state: None,
                     };

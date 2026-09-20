@@ -28,6 +28,8 @@ vulkano.workspace = true
 khronos-egl.workspace = true
 rusqlite.workspace = true
 inotify.workspace = true
+libdrm_amdgpu_sys.workspace = true
+nvml-wrapper.workspace = true
 
 [[bin]]
 name = "cardwired"
@@ -41,7 +43,7 @@ section = "utils"
 priority = "optional"
 extended-description = """\
  GPU manager for Linux using eBPF LSM hooks."""
-depends = "hwdata, dbus, systemd, upower, udev, libgcc-s1, libc6, libudev1"
+depends = "hwdata, dbus, systemd, upower, udev, libgcc-s1, libc6, libudev1, libdrm2, libdrm-amdgpu1"
 
 assets = [
     ["target/release/cardwired", "usr/bin/", "755"],

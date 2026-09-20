@@ -85,7 +85,7 @@ jobs:
         with:
           version: "1.21.1"
       - name: Install bpf-linker
-        run: cargo binstall bpf-linker
+        run: cargo binstall --version 0.11.0 --locked --no-confirm bpf-linker 
       - name: Clippy Workspace
         uses: auguwu/clippy-action@9817d076b82df0194935be9db6154c56ac07b317 # 1.5.0
         with:

@@ -1,15 +1,11 @@
-mod default_gpu;
-mod device_info;
-mod display;
-mod egl;
 mod enumerator;
+mod generic;
 mod models;
-mod nvidia;
-mod vulkan;
+mod vendor_specific;
 
-pub use default_gpu::check_default_drm_class;
-#[expect(unused_imports)]
-pub use display::{external_display_connected, is_gpu_active};
 pub use enumerator::GpuEnumerator;
-pub use models::{DbusGpuDevice, GpuDevice, GpuVendor, PowerState};
-pub use nvidia::{start_nvidia_powerd, stop_nvidia_powerd};
+pub use generic::default_gpu::check_default_drm_class;
+#[expect(unused_imports)]
+pub use generic::display::{external_display_connected, is_gpu_active};
+pub use models::{DbusGpuDevice, GpuDevice, GpuType, GpuVendor, PowerState};
+pub use vendor_specific::nvidia::{start_nvidia_powerd, stop_nvidia_powerd};

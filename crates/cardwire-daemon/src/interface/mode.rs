@@ -131,7 +131,7 @@ impl ModeInterface {
                 // Check if there is an offload discrete GPU (discrete and not the default display)
                 if system_type != SystemType::Laptop {
                     let error_message = format!(
-                        "Couldn't set mode to {}, Integrated and Smart modes require a offload discrete GPU (not supported on desktops where the discrete GPU is the primary display)",
+                        "Couldn't set mode to {}, Integrated and Smart modes are only available on laptops with a offload discrete GPU",
                         mode
                     );
                     error!("{}", error_message);
@@ -163,9 +163,9 @@ impl ModeInterface {
             // Else apply the gpu_state but still unblock other gpus
             Modes::Manual => {
                 // Manual is only allowed on Desktop or Manual
-                if system_type != SystemType::Manual && system_type != SystemType::Desktop {
+                if system_type != SystemType::Manual {
                     let error_message = format!(
-                        "Couldn't set mode to {}, Manual mode is only available on Desktop or system with either 1 GPU or 3+ GPUs",
+                        "Couldn't set mode to {}, Manual mode is only available laptops with a offload discrete GPU",
                         mode
                     );
                     error!("{}", error_message);
@@ -240,7 +240,7 @@ impl ModeInterface {
             SystemType::Laptop => {
                 vec![Modes::Integrated, Modes::Hybrid, Modes::Smart]
             }
-            SystemType::Desktop | SystemType::Manual => {
+            SystemType::Manual => {
                 vec![Modes::Hybrid, Modes::Manual]
             }
         })
