@@ -80,8 +80,6 @@ jobs:
         run: |
           mkdir /build
           cp packages/arch-linux/cardwire-PKGBUILD /build/PKGBUILD
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" /build/PKGBUILD
           useradd -m builder
           echo 'builder ALL=(ALL) NOPASSWD: /usr/bin/pacman' > /etc/sudoers.d/builder-pacman
           chmod 0440 /etc/sudoers.d/builder-pacman
