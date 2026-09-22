@@ -15,6 +15,12 @@ Creator and main maintainer: @luytan
 > 
 > Wayland only, X11 is not supported.
 
+## LLM Usage
+I prefer being transparent with it.
+Cardwire had LLM usages in the early code to have some POC.
+It has been since rewritten, if i happen to use AI, i try to mention it.
+For contributors, as said in the llm policy, PRs that contain llm code can be refused
+
 ## Benefits
 - **Instant App Startup:** Prevents applications (like Electron apps or GTK apps) from attempting to initialize the GPU, this eliminates the 3–4 second "hang" typically caused by waiting for a sleeping GPU to power up
 - **Power Efficiency:** By blocking access at the syscall level, the GPU is never woken from its lowest power state (D3cold), extending battery life on laptops
