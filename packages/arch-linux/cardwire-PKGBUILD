@@ -2,6 +2,8 @@
 
 pkgbase=cardwire
 pkgname=cardwire
+# for alpha only, arch doesnt accept "-"
+_tag=0.13.0-alpha.1
 pkgver=0.13.0_alpha.1
 pkgrel=1
 pkgdesc='GPU manager for Linux using eBPF LSM hooks'
@@ -10,11 +12,11 @@ url='https://github.com/OpenGamingCollective/cardwire'
 license=('GPL3')
 depends=('hwdata' 'dbus' 'sqlite' 'systemd' 'upower' 'libdrm')
 makedepends=('rust' 'rust-src' 'cargo-binstall' 'libxcb')
-source=("https://github.com/OpenGamingCollective/cardwire/archive/refs/tags/v$pkgver.tar.gz")
+source=("https://github.com/OpenGamingCollective/cardwire/archive/refs/tags/v${_tag}.tar.gz")
 sha256sums=('eba92c952f002767abead1391d9d2d229e3637a756ac4786759a0012b7e96649')
 
 prepare(){
-	cd "${pkgbase}-${pkgver}"
+	cd "${pkgbase}-${_tag}"
 	cargo fetch --locked
 	# This is a workaround to get cardwire-ebpf building
 	# bpf-linker linked to llvm 22 or built with llvm 22 cannot compile the crate
@@ -25,7 +27,7 @@ prepare(){
 }
 
 build(){
-	cd "${pkgbase}-${pkgver}"
+	cd "${pkgbase}-${_tag}"
 	export LIBSQLITE3_SYS_USE_PKG_CONFIG=1
 	export RUSTC_BOOTSTRAP=1
 	export CARGO_TARGET_DIR=target
@@ -35,7 +37,7 @@ build(){
 }
 
 package(){
-	cd "${pkgbase}-${pkgver}"
+	cd "${pkgbase}-${_tag}"
 	install -Dm755 target/release/cardwire "$pkgdir/usr/bin/cardwire"
 	install -Dm755 target/release/cardwired "$pkgdir/usr/bin/cardwired"
 	install -Dm755 target/release/cardwire-gui "$pkgdir/usr/bin/cardwire-gui"
