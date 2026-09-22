@@ -13,40 +13,52 @@ pub async fn monitor_pci_changes(debug_int: DebugInterface) -> zbus::Result<()> 
     loop {
         tokio::select! {
             guard_res = udev_pci_fd.readable() => {
-                if let Ok(mut guard) = guard_res && guard.ready().is_readable() {
-                    for event in udev_pci_fd.get_ref().iter() {
-                        if let Some(action) = event.action()
-                            && (action == "bind" || action == "unbind")
-                        {
-                             info!("detected pci event, refreshing GPU interfaces");
-                            match debug_int.refresh_gpu().await {
-                                Ok(()) => {}
-                                Err(e) => {
-                                    error!("failed to refresh gpu interface: {}", e);
+                match guard_res {
+                    Ok(mut guard) => {
+                        for event in udev_pci_fd.get_ref().iter() {
+                            if let Some(action) = event.action()
+                                && (action == "bind" || action == "unbind")
+                            {
+                                info!("detected pci event, refreshing GPU interfaces");
+                                match debug_int.refresh_gpu().await {
+                                    Ok(()) => {}
+                                    Err(e) => {
+                                        error!("failed to refresh gpu interface: {}", e);
+                                    }
                                 }
                             }
                         }
+                        guard.clear_ready();
                     }
-                    guard.clear_ready();
+                    Err(err) => {
+                        error!("[UDEV_MONITOR_PCI]: {:?}", err);
+                        return Err(err.into())
+                    }
                 }
             }
             guard_res = udev_thunderbolt_fd.readable() => {
-                if let Ok(mut guard) = guard_res && guard.ready().is_readable() {
-                    for event in udev_thunderbolt_fd.get_ref().iter() {
-                        if let Some(action) = event.action()
-                            && (action == "add" || action == "remove" || action == "change")
-                            // try to match most actions, refreshing isnt that ressource intensive
-                        {
-                             info!("detected pci event, refreshing GPU interfaces");
-                            match debug_int.refresh_gpu().await {
-                                Ok(()) => {}
-                                Err(e) => {
-                                    error!("failed to refresh gpu interface: {}", e);
+                match guard_res {
+                    Ok(mut guard) => {
+                        for event in udev_thunderbolt_fd.get_ref().iter() {
+                            if let Some(action) = event.action()
+                                && (action == "add" || action == "remove" || action == "change")
+                                // try to match most actions, refreshing isnt that ressource intensive
+                            {
+                                info!("detected pci event, refreshing GPU interfaces");
+                                match debug_int.refresh_gpu().await {
+                                    Ok(()) => {}
+                                    Err(e) => {
+                                        error!("failed to refresh gpu interface: {}", e);
+                                    }
                                 }
                             }
                         }
+                        guard.clear_ready();
                     }
-                    guard.clear_ready();
+                    Err(err) => {
+                        error!("[UDEV_MONITOR_THUNDERBOLT]: {:?}", err);
+                        return Err(err.into())
+                    }
                 }
             }
         }
