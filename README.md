@@ -1,7 +1,7 @@
 # cardwire
 A GPU manager for Linux for laptops and multi-GPU desktops, using eBPF LSM hooks.
 
-[![Packaging status](https://repology.amdmi3.ru/badge/vertical-allrepos/cardwire.svg)](https://repology.org/project/cardwire/versions)
+[![Packaging status](https://repology.amdmi3.ru/badge/vertical-allrepos/cardwire.svg)](https://repology.amdmi3.ru/project/cardwire/versions)
 
 [![GitHub License](https://img.shields.io/github/license/OpenGamingCollective/cardwire)](https://github.com/OpenGamingCollective/cardwire/blob/main/LICENSE)
 
