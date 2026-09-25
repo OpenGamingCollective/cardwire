@@ -1,8 +1,6 @@
 use crate::{
     Result, analyzer::{
-        dynamic_analysis::{check_env, get_app_id_wayland_with_retry, get_steam_app_id}, helpers::{
-            comm_to_string, get_real_process_name, is_proc_still_alive, normalized_candidates
-        }, static_analysis::{self, AppMetadata, watch_fdo_folders}
+        dynamic_analysis::{check_env, get_steam_app_id}, helpers::{get_real_process_name, normalized_candidates}, static_analysis::{self, AppMetadata, watch_fdo_folders}
     }, file::{DbusAppMetadata, GpuPolicy}, interface::{LogEntry, LoggerInterfaceSignals, SmartPolicyInterface}
 };
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
@@ -13,7 +11,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque}, fs, ptr, sync::{Arc, OnceLock}, time::SystemTime
 };
 use tokio::{
-    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, Semaphore, mpsc, oneshot}, task, time::Instant
+    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, mpsc, oneshot}, task, time::Instant
 };
 use zbus::object_server::SignalEmitter;
 #[repr(C)]
@@ -26,6 +24,7 @@ pub struct ExecEvent {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
+#[allow(dead_code)]
 pub struct ReportEvent {
     pub pid: u32,
     pub gpu_id: u32,
@@ -41,6 +40,7 @@ enum PidType {
 #[derive(Clone)]
 pub struct CardwireAnalyzer {
     exec_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
+    #[allow(dead_code)]
     report_ring: Arc<Mutex<AsyncFd<RingBuf<aya::maps::MapData>>>>,
     pid_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
     forced_map: Arc<RwLock<AyaHashMap<aya::maps::MapData, u32, u32>>>,
@@ -50,16 +50,16 @@ pub struct CardwireAnalyzer {
     db_cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
     pending_discoveries: Arc<Mutex<HashSet<String>>>,
     db_tx: mpsc::Sender<(String, AppMetadata, oneshot::Sender<bool>)>,
+    #[allow(dead_code)]
     report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
+    #[allow(dead_code)]
     reported_pids: Arc<RwLock<HashSet<u32>>>,
-    report_semaphore: Arc<Semaphore>,
+    #[allow(dead_code)]
     signal: Arc<OnceLock<SignalEmitter<'static>>>,
     new_app_signal: Arc<OnceLock<SignalEmitter<'static>>>,
 }
-
-// Bound the number of concurrent report tasks
-const REPORT_SEMAPHORE_PERMITS: usize = 32;
 // Max entries kept in the report history
+#[allow(dead_code)]
 const MAX_REPORT_ENTRIES: usize = 4096;
 
 impl CardwireAnalyzer {
@@ -106,7 +106,6 @@ impl CardwireAnalyzer {
             db_tx,
             report_vec,
             reported_pids: Arc::new(RwLock::new(HashSet::new())),
-            report_semaphore: Arc::new(Semaphore::new(REPORT_SEMAPHORE_PERMITS)),
             signal,
             new_app_signal,
         })
@@ -143,10 +142,6 @@ impl CardwireAnalyzer {
                 guard.clear_ready();
             }
         });
-
-        // spawn the blocked event report in it's own thread
-        let shared_self_report = Arc::clone(&shared_self);
-        task::spawn(async move { shared_self_report.report_logger().await });
 
         loop {
             if let Ok(mut guard) = exec_ring.ready_mut(Interest::READABLE).await
@@ -203,87 +198,6 @@ impl CardwireAnalyzer {
                     }
                 }
             }
-        }
-    }
-
-    async fn report_logger(&self) -> () {
-        let report_arc = self.report_ring.clone();
-        let mut report_ring = report_arc.lock().await;
-        let report_vec = self.report_vec.clone();
-
-        // Used to prevent duplicated logs burst
-        let reported_pids_arc = self.reported_pids.clone();
-        let report_semaphore = self.report_semaphore.clone();
-        loop {
-            let mut guard = match report_ring.ready_mut(Interest::READABLE).await {
-                Ok(guard) => guard,
-                Err(err) => {
-                    error!("failed to get report logger guard: {}", err);
-                    return;
-                }
-            };
-            while let Some(item) = guard.get_inner_mut().next() {
-                if item.len() < std::mem::size_of::<ReportEvent>() {
-                    warn!("Skipping malformed report event. Size: {}", item.len());
-                    continue;
-                }
-                let event = unsafe { ptr::read_unaligned(item.as_ptr() as *const ReportEvent) };
-                // only log if we didn't see the pid recently
-                {
-                    let mut reported_pids = reported_pids_arc.write().await;
-                    if reported_pids.contains(&event.pid) {
-                        continue;
-                    } else {
-                        reported_pids.insert(event.pid);
-                    }
-                }
-                let event_comm_str = comm_to_string(event.comm);
-                // Bound the number of concurrent report tasks, this prevent exausting the process
-                // FD limits
-                if let Ok(permit) = report_semaphore.clone().acquire_owned().await {
-                    // Spawn in another task to prevent blocking the report logger while
-                    // fetching informations about this process
-                    let report_vec = report_vec.clone();
-                    let signal = self.signal.clone();
-                    let gpu_id = event.gpu_id;
-                    task::spawn(async move {
-                        let _permit = permit;
-                        if let Some(app_id) = get_app_id_wayland_with_retry(event.pid).await {
-                            report_blocked(
-                                report_vec,
-                                signal,
-                                event.pid,
-                                gpu_id,
-                                event_comm_str,
-                                app_id,
-                            )
-                            .await;
-                        } else if let Some(process_name) = get_real_process_name(event.pid) {
-                            report_blocked(
-                                report_vec,
-                                signal,
-                                event.pid,
-                                gpu_id,
-                                process_name,
-                                String::new(),
-                            )
-                            .await;
-                        } else if is_proc_still_alive(event.pid) {
-                            // we check if the proc is still here to not log noise caused by fish
-                            report_blocked(
-                                report_vec,
-                                signal,
-                                event.pid,
-                                gpu_id,
-                                event_comm_str,
-                                String::new(),
-                            )
-                            .await;
-                        }
-                    });
-                }
-            }
-            guard.clear_ready();
         }
     }
 
@@ -424,6 +338,7 @@ impl CardwireAnalyzer {
 }
 
 /// Record a blocked process in the report history and notify listeners
+#[allow(dead_code)]
 async fn report_blocked(
     report_vec: Arc<RwLock<VecDeque<LogEntry>>>,
     signal: Arc<OnceLock<SignalEmitter<'static>>>,

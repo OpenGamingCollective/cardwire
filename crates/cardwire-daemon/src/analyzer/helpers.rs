@@ -100,6 +100,7 @@ pub fn parse_cmdline_name(cmdline_bytes: &[u8]) -> Option<String> {
     Some(base_name.to_string())
 }
 
+#[allow(dead_code)]
 pub fn is_proc_still_alive(pid: u32) -> bool {
     Path::new(&format!("/proc/{}", pid)).exists()
 }
@@ -116,7 +117,8 @@ pub fn normalized_candidates(name: &str) -> Vec<String> {
     candidates
 }
 
-/// Decode the 16-byte kernel comm into a String, trimming trailing NULs
+/// Decode the 16-byte kernel comm into a String
+#[allow(dead_code)]
 pub fn comm_to_string(comm: [u8; 16]) -> String {
     match String::from_utf8(comm.to_vec()) {
         Ok(str) => str.trim_end_matches('\0').to_string(),
