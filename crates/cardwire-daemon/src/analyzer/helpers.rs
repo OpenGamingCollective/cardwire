@@ -119,10 +119,10 @@ pub fn normalized_candidates(name: &str) -> Vec<String> {
 
 /// Decode the 16-byte kernel comm into a String
 #[allow(dead_code)]
-pub fn comm_to_string(comm: [u8; 16]) -> String {
+pub fn comm_to_string(comm: [u8; 16]) -> Option<String> {
     match String::from_utf8(comm.to_vec()) {
-        Ok(str) => str.trim_end_matches('\0').to_string(),
-        Err(_) => "no_comm_err".to_string(),
+        Ok(str) => Some(str.trim_end_matches('\0').to_string()),
+        Err(_) => None,
     }
 }
 
@@ -181,19 +181,19 @@ mod tests {
     #[test]
     fn test_comm_to_string_trims_trailing_nuls() {
         let comm = *b"bash\0\0\0\0\0\0\0\0\0\0\0\0";
-        assert_eq!(comm_to_string(comm), "bash");
+        assert!(comm_to_string(comm).is_some_and(|s| s == "bash"));
     }
 
     #[test]
     fn test_comm_to_string_full_length() {
         let comm = *b"a-very-long-comm";
-        assert_eq!(comm_to_string(comm), "a-very-long-comm");
+        assert!(comm_to_string(comm).is_some_and(|s| s == "a-very-long-comm"));
     }
 
     #[test]
     fn test_comm_to_string_invalid_utf8() {
         let comm = [0xFFu8; 16];
-        assert_eq!(comm_to_string(comm), "no_comm_err");
+        assert_eq!(comm_to_string(comm), None);
     }
 
     #[test]

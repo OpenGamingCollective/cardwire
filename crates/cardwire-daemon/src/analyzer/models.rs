@@ -431,7 +431,7 @@ mod tests {
         assert_eq!(event.pid, 1337);
         assert_eq!(event.gpu_id, 1);
         assert_eq!(&event.comm, b"test_comm\0\0\0\0\0\0\0");
-        assert_eq!(comm_to_string(event.comm), "test_comm");
+        assert!(comm_to_string(event.comm).is_some_and(|s| s == "test_comm"));
     }
 
     #[test]
