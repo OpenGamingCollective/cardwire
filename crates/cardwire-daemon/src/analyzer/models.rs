@@ -416,8 +416,6 @@ mod tests {
         assert_eq!(event.mode, 2);
     }
 
-    // ── ReportEvent ──────────────────────────────────────────────────
-
     #[test]
     fn test_report_event_deserialization_from_valid_bytes() {
         // ReportEvent: pid (4 bytes) + gpu_id (4 bytes) + comm (16 bytes)
