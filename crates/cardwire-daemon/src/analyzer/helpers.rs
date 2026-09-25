@@ -29,39 +29,27 @@ pub fn parse_cmdline_name(cmdline_bytes: &[u8]) -> Option<String> {
     let binary = args[0];
 
     // Check Wine/Proton
-    if binary.contains("wine") || binary.contains("proton") {
-        for arg in args.iter().skip(1) {
-            if arg.to_lowercase().ends_with(".exe") {
-                let file_name = arg.split(&['/', '\\'][..]).next_back().unwrap_or(arg);
-                return Some(file_name.to_string());
-            }
-        }
+    if (binary.contains("wine") || binary.contains("proton"))
+        && let Some(name) = extract_wine_exe(&args)
+    {
+        return Some(name);
     }
 
     // Minecraft/Java games, return java instead of the real name to allow Close event bypass
-    if binary.ends_with(".java") {
-        for arg in args.iter().skip(1) {
-            if arg.ends_with(".jar") {
-                let file_name = arg.split('/').next_back().unwrap_or(arg);
-                return Some(file_name.to_string());
-            }
-        }
+    if binary.ends_with(".java")
+        && let Some(name) = extract_java_bin(&args)
+    {
+        return Some(name);
     }
 
     // Fallback, just use the binary name
     let base_name = binary.split('/').next_back().unwrap_or(binary);
 
     // Flatpak/Brwap
-    if base_name == "flatpak" || base_name == ".flatpak-wrapped" || base_name == "bwrap" {
-        for arg in args.iter().skip(1) {
-            if let Some(exec) = arg.strip_prefix("--command=") {
-                return Some(exec.to_string());
-            }
-            // Extract the flatpak ID
-            if !arg.starts_with('-') && *arg != "run" && arg.contains('.') {
-                return Some(arg.to_string());
-            }
-        }
+    if (base_name == "flatpak" || base_name == ".flatpak-wrapped" || base_name == "bwrap")
+        && let Some(name) = extract_flatpak_id(&args)
+    {
+        return Some(name);
     }
 
     if base_name == "steam" {
@@ -73,23 +61,10 @@ pub fn parse_cmdline_name(cmdline_bytes: &[u8]) -> Option<String> {
     }
 
     // Electron apps, the real app name is in the .asar path argument
-    if base_name == "electron" || base_name.ends_with("-electron") {
-        for arg in args.iter().skip(1) {
-            if arg.starts_with('-') {
-                continue;
-            }
-            if arg.ends_with(".asar") || arg.contains("resources/app") {
-                let path = Path::new(arg);
-                for component in path.components().rev() {
-                    let part = component.as_os_str().to_string_lossy();
-                    if part == "app.asar" || part == "resources" || part == "app" || part == "share"
-                    {
-                        continue;
-                    }
-                    return Some(part.to_string());
-                }
-            }
-        }
+    if (base_name == "electron" || base_name.ends_with("-electron"))
+        && let Some(name) = extract_electron_name(&args)
+    {
+        return Some(name);
     }
 
     // Fix for discord or other apps:
@@ -100,21 +75,76 @@ pub fn parse_cmdline_name(cmdline_bytes: &[u8]) -> Option<String> {
     Some(base_name.to_string())
 }
 
+#[inline(always)]
+fn extract_wine_exe(args: &Vec<&str>) -> Option<String> {
+    for arg in args {
+        if arg.to_lowercase().contains(".exe")
+            && let Some(file_name) = arg.split(&['/', '\\'][..]).next_back()
+        {
+            return Some(file_name.to_string());
+        }
+    }
+    None
+}
+
+#[inline(always)]
+fn extract_java_bin(args: &Vec<&str>) -> Option<String> {
+    for arg in args.iter().skip(1) {
+        if arg.ends_with(".jar")
+            && let Some(file_name) = arg.split('/').next_back()
+        {
+            return Some(file_name.to_string());
+        }
+    }
+    None
+}
+
+#[inline(always)]
+fn extract_flatpak_id(args: &Vec<&str>) -> Option<String> {
+    for arg in args.iter().skip(1) {
+        if let Some(exec) = arg.strip_prefix("--command=") {
+            return Some(exec.to_string());
+        }
+        if !arg.starts_with('-') && *arg != "run" && arg.contains('.') {
+            return Some(arg.to_string());
+        }
+    }
+    None
+}
+
+#[inline(always)]
+fn extract_electron_name(args: &Vec<&str>) -> Option<String> {
+    for arg in args.iter().skip(1) {
+        if arg.starts_with('-') {
+            continue;
+        }
+        if arg.ends_with(".asar") || arg.contains("resources/app") {
+            let path = Path::new(arg);
+            for component in path.components().rev() {
+                let part = component.as_os_str().to_string_lossy();
+                if part == "app.asar" || part == "resources" || part == "app" || part == "share" {
+                    continue;
+                }
+                return Some(part.to_string());
+            }
+        }
+    }
+    None
+}
+
 #[allow(dead_code)]
 pub fn is_proc_still_alive(pid: u32) -> bool {
     Path::new(&format!("/proc/{}", pid)).exists()
 }
 
-/// Unwrap NixOS-style wrapper names into lookups, eg:
-/// ".discord-wrapped" -> ["discord-wrapped", "discord"]
-/// "steamwebhelper"   -> ["steamwebhelper"]
-pub fn normalized_candidates(name: &str) -> Vec<String> {
+/// Strip the wrap from a nix wrapped binary
+pub fn strip_nix_wrap(name: &str) -> String {
+    // eg: ".discord-wrapped"
     let trimmed = name.trim_start_matches('.');
-    let mut candidates = vec![trimmed.to_string()];
-    if let Some(rest) = trimmed.strip_suffix("-wrapped") {
-        candidates.push(rest.to_string());
-    }
-    candidates
+    trimmed
+        .strip_suffix("-wrapped")
+        .unwrap_or(trimmed)
+        .to_string()
 }
 
 /// Decode the 16-byte kernel comm into a String
@@ -224,18 +254,12 @@ mod tests {
 
     #[test]
     fn test_normalized_candidates_unwraps_nix_wrapper() {
-        assert_eq!(
-            normalized_candidates(".discord-wrapped"),
-            vec!["discord-wrapped".to_string(), "discord".to_string()]
-        );
+        assert_eq!(strip_nix_wrap(".discord-wrapped"), "discord");
     }
 
     #[test]
     fn test_normalized_candidates_plain_name_unchanged() {
-        assert_eq!(
-            normalized_candidates("steamwebhelper"),
-            vec!["steamwebhelper".to_string()]
-        );
-        assert_eq!(normalized_candidates("steam"), vec!["steam".to_string()]);
+        assert_eq!(strip_nix_wrap("steamwebhelper"), "steamwebhelper");
+        assert_eq!(strip_nix_wrap("steam"), "steam");
     }
 }

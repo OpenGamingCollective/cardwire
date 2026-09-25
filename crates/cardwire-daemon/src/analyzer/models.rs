@@ -1,6 +1,6 @@
 use crate::{
     Result, analyzer::{
-        dynamic_analysis::{check_env, get_steam_app_id}, helpers::{get_real_process_name, normalized_candidates}, static_analysis::{self, AppMetadata, watch_fdo_folders}
+        dynamic_analysis::{check_env, get_steam_app_id}, helpers::{get_real_process_name, strip_nix_wrap}, static_analysis::{self, AppMetadata, watch_fdo_folders}
     }, file::{DbusAppMetadata, GpuPolicy}, interface::{LogEntry, LoggerInterfaceSignals, SmartPolicyInterface}
 };
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
@@ -248,14 +248,16 @@ impl CardwireAnalyzer {
 
         {
             let xdg_list = self.xdg_list.read().await;
-            for candidate in normalized_candidates(&lookup_name) {
-                if let Some(meta) = xdg_list.get(&candidate) {
-                    let meta = meta.clone();
-                    drop(xdg_list);
-                    self.discover_app(&lookup_name, meta).await;
-                    return Some((false, PidType::Allowed, 0));
-                }
+            // Strip ".wrapped", normalizing nixos wrapped binaries
+            let lookup_name = strip_nix_wrap(&lookup_name);
+
+            if let Some(meta) = xdg_list.get(&lookup_name) {
+                let meta = meta.clone();
+                drop(xdg_list);
+                self.discover_app(&lookup_name, meta).await;
+                return Some((false, PidType::Allowed, 0));
             }
+
             if let Some((_key, meta)) = xdg_list
                 .iter()
                 .find(|(key, _)| key.len() >= 3 && lookup_name.starts_with(key.as_str()))
