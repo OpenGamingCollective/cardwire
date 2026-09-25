@@ -2,8 +2,7 @@
 
 use std::{fs, path::Path};
 
-/// Read the real process name from `/proc/{pid}/cmdline`, taking into account
-/// wrappers like Wine/Proton, Java, Flatpak and Steam
+/// Read the real process name from `/proc/{pid}/cmdline`
 pub fn get_real_process_name(pid: u32) -> Option<String> {
     let cmdline_path = format!("/proc/{}/cmdline", pid);
     let cmdline_bytes = match fs::read(&cmdline_path) {
