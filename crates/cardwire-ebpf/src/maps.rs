@@ -2,6 +2,8 @@ use aya_ebpf::{
     btf_maps::RingBuf, macros::{btf_map, map}, maps::{Array, HashMap}
 };
 
+use crate::models::{InodeKey, InodeState};
+
 /*
     A single entry array used to store cardwired pid
 */
@@ -25,27 +27,6 @@ pub static CW_MODE: Array<u8> = Array::<u8>::with_max_entries(1, 0);
 */
 #[map]
 pub static CW_SETTINGS: HashMap<u8, bool> = HashMap::<u8, bool>::with_max_entries(255, 0);
-
-#[repr(C, align(8))]
-#[derive(Copy, Clone)]
-pub struct InodeState {
-    pub gpu_id: u32,
-    pub blocked: u8,
-    pub _padding: [u8; 3], // 8-byte alignment
-}
-
-/*
-   Key = entry name (dentry d_name / dirent d_name), zero-padded to 64 bytes
-   and inode number
-   Layout must stay identical to cardwire-ebpf-userspace's InodeKey, the kernel
-   hashes the raw key bytes so any drift turns every lookup into a silent miss
-*/
-#[repr(C, align(8))]
-#[derive(Copy, Clone)]
-pub struct InodeKey {
-    pub name: [u8; 64],
-    pub ino: u64,
-}
 
 /*
    Map used to store blocked inodes sent from userspace
