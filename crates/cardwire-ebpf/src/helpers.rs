@@ -4,83 +4,46 @@ use aya_ebpf::helpers::{
 
 use crate::{
     CardwiredSetting, DAEMON_INDEX, HYBRID, INTEGRATED, MANUAL, MODE_INDEX, SMART, maps::{
-        CW_ALLOWED_COMM, CW_ALLOWED_PID, CW_BLOCKED_INO, CW_DAEMON_PID, CW_EXP_BLK_INO, CW_FORCED_PID, CW_MODE, CW_REPORT_EVENTS, CW_SETTINGS, InodeKey, ReportEvent
-    }
+        CW_ALLOWED_COMM, CW_ALLOWED_PID, CW_BLOCKED_INO, CW_DAEMON_PID, CW_EXP_BLK_INO, CW_FORCED_PID, CW_MODE, CW_REPORT_EVENTS, CW_SETTINGS, ReportEvent
+    }, models::{InodeKey, ScanCode}
 };
 
-use crate::vmlinux::{dentry, inode, linux_dirent64, task_struct};
+use crate::vmlinux::{dentry, linux_dirent64, task_struct};
 
-/// Outcome of building a block-map key from a dentry or an inode
-pub enum KeyBuild {
-    /// A usable key
-    Key(InodeKey),
-    /// No name to key on: null dentry/inode, or an anonymous inode (epoll fds,
-    /// eventfds, dma-bufs). Expected while processes run, callers should skip
-    /// silently
-    Unnamed,
-    /// Kernel memory could not be read. Unexpected, callers should log it
-    ProbeFailed,
-}
-
-/// Build the block-map key for a dentry, keying on the entry's name and inode
 #[inline(always)]
-pub unsafe fn dentry_key(d: *const dentry) -> KeyBuild {
-    if d.is_null() {
-        return KeyBuild::Unnamed;
-    }
+/// Get the name from a dentry
+pub fn get_dentry_name(d: *const dentry) -> Option<[u8; 64]> {
+    let name_ptr =
+        unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*d).__bindgen_anon_1.d_name.name)) }
+            .ok()?;
 
-    // The dentry may have been reconstructed from inode->i_dentry.first
-    // (inode_permission), which the verifier refuses to dereference directly:
-    // read the fields through probe reads instead
-    let inode_ptr = match unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*d).d_inode)) } {
-        Ok(inode_ptr) => inode_ptr,
-        Err(_) => return KeyBuild::ProbeFailed,
-    };
-    if inode_ptr.is_null() {
-        return KeyBuild::Unnamed;
-    }
-
-    let name_ptr = match unsafe {
-        bpf_probe_read_kernel(core::ptr::addr_of!((*d).__bindgen_anon_1.d_name.name))
-    } {
-        Ok(name_ptr) => name_ptr,
-        Err(_) => return KeyBuild::ProbeFailed,
-    };
     if name_ptr.is_null() {
-        return KeyBuild::Unnamed;
+        return None;
     }
-
-    let ino = match unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*inode_ptr).i_ino)) } {
-        Ok(ino) => ino,
-        Err(_) => return KeyBuild::ProbeFailed,
-    };
 
     let mut name = [0u8; 64];
-    if unsafe { bpf_probe_read_kernel_str_bytes(name_ptr, &mut name) }.is_err() {
-        return KeyBuild::ProbeFailed;
+    // Read the name from kernel and return None if an error happened
+    unsafe { bpf_probe_read_kernel_str_bytes(name_ptr, &mut name) }.ok()?;
+    // Only return if the dentry has a name, else return None
+    match name.is_empty() {
+        true => None,
+        false => Some(name),
     }
-
-    KeyBuild::Key(InodeKey { name, ino })
 }
 
-/// Build the block-map key for an inode, keying on the entry's name and inode
 #[inline(always)]
-pub unsafe fn inode_key(inode_ptr: *const inode) -> KeyBuild {
+/// Get the inode from a dentry
+pub fn get_dentry_inode(d: *const dentry) -> Option<u64> {
+    let inode_ptr = unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*d).d_inode)).ok()? };
+
     if inode_ptr.is_null() {
-        return KeyBuild::Unnamed;
+        return None;
     }
 
-    let alias = unsafe { (*inode_ptr).__bindgen_anon_2.i_dentry.first };
-    if alias.is_null() {
-        // Anonymous inode (epoll, eventfd, dma-buf, ...): no name by design
-        return KeyBuild::Unnamed;
-    }
+    let ino: u64 =
+        unsafe { bpf_probe_read_kernel(core::ptr::addr_of!((*inode_ptr).i_ino)) }.ok()?;
 
-    // Wrapping_sub is used to prevent bpf bytecode from being rejected
-    let d = (alias as usize).wrapping_sub(core::mem::offset_of!(dentry, __bindgen_anon_3))
-        as *mut dentry;
-
-    unsafe { dentry_key(d) }
+    Some(ino)
 }
 
 /// Verify if the file is inside CW_BLOCKED_INO or not
@@ -295,29 +258,13 @@ pub unsafe fn is_nvidia_setting_enabled() -> bool {
         None => false,
     }
 }
-
-/// The scan ran to completion (or hit a non-fatal stop condition)
-pub const SCAN_OK: u32 = 0;
-/// A dirent header could not be read, the syscall result must not be trusted
-pub const SCAN_READ_FAILED: u32 = 1;
-/// A hidden entry could not be merged into the previous one, the scan stopped
-pub const SCAN_WRITE_FAILED: u32 = 2;
-
-/// Largest getdents64 return value the hook scans
-const GETDENTS_BUF_MAX: u64 = 32768;
-
 /// Iteration bound for the dirent scan
-///
-/// One buffer holds at most GETDENTS_BUF_MAX / sizeof(linux_dirent64)
-/// header-sized records, plus one iteration to observe the bounds-check miss
-/// that ends the scan, so the bound can never truncate a buffer silently
-pub const MAX_DIRENTS: u32 =
-    (GETDENTS_BUF_MAX / core::mem::size_of::<linux_dirent64>() as u64) as u32 + 1;
+pub const MAX_DIRENTS: u32 = (32768 / core::mem::size_of::<linux_dirent64>() as u64) as u32 + 1;
 
 /// State shared between the getdents64 exit hook and the bpf_loop callback
 #[repr(C)]
 pub struct ScanCtx {
-    /// Cursor: address of the dirent currently being inspected
+    /// address of the dirent currently being inspected
     pub dirent_ptr: u64,
     /// First address past the getdents64 buffer (base + retval)
     pub end: u64,
@@ -325,10 +272,9 @@ pub struct ScanCtx {
     pub prev_ptr: u64,
     /// d_reclen of prev_ptr, updated when hidden entries are merged into it
     pub prev_reclen: u16,
-    /// One of the SCAN_* constants
+    /// One of the SCAN_*
     pub status: u32,
-    /// Kernel return code of the failed write, valid when status is
-    /// SCAN_WRITE_FAILED
+    /// Kernel return code of the failed write
     pub errno: i32,
 }
 
@@ -353,8 +299,7 @@ pub unsafe extern "C" fn scan_dirent(_index: u32, scan: *mut ScanCtx) -> u64 {
 
     let reclen = dirent.d_reclen;
 
-    // Malformed: a record shorter than its own header can't be valid, and
-    // advancing by it would also break the MAX_DIRENTS bound
+    // Malformed
     if (reclen as usize) < core::mem::size_of::<linux_dirent64>() || reclen > 512 {
         return 1;
     }
@@ -365,7 +310,7 @@ pub unsafe extern "C" fn scan_dirent(_index: u32, scan: *mut ScanCtx) -> u64 {
         as *const u8;
     let mut name = [0u8; 64];
     if unsafe { bpf_probe_read_user_str_bytes(name_pos, &mut name) }.is_err() {
-        scan.status = SCAN_READ_FAILED;
+        scan.status = ScanCode::READ_FAILED;
         return 1;
     }
 
@@ -385,7 +330,7 @@ pub unsafe extern "C" fn scan_dirent(_index: u32, scan: *mut ScanCtx) -> u64 {
                 .wrapping_add(core::mem::offset_of!(linux_dirent64, d_reclen) as u64)
                 as *mut u16;
             if let Err(err) = unsafe { bpf_probe_write_user(reclen_ptr, &new_reclen) } {
-                scan.status = SCAN_WRITE_FAILED;
+                scan.status = ScanCode::WRITE_FAILED;
                 scan.errno = err;
                 return 1;
             }

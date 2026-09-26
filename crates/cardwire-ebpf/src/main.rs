@@ -4,12 +4,12 @@
 use aya_ebpf::{
     helpers::{bpf_get_current_pid_tgid, bpf_loop}, macros::{lsm, tracepoint}, programs::{LsmContext, TracePointContext}
 };
-use aya_log_ebpf::{debug, error, warn};
+use aya_log_ebpf::{error, warn};
 
 use crate::{
     helpers::{
-        KeyBuild, MAX_DIRENTS, SCAN_OK, SCAN_READ_FAILED, SCAN_WRITE_FAILED, ScanCtx, dentry_key, inode_key, is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_manual, is_smart, scan_dirent
-    }, maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent}, vmlinux::{dentry, file, inode, path}
+        MAX_DIRENTS, ScanCtx, get_dentry_inode, get_dentry_name, is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_manual, is_smart, scan_dirent
+    }, maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent}, models::{InodeKey, ReturnCode, ScanCode}, vmlinux::{dentry, file, inode, path}
 };
 
 #[allow(
@@ -24,18 +24,9 @@ use crate::{
 )]
 #[rustfmt::skip]
 mod vmlinux;
-
 mod helpers;
-
 mod maps;
-
-struct ReturnCode {}
-impl ReturnCode {
-    // Succes means we didn't block the process
-    const SUCCESS: Result<i32, i32> = Ok(0);
-    // ENOENT means we blocked the process, it can't see the file
-    const ENOENT: Result<i32, i32> = Ok(-2);
-}
+mod models;
 
 // Used of CW_DAEMON_PID array
 const DAEMON_INDEX: u32 = 0;
@@ -127,23 +118,17 @@ unsafe fn try_file_open(ctx: LsmContext) -> Result<i32, i32> {
         return ReturnCode::SUCCESS;
     }
 
-    let key = match unsafe { dentry_key(d) } {
-        KeyBuild::Key(key) => key,
-        KeyBuild::Unnamed => {
-            debug!(
-                &ctx,
-                "EBPF dentry_key() found no name in file_open, skipping"
-            );
-            return ReturnCode::SUCCESS;
-        }
-        KeyBuild::ProbeFailed => {
-            error!(
-                &ctx,
-                "EBPF dentry_key() could not read the dentry in file_open, skipping"
-            );
-            return ReturnCode::SUCCESS;
-        }
+    let name = match get_dentry_name(d) {
+        Some(name) => name,
+        None => return ReturnCode::SUCCESS,
     };
+
+    let ino = match get_dentry_inode(d) {
+        Some(ino) => ino,
+        None => return ReturnCode::SUCCESS,
+    };
+
+    let key = InodeKey { name, ino };
 
     match unsafe { is_inode_blocked(key) } {
         true => ReturnCode::ENOENT,
@@ -207,23 +192,30 @@ unsafe fn try_inode_permission(ctx: LsmContext) -> Result<i32, i32> {
         return ReturnCode::SUCCESS;
     }
 
-    let key = match unsafe { inode_key(inode_ptr) } {
-        KeyBuild::Key(key) => key,
-        KeyBuild::Unnamed => {
-            debug!(
-                &ctx,
-                "EBPF inode_key() found an unnamed inode in inode_permission, skipping"
-            );
-            return ReturnCode::SUCCESS;
-        }
-        KeyBuild::ProbeFailed => {
-            error!(
-                &ctx,
-                "EBPF inode_key() could not read the inode in inode_permission, skipping"
-            );
-            return ReturnCode::SUCCESS;
-        }
+    let alias = unsafe { (*inode_ptr).__bindgen_anon_2.i_dentry.first };
+
+    if alias.is_null() {
+        return ReturnCode::SUCCESS;
+    }
+
+    let d = (alias as usize).wrapping_sub(core::mem::offset_of!(dentry, __bindgen_anon_3))
+        as *mut dentry;
+
+    if d.is_null() {
+        return ReturnCode::SUCCESS;
+    }
+
+    let name = match get_dentry_name(d) {
+        Some(name) => name,
+        None => return ReturnCode::SUCCESS,
     };
+
+    let ino = match get_dentry_inode(d) {
+        Some(ino) => ino,
+        None => return ReturnCode::SUCCESS,
+    };
+
+    let key = InodeKey { name, ino };
 
     match unsafe { is_inode_blocked(key) } {
         true => ReturnCode::ENOENT,
@@ -291,23 +283,17 @@ unsafe fn try_inode_getattr(ctx: LsmContext) -> Result<i32, i32> {
         return ReturnCode::SUCCESS;
     }
 
-    let key = match unsafe { dentry_key(dentry_ptr) } {
-        KeyBuild::Key(key) => key,
-        KeyBuild::Unnamed => {
-            debug!(
-                &ctx,
-                "EBPF dentry_key() found no name in inode_getattr, skipping"
-            );
-            return ReturnCode::SUCCESS;
-        }
-        KeyBuild::ProbeFailed => {
-            error!(
-                &ctx,
-                "EBPF dentry_key() could not read the dentry in inode_getattr, skipping"
-            );
-            return ReturnCode::SUCCESS;
-        }
+    let name = match get_dentry_name(dentry_ptr) {
+        Some(name) => name,
+        None => return ReturnCode::SUCCESS,
     };
+
+    let ino = match get_dentry_inode(dentry_ptr) {
+        Some(ino) => ino,
+        None => return ReturnCode::SUCCESS,
+    };
+
+    let key = InodeKey { name, ino };
 
     match unsafe { is_inode_blocked(key) } {
         true => ReturnCode::ENOENT,
@@ -407,7 +393,7 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
         end: dirp.wrapping_add(retval),
         prev_ptr: 0,
         prev_reclen: 0,
-        status: SCAN_OK,
+        status: ScanCode::OK,
         errno: 0,
     };
 
@@ -417,19 +403,17 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
         )
     };
     let scan_ptr: *mut core::ffi::c_void = core::ptr::addr_of_mut!(scan).cast();
-    // MAX_DIRENTS covers any buffer the retval guard lets through, a negative
-    // return would mean the helper itself rejected the call (EINVAL/E2BIG)
     let loop_ret = unsafe { bpf_loop(MAX_DIRENTS, callback, scan_ptr, 0) };
     if loop_ret < 0 {
         warn!(&ctx, "bpf_loop failed with {}", loop_ret);
     }
 
     match scan.status {
-        SCAN_WRITE_FAILED => {
+        ScanCode::WRITE_FAILED => {
             error!(&ctx, "failed to write new reclen {}", scan.errno);
             ReturnCode::SUCCESS
         }
-        SCAN_READ_FAILED => Err(-1),
+        ScanCode::READ_FAILED => Err(-1),
         _ => ReturnCode::SUCCESS,
     }
 }
