@@ -76,7 +76,7 @@ pub fn parse_cmdline_name(cmdline_bytes: &[u8]) -> Option<String> {
 
 #[inline(always)]
 fn extract_wine_exe(args: &Vec<&str>) -> Option<String> {
-    for arg in args {
+    for arg in args.iter().skip(1) {
         if arg.to_lowercase().contains(".exe")
             && let Some(file_name) = arg.split(&['/', '\\'][..]).next_back()
         {
