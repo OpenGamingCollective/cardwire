@@ -23,12 +23,11 @@ pub fn get_dentry_name(d: *const dentry) -> Option<[u8; 64]> {
 
     let mut name = [0u8; 64];
     // Read the name from kernel and return None if an error happened
-    unsafe { bpf_probe_read_kernel_str_bytes(name_ptr, &mut name) }.ok()?;
-    // Only return if the dentry has a name, else return None
-    match name.is_empty() {
-        true => None,
-        false => Some(name),
+    let res = unsafe { bpf_probe_read_kernel_str_bytes(name_ptr, &mut name) }.ok()?;
+    if res.len() == 0 {
+        return None;
     }
+    Some(name)
 }
 
 #[inline(always)]
