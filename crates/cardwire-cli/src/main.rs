@@ -213,7 +213,7 @@ async fn main() -> anyhow::Result<()> {
                                 // shouldn't happen
                                 _ => CliMode::Manual,
                             };
-                            println!("BatteryAutoSwitch: {}", response)
+                            println!("BatteryAutoSwitchMode: {}", response)
                         }
                         Err(e) => handle_error(e),
                     }
