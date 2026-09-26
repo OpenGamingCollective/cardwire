@@ -22,7 +22,8 @@ pub const STATE_PATH: &str = "/var/lib/cardwire";
 #[tokio::main]
 async fn main() -> Result<()> {
     // log
-    env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+    // zbus logs every incoming D-Bus call at info level, with the whole message
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,zbus=warn"))
         .format_target(false)
         .format_timestamp(None)
         .init();
