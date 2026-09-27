@@ -7,7 +7,7 @@ mod mode;
 mod smart;
 mod switcheroo;
 
-pub use config::{ConfigInterface, ConfigMemory};
+pub use config::ConfigInterface;
 pub use context::DaemonContext;
 pub use debug::DebugInterface;
 pub use gpu::{GpuInterface, GpuInterfaceSignals};

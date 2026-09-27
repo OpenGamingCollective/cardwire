@@ -18,35 +18,229 @@ in
         default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
         description = "Cardwire package";
       };
-      settings = {
-        auto_apply_gpu_state = mkOption {
-          type = types.bool;
-          default = true;
+      settings = mkOption {
+        type = types.submodule {
+          imports = [
+            (lib.mkRenamedOptionModule [ "auto_apply_gpu_state" ] [ "global_settings" "restore_gpu_states" ])
+
+            (lib.mkRenamedOptionModule
+              [ "experimental_nvidia_block" ]
+              [ "experimental_features" "advanced_nvidia_blocking" ]
+            )
+
+            (lib.mkRenamedOptionModule
+              [ "battery_auto_switch" ]
+              [ "global_settings" "battery_switch" "enabled" ]
+            )
+
+            (lib.mkRenamedOptionModule
+              [ "battery_auto_switch_mode" ]
+              [ "global_settings" "battery_switch" "ac_mode" ]
+            )
+
+            (lib.mkRenamedOptionModule
+              [ "external_display_auto_switch" ]
+              [ "global_settings" "switch_on_display" ]
+            )
+          ];
+          options = {
+            global_settings = mkOption {
+              type = types.submodule {
+                options = {
+                  restore_gpu_states = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = ''
+                      Automatically restore GPU states on manual mode.
+                    '';
+                  };
+
+                  switch_on_display = mkOption {
+                    type = types.bool;
+                    default = false;
+                    description = ''
+                      Automatically change the mode on display connection.
+                    '';
+                  };
+
+                  battery_switch = mkOption {
+                    type = types.submodule {
+                      options = {
+                        enabled = mkOption {
+                          type = types.bool;
+                          default = false;
+                          description = ''
+                            Automatically switch mode when the power source changes.
+                          '';
+                        };
+
+                        ac_mode = mkOption {
+                          type = types.enum [
+                            "integrated"
+                            "hybrid"
+                            "manual"
+                            "smart"
+                          ];
+                          default = "hybrid";
+                          description = ''
+                            The mode Cardwire switches to on AC power.
+                          '';
+                        };
+
+                        bat_mode = mkOption {
+                          type = types.enum [
+                            "integrated"
+                            "hybrid"
+                            "manual"
+                            "smart"
+                          ];
+                          default = "integrated";
+                          description = ''
+                            The mode Cardwire switches to on battery power.
+                          '';
+                        };
+                      };
+                    };
+                    default = { };
+                    description = ''
+                      Settings for switching modes when the power source changes.
+                    '';
+                  };
+                };
+              };
+              default = { };
+              description = ''
+                Global Cardwire settings.
+              '';
+            };
+
+            experimental_features = mkOption {
+              type = types.submodule {
+                options = {
+                  advanced_nvidia_blocking = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = ''
+                      Enable advanced blocking of Nvidia files. This feature is
+                      experimental because these files can be shared across multiple
+                      Nvidia GPUs.
+                    '';
+                  };
+
+                  fake_drm_uevent = mkOption {
+                    type = types.bool;
+                    default = false;
+                    description = ''
+                      Enable fake DRM uevents.
+                      Send fake DRM uevents on GPU blocking.
+                      ('remove' on blocking, 'add' on unblocking)
+                    '';
+                  };
+                };
+              };
+              default = { };
+              description = ''
+                Experimental Cardwire features.
+              '';
+            };
+
+            switcheroo_settings = mkOption {
+              type = types.submodule {
+                options = {
+                  enabled = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = ''
+                      Enable switcheroo integration.
+                    '';
+                  };
+
+                  cardwire_envs = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = ''
+                      Include Cardwire environment variables in switcheroo integration.
+                    '';
+                  };
+
+                  switcheroo_envs = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = ''
+                      Include switcheroo environment variables in switcheroo integration.
+                    '';
+                  };
+                };
+              };
+              default = { };
+              description = ''
+                Switcheroo integration settings.
+              '';
+            };
+
+            internal_whitelist = mkOption {
+              type = types.submodule {
+                options = {
+                  packages_managers = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = ''
+                      Enable the internal whitelist for package managers.
+                    '';
+                  };
+
+                  vfio = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = ''
+                      Enable the internal whitelist for VFIO.
+                    '';
+                  };
+
+                  systemd = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = ''
+                      Enable the internal whitelist for systemd.
+                    '';
+                  };
+
+                  nvidia_powerd = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = ''
+                      Enable the internal whitelist for nvidia-powerd.
+                    '';
+                  };
+                };
+              };
+              default = { };
+              description = ''
+                Internal whitelist settings.
+              '';
+            };
+          };
         };
-        experimental_nvidia_block = mkOption {
-          type = types.bool;
-          default = false;
-        };
-        battery_auto_switch = mkOption {
-          type = types.bool;
-          default = false;
-        };
-        battery_auto_switch_mode = mkOption {
-          type = types.str;
-          default = "hybrid";
-        };
-        external_display_auto_switch = mkOption {
-          type = types.bool;
-          default = false;
-          description = "Automatically make GPUs available for displays connected to dGPU-only ports";
-        };
+        default = { };
+        description = ''
+          Configuration for {file}`/etc/cardwire.toml`
+          See <https://opengamingcollective.github.io/cardwire/getting-started/usage>
+        '';
       };
     };
   };
   config = lib.mkIf cfg.enable {
     # /etc/cardwire/cardwire.toml
     environment.etc."cardwire/cardwire.toml" = {
-      source = tomlFormat.generate "cardwire.toml" cfg.settings;
+      source = tomlFormat.generate "cardwire.toml" (
+        builtins.removeAttrs cfg.settings [
+          "auto_apply_gpu_state"
+          "battery_auto_switch"
+          "battery_auto_switch_mode"
+          "experimental_nvidia_block"
+          "external_display_auto_switch"
+        ]
+      );
     };
     # DBUS
     services.dbus.enable = true;

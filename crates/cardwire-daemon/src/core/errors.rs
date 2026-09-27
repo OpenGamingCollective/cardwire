@@ -22,6 +22,12 @@ pub enum CardwireError {
     #[error("parse int error: {0}")]
     ParseInt(#[from] std::num::ParseIntError),
 
+    #[error("serialize toml error: {0}")]
+    TomlSerError(#[from] toml::ser::Error),
+
+    #[error("deserialize toml error: {0}")]
+    TomlDeError(#[from] toml::de::Error),
+
     // PCI errors
     #[error("IOMMU Not Enabled")]
     IommuNotEnabled,

@@ -117,7 +117,6 @@ async fn main() -> Result<()> {
     }
     task::spawn(daemon.battery_switch_future());
     task::spawn(daemon.monitor_udev_future());
-    task::spawn(daemon.monitor_display_future());
     task::spawn(daemon.run_analyzer());
     info!("Daemon started succesfully");
     pending::<()>().await;
