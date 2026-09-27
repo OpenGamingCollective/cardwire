@@ -7,6 +7,7 @@ use std::{
 use crate::{CONFIG_PATH, Result, types::Modes};
 
 #[derive(Debug, Deserialize, Serialize, Default)]
+#[serde(default)]
 pub struct CardwireConfig {
     pub global_settings: Settings,
     pub experimental_features: ExperimentalFeatures,
