@@ -40,7 +40,7 @@ in
 
             (lib.mkRenamedOptionModule
               [ "external_display_auto_switch" ]
-              [ "global_settings" "global_settings" "switch_on_display" ]
+              [ "global_settings" "switch_on_display" ]
             )
           ];
           options = {
