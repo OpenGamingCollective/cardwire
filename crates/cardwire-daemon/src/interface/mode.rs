@@ -2,12 +2,12 @@
 use crate::{
     Result, core::{
         errors::CardwireError, gpu::{start_nvidia_powerd, stop_nvidia_powerd}
-    }, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface, config::ConfigMemory}, types::SystemType
+    }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface}, types::SystemType
 };
 use aya::maps::Array as AyaArray;
 use log::{error, info, warn};
 use std::{
-    collections::BTreeMap, sync::{Arc, OnceLock, atomic::Ordering}
+    collections::BTreeMap, sync::{Arc, OnceLock}
 };
 use tokio::{
     sync::{Mutex, RwLock}, task
@@ -21,7 +21,7 @@ pub struct ModeInterface {
     mode_state: Arc<RwLock<CardwireModeState>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
-    config: Arc<ConfigMemory>,
+    config: Arc<RwLock<CardwireConfig>>,
     mode_map: Arc<Mutex<AyaArray<aya::maps::MapData, u8>>>,
     // Mutex to serialize mode transitions
     transition: Arc<Mutex<()>>,
@@ -171,10 +171,12 @@ impl ModeInterface {
                     error!("{}", error_message);
                     return Err(fdo::Error::NotSupported(error_message));
                 }
-                let config = self.config.auto_apply_gpu_state.load(Ordering::Relaxed);
+                let config = self.config.read().await;
+                let restore_states = config.global_settings.restore_gpu_states;
+                drop(config);
                 let gpu_state = self.gpu_state.read().await;
                 for (id, gpu) in gpu_list.iter().filter(|(_, gpu)| gpu.device.is_available()) {
-                    if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && config {
+                    if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && restore_states {
                         if gpu.device.is_default() {
                             // For safety, warn and unblock if default
                             warn!(

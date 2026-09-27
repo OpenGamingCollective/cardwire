@@ -1,7 +1,7 @@
 use crate::{
     core::{
         env::compute_switcheroo_env, gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self, DbusPciDevice, PciDevice}
-    }, interface::SwitcherooInterface, tasks::watch_power_state
+    }, file::CardwireConfig, interface::SwitcherooInterface, tasks::watch_power_state
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
 use log::{error, info, warn};
@@ -12,16 +12,17 @@ use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    Result, file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, DaemonContext, GpuInterface, ModeInterface, Modes}
+    Result, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, ModeInterface, Modes}
 };
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct DebugInterface {
     pub mode_state: Arc<RwLock<CardwireModeState>>,
     pub mode_interface: ModeInterface,
     pub gpu_state: Arc<RwLock<CardwireGpuState>>,
     pub gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
-    pub config: Arc<ConfigMemory>,
+    pub config: Arc<RwLock<CardwireConfig>>,
     pub blocker: Arc<RwLock<EbpfBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     pub object_server: Option<zbus::ObjectServer>,

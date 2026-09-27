@@ -4,7 +4,7 @@ use crate::{
     Result, analyzer::CardwireAnalyzer, core::{
         env::compute_switcheroo_env, gpu::GpuEnumerator, pci::{self}
     }, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
-        ConfigInterface, ConfigMemory, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
+        ConfigInterface, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
     }, tasks
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
@@ -30,7 +30,7 @@ impl DaemonManager {
         let mode_state: Arc<RwLock<CardwireModeState>> = Arc::new(RwLock::new(mode_state));
 
         let user_config: CardwireConfig = CardwireConfig::build()?;
-        let user_config = Arc::new(ConfigMemory::build(user_config));
+        let user_config = Arc::new(RwLock::new(user_config));
 
         let gpu_state: CardwireGpuState = CardwireGpuState::build()?;
         let gpu_state: Arc<RwLock<CardwireGpuState>> = Arc::new(RwLock::new(gpu_state));
@@ -153,14 +153,11 @@ impl DaemonManager {
     async fn set_nvidia_setting(&self) -> Result<()> {
         // Get lock on ebpf-blocker
         let mut blocker = self.inner.blocker.write().await;
+        let config = self.inner.config.read().await;
         blocker
             .set_ebpf_setting(
                 EbpfSettings::ExperimentalNvidia,
-                self.debug_interface
-                    .config
-                    .experimental_nvidia_block
-                    .load(std::sync::atomic::Ordering::Relaxed)
-                    .into(),
+                config.experimental_features.advanced_nvidia_blocking.into(),
             )
             .map_err(|err| err.into())
     }
@@ -200,12 +197,10 @@ impl DaemonManager {
         self.mode_interface.internal_set_mode(mode, save).await
     }
     pub fn battery_switch_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
-        let auto_switch = Arc::clone(&self.inner.config.battery_auto_switch);
-        let auto_switch_mode = Arc::clone(&self.inner.config.battery_auto_switch_mode);
+        let config = self.inner.config.clone();
         let mode_interface = self.mode_interface.clone();
         async move {
-            let res =
-                tasks::watch_battery_status(auto_switch, auto_switch_mode, mode_interface).await;
+            let res = tasks::watch_battery_status(config, mode_interface).await;
             if let Err(ref e) = res {
                 error!("battery_switch task failed: {}", e);
             }
@@ -218,20 +213,6 @@ impl DaemonManager {
             let res = tasks::monitor_pci_changes(debug_int).await;
             if let Err(ref e) = res {
                 error!("monitor_udev task failed: {}", e);
-            }
-            res
-        }
-    }
-    pub fn monitor_display_future(
-        &self,
-    ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
-        let mode = self.mode_interface.clone();
-        let gpu_list = Arc::clone(&self.inner.gpu_list);
-        let external_display_switch = Arc::clone(&self.inner.config.external_display_auto_switch);
-        async move {
-            let res = tasks::monitor_display_changes(mode, gpu_list, external_display_switch).await;
-            if let Err(ref e) = res {
-                error!("monitor_display task failed: {}", e);
             }
             res
         }
