@@ -77,7 +77,15 @@ impl CardwireConfig {
         // ik this error management sucks
         let config_toml = toml::to_string_pretty(self).map_err(|_| io::ErrorKind::InvalidData)?;
         let path = Path::new(CONFIG_PATH).join("cardwire.toml");
-        write(&path, config_toml)
+        let tmp_file = format!("cardwire.toml.tmp-{}", std::process::id());
+        let tmp = Path::new(CONFIG_PATH).join(tmp_file);
+        {
+            use std::io::Write;
+            let mut f = std::fs::File::create(&tmp)?;
+            f.write_all(config_toml.as_bytes())?;
+            f.sync_all()?;
+        }
+        std::fs::rename(&tmp, path)
     }
     fn migrate_from_old(&mut self, old_config: OldCardwireConfig) {
         self.global_settings.restore_gpu_states = old_config.auto_apply_gpu_state;
