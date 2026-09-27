@@ -50,7 +50,8 @@ impl ConfigInterface {
 
     #[zbus(property)]
     pub async fn external_display_auto_switch(&self) -> fdo::Result<bool> {
-        Ok(false)
+        let config = self.config.read().await;
+        Ok(config.global_settings.switch_on_display)
     }
 
     // setters
