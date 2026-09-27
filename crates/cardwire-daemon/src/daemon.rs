@@ -7,7 +7,9 @@ mod manager;
 mod tasks;
 pub mod types;
 
-use crate::{core::errors::Result, manager::DaemonManager, tasks::watch_power_state};
+use crate::{
+    core::errors::Result, file::NewConfig, manager::DaemonManager, tasks::watch_power_state
+};
 use env_logger::Env;
 use log::info;
 use std::{future::pending, sync::Arc};
@@ -32,6 +34,11 @@ async fn main() -> Result<()> {
     let mut daemon = DaemonManager::new().await?;
     // Before we publish the API
     daemon.pre_daemon_tasks().await?;
+
+    {
+        let new_config = NewConfig::build();
+        println!("{:?}", new_config);
+    }
 
     // Now connect to the system dbus
     let conn_builder = connection::Builder::system()?;
