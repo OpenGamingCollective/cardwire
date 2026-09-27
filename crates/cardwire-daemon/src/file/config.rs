@@ -1,4 +1,4 @@
-use log::{info, warn};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{create_dir, read_to_string, write}, io, path::Path
@@ -43,9 +43,26 @@ impl CardwireConfig {
         } else {
             // config alr exist, verify if it's the old one that needs to be migrated or not
             let config_content = read_to_string(&config_file)?;
+            // an old setting, we need to migrate the config
             if config_content.contains("auto_apply_gpu_state") {
                 warn!("[CONFIG]: detected old cardwire config, migrating...");
-                let cardwire_config = CardwireConfig::default();
+
+                let cardwire_config = match toml::from_str::<OldCardwireConfig>(&config_content) {
+                    Ok(old_conf) => {
+                        // We successfully parsed the old config
+                        let mut cardwire_config = CardwireConfig::default();
+                        cardwire_config.migrate_from_old(old_conf);
+                        cardwire_config
+                    }
+                    Err(err) => {
+                        error!(
+                            "[CONFIG]: error while trying to parse the old config: {}",
+                            err
+                        );
+                        warn!("[CONFIG]: overwriting with the default new config...");
+                        CardwireConfig::default()
+                    }
+                };
                 let conf_toml = toml::to_string_pretty(&cardwire_config)?;
                 write(&config_file, conf_toml)?;
                 info!("[CONFIG]: wrote config to {:?}", config_file);
@@ -61,11 +78,19 @@ impl CardwireConfig {
         let path = Path::new(CONFIG_PATH).join("cardwire.toml");
         write(&path, config_toml)
     }
+    fn migrate_from_old(&mut self, old_config: OldCardwireConfig) {
+        self.global_settings.restore_gpu_states = old_config.auto_apply_gpu_state;
+        self.experimental_features.advanced_nvidia_blocking = old_config.experimental_nvidia_block;
+        self.global_settings.battery_switch.enabled = old_config.battery_auto_switch;
+        self.global_settings.battery_switch.ac_mode = old_config.battery_auto_switch_mode;
+        self.global_settings.switch_on_display = old_config.external_display_auto_switch;
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Settings {
     pub restore_gpu_states: bool,
+    pub switch_on_display: bool,
     pub battery_switch: BatteryAutoSwitch,
 }
 
@@ -73,6 +98,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             restore_gpu_states: true,
+            switch_on_display: false,
             battery_switch: BatteryAutoSwitch::default(),
         }
     }
@@ -147,4 +173,13 @@ impl Default for InternalWhitelist {
             nvidia_powerd: true,
         }
     }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct OldCardwireConfig {
+    auto_apply_gpu_state: bool,
+    experimental_nvidia_block: bool,
+    battery_auto_switch: bool,
+    battery_auto_switch_mode: Modes,
+    external_display_auto_switch: bool,
 }
