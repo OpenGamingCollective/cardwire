@@ -68,6 +68,8 @@ in
     };
 
   testScript = ''
+    import json
+
     machine.start()
     machine.wait_for_unit("default.target")
     with subtest("Wait for boot and services"):
@@ -102,6 +104,43 @@ in
       t.assertIn("Mode has been set to Hybrid", machine.succeed("cardwire set hybrid"), "Couldn't set to hybrid mode")
       machine.succeed(": < /dev/dri/renderD129")
       t.assertIn("hybrid", machine.succeed("cat /var/lib/cardwire/mode.json"), "mode.json didnt get saved")
+
+    with subtest("Runtime process policies accept fresh and repeated requests"):
+      smart_api = (
+        "busctl --system --json=short call org.opengamingcollective.cardwire "
+        "/org/opengamingcollective/cardwire "
+        "org.opengamingcollective.cardwire.SmartPolicy "
+      )
+      # Hybrid mode leaves these PIDs unclassified. Use a new process for each
+      # initial policy so every branch is tested against two empty policy maps.
+      for index, initial in enumerate(["Allow_dGPU", "Force_dGPU", "Force_GPU"]):
+        unit = f"cardwire-process-policy-{index}.service"
+        machine.succeed(f"systemd-run --unit={unit} --property=Type=exec sleep infinity")
+        try:
+          pid = int(machine.succeed(f"systemctl show --property=MainPID --value {unit}").strip())
+          t.assertGreater(pid, 1)
+          status = json.loads(machine.succeed(smart_api + f"GetProcessStatus u {pid}"))
+          t.assertEqual(status["data"], ["", []])
+
+          for policy, value in [
+            (initial, 1),
+            (initial, 1),
+            ("Allow_dGPU", 1),
+            ("Force_dGPU", 0),
+            ("Force_GPU", 1),
+            ("Allow_dGPU", 1),
+          ]:
+            machine.succeed(smart_api + f"RequestProcessAccess usu {pid} {policy} {value}")
+            status = json.loads(machine.succeed(smart_api + f"GetProcessStatus u {pid}"))
+            expected = ["Allowed", [0]] if policy == "Allow_dGPU" else ["Forced", [value]]
+            t.assertEqual(status["data"], expected)
+
+          # Default still does nothing; this fix must not change its semantics.
+          machine.succeed(smart_api + f"RequestProcessAccess usu {pid} Default 0")
+          status = json.loads(machine.succeed(smart_api + f"GetProcessStatus u {pid}"))
+          t.assertEqual(status["data"], ["Allowed", [0]])
+        finally:
+          machine.succeed(f"systemctl stop {unit}")
 
     with subtest("Try to block default gpu"):
       t.assertIn("Per GPU block is only available on manual mode", machine.fail("cardwire gpu 0 --block 2>&1"), "Default gpu got blocked")

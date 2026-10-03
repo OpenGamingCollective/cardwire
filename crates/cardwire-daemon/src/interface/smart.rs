@@ -1,7 +1,7 @@
 use aya::maps::{HashMap as AyaHashMap, MapError as AyaMapError};
 use cardwire_ebpf_userspace::EbpfBlocker;
 use std::{
-    collections::HashMap, path::Path, sync::{Arc, OnceLock}
+    collections::HashMap, io::ErrorKind, path::Path, sync::{Arc, OnceLock}
 };
 
 use tokio::sync::{Mutex, RwLock};
@@ -10,6 +10,21 @@ use zbus::{
 };
 
 use crate::file::{CardwireDatabase, DbusAppMetadata, GpuPolicy};
+
+// Removing the opposite policy must also work for an unclassified PID or a repeated request.
+// Aya's hash-map remove reports a missing key as a syscall ENOENT, unlike get (KeyNotFound).
+// Handle the delete result directly: an existence check could race with eBPF exec/exit cleanup.
+fn ignore_missing_pid(err: AyaMapError) -> Result<(), AyaMapError> {
+    match err {
+        AyaMapError::KeyNotFound => Ok(()),
+        AyaMapError::SyscallError(ref err)
+            if err.call == "bpf_map_delete_elem" && err.io_error.kind() == ErrorKind::NotFound =>
+        {
+            Ok(())
+        }
+        _ => Err(err),
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct SmartPolicyInterface {
@@ -67,6 +82,7 @@ impl SmartPolicyInterface {
                     let mut forced_map = self.forced_map.write().await;
                     forced_map
                         .remove(&pid)
+                        .or_else(ignore_missing_pid)
                         .map_err(|err| fdo::Error::Failed(err.to_string()))?;
                 }
                 let mut pid_map = self.pid_map.write().await;
@@ -81,6 +97,7 @@ impl SmartPolicyInterface {
                     let mut pid_map = self.pid_map.write().await;
                     pid_map
                         .remove(&pid)
+                        .or_else(ignore_missing_pid)
                         .map_err(|err| fdo::Error::Failed(err.to_string()))?;
                 }
                 let mut force_map = self.forced_map.write().await;
@@ -95,6 +112,7 @@ impl SmartPolicyInterface {
                     let mut pid_map = self.pid_map.write().await;
                     pid_map
                         .remove(&pid)
+                        .or_else(ignore_missing_pid)
                         .map_err(|err| fdo::Error::Failed(err.to_string()))?;
                 }
                 let mut force_map = self.forced_map.write().await;
@@ -197,4 +215,78 @@ impl SmartPolicyInterface {
         emitter: &SignalEmitter<'_>,
         new_app: (String, DbusAppMetadata),
     ) -> zbus::Result<()>;
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use aya::sys::SyscallError;
+
+    use super::*;
+
+    fn syscall_error(call: &'static str, errno: i32) -> AyaMapError {
+        AyaMapError::SyscallError(SyscallError {
+            call,
+            io_error: io::Error::from_raw_os_error(errno),
+        })
+    }
+
+    #[test]
+    fn successful_delete_stays_successful() {
+        let result: Result<(), AyaMapError> = Ok(());
+        assert!(result.or_else(ignore_missing_pid).is_ok());
+    }
+
+    #[test]
+    fn missing_pid_delete_is_successful() {
+        // Linux ENOENT: the error returned by Aya HashMap::remove for a fresh PID,
+        // a repeated policy, or a PID already removed by the eBPF cleanup hooks.
+        let result = Err(syscall_error("bpf_map_delete_elem", 2));
+        assert!(result.or_else(ignore_missing_pid).is_ok());
+    }
+
+    #[test]
+    fn key_not_found_is_successful() {
+        assert!(ignore_missing_pid(AyaMapError::KeyNotFound).is_ok());
+    }
+
+    #[test]
+    fn other_delete_errors_are_preserved() {
+        // Linux EPERM, EBADF, ENOMEM, EACCES and EINVAL must not be treated as a missing PID.
+        for errno in [1, 9, 12, 13, 22] {
+            let err = syscall_error("bpf_map_delete_elem", errno);
+            assert!(matches!(
+                ignore_missing_pid(err),
+                Err(AyaMapError::SyscallError(err))
+                    if err.call == "bpf_map_delete_elem"
+                        && err.io_error.raw_os_error() == Some(errno)
+            ));
+        }
+    }
+
+    #[test]
+    fn missing_key_from_other_syscalls_is_not_ignored() {
+        let err = syscall_error("bpf_map_update_elem", 2);
+        assert!(matches!(
+            ignore_missing_pid(err),
+            Err(AyaMapError::SyscallError(err))
+                if err.call == "bpf_map_update_elem" && err.io_error.raw_os_error() == Some(2)
+        ));
+    }
+
+    #[test]
+    fn map_validation_errors_are_preserved() {
+        let err = AyaMapError::InvalidKeySize {
+            size: 8,
+            expected: 4,
+        };
+        assert!(matches!(
+            ignore_missing_pid(err),
+            Err(AyaMapError::InvalidKeySize {
+                size: 8,
+                expected: 4
+            })
+        ));
+    }
 }

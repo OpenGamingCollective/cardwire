@@ -88,4 +88,6 @@ The `Forced` policy will be added in 0.13.0
 
 The policy for a process can be overridden at runtime through the `org.opengamingcollective.cardwire.SmartPolicy` D-Bus interface (`RequestProcessAccess`, `GetProcessStatus`, `GetAppPolicies`, `SetAppPolicy`). Note that `GetProcessStatus` returns an empty string (not `"Default"`) for unclassified processes.
 
+`RequestProcessAccess` accepts `Allow_dGPU`, `Force_dGPU`, and `Force_GPU` for an existing process even when that PID is not yet in either policy map. Repeating a request or changing its policy removes the opposite map entry if present, then inserts or updates the requested entry. A missing opposite entry is not an error; other map errors are still reported. `Default` remains a no-op, not a way to revoke a previous request.
+
 Force_GPU can be used on all systems with the Manual mode.
