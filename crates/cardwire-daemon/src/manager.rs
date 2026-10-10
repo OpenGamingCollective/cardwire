@@ -17,7 +17,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 
 #[derive(Clone)]
 pub struct DaemonManager {
