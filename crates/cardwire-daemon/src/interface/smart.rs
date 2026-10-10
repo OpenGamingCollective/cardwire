@@ -1,6 +1,6 @@
 use aya::maps::{HashMap as AyaHashMap, MapError as AyaMapError};
-use cardwire_analyzer::types::DbusAppMetadata;
 use cardwire_config::sql::CardwireDatabase;
+use cardwire_dbus::types::DbusAppMetadata;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use std::{
     collections::HashMap, path::Path, sync::{Arc, OnceLock}

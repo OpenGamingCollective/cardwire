@@ -1,3 +1,4 @@
+use cardwire_core::modes::types::Modes;
 use zbus::proxy;
 
 #[proxy(
@@ -7,6 +8,9 @@ use zbus::proxy;
 )]
 pub trait CardwireMode {
     #[zbus(property)]
-    pub fn mode(&self) -> zbus::Result<u32>;
-    pub fn available_modes(&self) -> zbus::Result<Vec<Modes>>;
+    fn mode(&self) -> zbus::Result<Modes>;
+
+    fn set_mode(&self, mode: Modes) -> zbus::Result<()>;
+
+    fn available_modes(&self) -> zbus::Result<Vec<Modes>>;
 }

@@ -18,3 +18,4 @@ tokio.workspace = true
 
 cardwire-core = { path = "../cardwire-core" }
 cardwire-analyzer = { path = "../cardwire-analyzer" }
+cardwire-dbus = { path = "../cardwire-dbus" }

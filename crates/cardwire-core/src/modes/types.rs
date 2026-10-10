@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use zbus::zvariant::OwnedValue;
 
-#[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug)]
+#[derive(
+    Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug, OwnedValue,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Modes {
     Integrated,

@@ -1,4 +1,8 @@
-use zbus::proxy;
+use std::collections::HashMap;
+
+use zbus::{Result, proxy};
+
+use crate::types::DbusAppMetadata;
 
 #[proxy(
     default_service = "org.opengamingcollective.cardwire",
@@ -6,11 +10,12 @@ use zbus::proxy;
     interface = "org.opengamingcollective.cardwire.SmartPolicy"
 )]
 pub trait CardwireSmartPolicy {
-    pub fn get_app_policies(&self)
-    -> zbus::Result<HashMap<String, crate::models::DbusAppMetadata>>;
+    fn get_app_policies(&self) -> Result<HashMap<String, DbusAppMetadata>>;
+
+    fn request_process_access(&self, pid: u32, policy: String, value: u32) -> Result<()>;
+
+    fn get_process_status(&self, pid: u32) -> Result<(String, Option<u32>)>;
+
     #[zbus(signal)]
-    pub fn new_app_added(
-        &self,
-        new_app: (String, crate::models::DbusAppMetadata),
-    ) -> zbus::Result<()>;
+    fn new_app_added(&self, new_app: (String, u32)) -> zbus::Result<()>;
 }

@@ -1,4 +1,8 @@
-use zbus::proxy;
+use std::collections::BTreeMap;
+
+use zbus::{Result, proxy};
+
+use crate::types::DbusPciDevice;
 
 #[proxy(
     default_service = "org.opengamingcollective.cardwire",
@@ -6,5 +10,7 @@ use zbus::proxy;
     interface = "org.opengamingcollective.cardwire.Debug"
 )]
 pub trait CardwireDebug {
-    pub fn get_pci_devices(&self) -> zbus::Result<BTreeMap<String, PciDevice>>;
+    fn get_pci_devices(&self) -> zbus::Result<BTreeMap<String, DbusPciDevice>>;
+
+    fn refresh_gpu(&self) -> Result<()>;
 }

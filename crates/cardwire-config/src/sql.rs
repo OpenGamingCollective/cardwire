@@ -1,7 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{STATE_PATH, errors::Result};
-use cardwire_analyzer::types::{AppMetadata, DbusAppMetadata};
+use cardwire_core::app_metadata::types::AppMetadata;
+use cardwire_dbus::types::DbusAppMetadata;
 use log::error;
 use rusqlite::{Connection, OptionalExtension};
 use tokio::sync::{RwLock, mpsc, oneshot};

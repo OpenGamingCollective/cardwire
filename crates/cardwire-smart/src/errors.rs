@@ -1,6 +1,7 @@
 use std::io;
 
-use cardwire_analyzer::{errors::AnalyzerError, types::AppMetadata};
+use cardwire_analyzer::errors::AnalyzerError;
+use cardwire_core::app_metadata::types::AppMetadata;
 use cardwire_ebpf_userspace::CardwireEbpfError;
 use thiserror::Error;
 use tokio::sync::{mpsc::error::SendError, oneshot::error::RecvError};

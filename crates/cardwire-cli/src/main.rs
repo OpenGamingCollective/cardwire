@@ -2,15 +2,15 @@ mod args;
 mod completion;
 mod dbus;
 mod display;
-mod types;
 
 use std::{collections::BTreeMap, process::Stdio};
 
 use args::{Args, CliMode, Commands, ConfigAction, DebugAction, ManagerAction};
+use cardwire_core::{gpu::models::GpuType, system_type::types::SystemType};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
 
-use crate::{dbus::GpuType, display::print_devices_pci, types::SystemType};
+use crate::display::print_devices_pci;
 
 const BIN_NAME: &str = "cardwire";
 
@@ -51,7 +51,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Verify the daemon is reachable via Cardwire Manager status before processing args
-    if let Err(e) = client.manager_status().await {
+    if let Err(e) = client.get_daemon_status().await {
         return Err(anyhow::anyhow!(
             "Cannot communicate with cardwired, is the daemon running? - {}",
             e
@@ -60,14 +60,7 @@ async fn main() -> anyhow::Result<()> {
 
     match args.command {
         Commands::Set { mode } => {
-            let mode_u32 = match mode {
-                CliMode::Integrated => 0,
-                CliMode::Hybrid => 1,
-                CliMode::Manual => 2,
-                CliMode::Smart => 3,
-            };
-
-            match client.set_mode(&mode_u32).await {
+            match client.set_mode(mode.into()).await {
                 Ok(_) => println!("Mode has been set to {}", mode),
                 Err(e) => handle_error(e.into()),
             };
@@ -84,14 +77,6 @@ async fn main() -> anyhow::Result<()> {
                 .join(", ");
             match client.get_mode().await {
                 Ok(response) => {
-                    let response: CliMode = match response {
-                        0 => CliMode::Integrated,
-                        1 => CliMode::Hybrid,
-                        2 => CliMode::Manual,
-                        3 => CliMode::Smart,
-                        // shouldn't happen
-                        _ => CliMode::Manual,
-                    };
                     println!("Current Mode: {}", response);
                     println!("Available Mode: {}", available_modes_str);
                 }
@@ -100,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::List { full, json } => {
             if full {
-                match client.get_pci_device().await {
+                match client.get_pci_devices().await {
                     Ok(response) => {
                         print_devices_pci(response)?;
                     }
@@ -117,12 +102,12 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Gpu { id, action } => {
             if action.block {
-                match client.set_gpu_block(id, true).await {
+                match client.set_block(id, true).await {
                     Ok(_) => println!("GPU {} has been blocked", id),
                     Err(e) => handle_error(e.into()),
                 };
             } else if action.unblock {
-                match client.set_gpu_block(id, false).await {
+                match client.set_block(id, false).await {
                     Ok(_) => println!("GPU {} has been unblocked", id),
                     Err(e) => handle_error(e.into()),
                 };
@@ -136,7 +121,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(e) => handle_error(e),
                 };
             } else if action.power {
-                match client.get_power_state(id).await {
+                match client.power_state(id).await {
                     Ok(power_state) => {
                         println!("{}", power_state);
                     }
@@ -153,7 +138,7 @@ async fn main() -> anyhow::Result<()> {
                         println!("AutoApplyGpuState set to {}", val);
                     }
                 } else {
-                    match client.get_auto_apply_gpu_state().await {
+                    match client.auto_apply_gpu_state().await {
                         Ok(val) => println!("AutoApplyGpuState: {}", val),
                         Err(e) => handle_error(e),
                     }
@@ -167,7 +152,7 @@ async fn main() -> anyhow::Result<()> {
                         println!("ExperimentalNvidiaBlock set to {}", val);
                     }
                 } else {
-                    match client.get_experimental_nvidia_block().await {
+                    match client.experimental_nvidia_block().await {
                         Ok(val) => println!("ExperimentalNvidiaBlock: {}", val),
                         Err(e) => handle_error(e),
                     }
@@ -181,7 +166,7 @@ async fn main() -> anyhow::Result<()> {
                         println!("BatteryAutoSwitch set to {}", val);
                     }
                 } else {
-                    match client.get_battery_auto_switch().await {
+                    match client.battery_auto_switch().await {
                         Ok(val) => println!("BatteryAutoSwitch: {}", val),
                         Err(e) => handle_error(e),
                     }
@@ -190,29 +175,14 @@ async fn main() -> anyhow::Result<()> {
             ConfigAction::BatteryAutoSwitchMode { set } => {
                 if let Some(val) = set {
                     {
-                        let mode_u32 = match val {
-                            CliMode::Integrated => 0,
-                            CliMode::Hybrid => 1,
-                            CliMode::Manual => 2,
-                            CliMode::Smart => 3,
-                        };
-
-                        match client.set_battery_auto_switch_mode(&mode_u32).await {
+                        match client.set_battery_auto_switch_mode(val.into()).await {
                             Ok(_) => println!("Auto switch mode has been set to {}", val),
                             Err(e) => handle_error(e.into()),
                         };
                     }
                 } else {
-                    match client.get_battery_auto_switch_mode().await {
+                    match client.battery_auto_switch_mode().await {
                         Ok(response) => {
-                            let response: CliMode = match response {
-                                0 => CliMode::Integrated,
-                                1 => CliMode::Hybrid,
-                                2 => CliMode::Manual,
-                                3 => CliMode::Smart,
-                                // shouldn't happen
-                                _ => CliMode::Manual,
-                            };
                             println!("BatteryAutoSwitch: {}", response)
                         }
                         Err(e) => handle_error(e),
@@ -227,23 +197,16 @@ async fn main() -> anyhow::Result<()> {
                         println!("ExternalDisplayAutoSwitch set to {}", val);
                     }
                 } else {
-                    match client.get_external_display_auto_switch().await {
+                    match client.external_display_auto_switch().await {
                         Ok(val) => println!("ExternalDisplayAutoSwitch: {}", val),
                         Err(e) => handle_error(e),
                     }
                 }
             }
-            ConfigAction::Save => {
-                if let Err(e) = client.save_to_file().await {
-                    handle_error(e);
-                } else {
-                    println!("Configuration saved");
-                }
-            }
         },
         Commands::Manager { action } => match action {
             ManagerAction::Status => {
-                if let Err(e) = client.manager_status().await {
+                if let Err(e) = client.get_daemon_status().await {
                     handle_error(e);
                 } else {
                     println!("Daemon is alive");
@@ -252,15 +215,11 @@ async fn main() -> anyhow::Result<()> {
         },
         Commands::Debug { action } => match action {
             DebugAction::DiagnosticGpu => {
-                if let Err(e) = client.diagnostic_gpu().await {
-                    handle_error(e);
-                } else {
-                    // TODO: implement debug
-                    println!("DiagnosticGpu not implemented yet");
-                }
+                // TODO: implement debug
+                println!("DiagnosticGpu not implemented yet");
             }
             DebugAction::RefreshGpu => {
-                if let Err(e) = client.refresh_gpu().await {
+                if let Err(e) = client.refresh_gpus().await {
                     handle_error(e);
                 } else {
                     println!("GPU list refreshed");
@@ -304,16 +263,17 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 available_gpu
                     .retain(|_, gpu| gpu.device_type != GpuType::Unavailable && gpu.launchable);
-                let system_type = SystemType::from_gpulist(&available_gpu);
+                let available_gpus: Vec<(usize, bool, GpuType)> = available_gpu
+                    .iter()
+                    .map(|(id, gpu)| (*id, gpu.default, gpu.device_type.clone()))
+                    .collect();
+
+                let system_type = SystemType::from_gpus(&available_gpus);
                 match system_type {
                     // 2 GPUs, one iGPU and one dGPU
                     SystemType::Laptop => available_gpu
                         .iter()
                         .find(|(_, gpu)| !gpu.default && gpu.device_type == GpuType::Discrete),
-                    // 2 GPUs, use default discrete GPU
-                    SystemType::Desktop => available_gpu
-                        .iter()
-                        .find(|(_, gpu)| gpu.default && gpu.device_type == GpuType::Discrete),
                     // 1 GPU or 3+ GPUs, get in this priority:
                     // 0. Default Discrete GPU
                     // 1. non-Default discrete GPU
@@ -337,7 +297,7 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 let env = client
-                    .get_gpu_env(gpu.id)
+                    .env(gpu.id)
                     .await
                     .map_err(|e| anyhow::anyhow!("Failed to get GPU environment: {e}"))?;
 
@@ -374,13 +334,13 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::CompleteGpus => {
-            let objects = client.get_managed_objects().await.unwrap_or_default();
+            let objects = client.get_gpu_objects().await.unwrap_or_default();
             for (path, _) in objects {
                 let path_str = path.as_str();
                 if let Some(id_str) =
                     path_str.strip_prefix("/org/opengamingcollective/cardwire/Gpu/")
                     && let Ok(id) = id_str.parse::<u32>()
-                    && let Ok(dbus_dev) = client.get_device(id).await
+                    && let Ok(dbus_dev) = client.get_gpu_device(id).await
                 {
                     // The \t makes fish show the name as a description next to the ID
                     println!("{}\t{}", id, dbus_dev.name);
@@ -423,7 +383,7 @@ fn handle_error(err: zbus::Error) -> ! {
 
 async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::GpuDevice> {
     let mut map: BTreeMap<usize, display::GpuDevice> = BTreeMap::new();
-    let objects = match client.get_managed_objects().await {
+    let objects = match client.get_gpu_objects().await {
         Ok(objects) => objects,
         Err(e) => handle_error(e.into()),
     };
@@ -444,7 +404,7 @@ async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::
                     }
                 }
             }
-            if let Ok(dbus_dev) = client.get_device(id).await {
+            if let Ok(dbus_dev) = client.get_gpu_device(id).await {
                 let dev = display::GpuDevice {
                     id,
                     name: dbus_dev.name,

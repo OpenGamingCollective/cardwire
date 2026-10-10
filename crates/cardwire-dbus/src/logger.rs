@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::{collections::VecDeque, time::SystemTime};
 
 use zbus::proxy;
 
@@ -17,7 +17,7 @@ pub struct LogEntry {
     interface = "org.opengamingcollective.cardwire.Logger"
 )]
 pub trait CardwireLogger {
-    pub fn process_blocked(&self) -> zbus::Result<VecDeque<LogEntry>>;
+    fn process_blocked(&self) -> zbus::Result<VecDeque<LogEntry>>;
     #[zbus(signal)]
-    pub fn process_blocked_changed(&self, log: LogEntry) -> zbus::Result<()>;
+    fn process_blocked_changed(&self, log: LogEntry) -> zbus::Result<()>;
 }

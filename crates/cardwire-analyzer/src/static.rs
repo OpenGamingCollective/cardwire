@@ -1,5 +1,6 @@
 //! Functions that must be used at startup, like .desktop entries listing
 
+use cardwire_core::app_metadata::types::AppMetadata;
 use freedesktop_desktop_entry::{DesktopEntry, get_languages_from_env};
 use inotify::{EventMask, Inotify, StreamExt, WatchDescriptor, WatchMask};
 use log::error;
@@ -9,7 +10,7 @@ use std::{
 use tokio::sync::RwLock;
 use xdg::BaseDirectories;
 
-use crate::{errors::Result, types::AppMetadata};
+use crate::errors::Result;
 /// Return a list of fdo apps present in the system
 pub async fn get_fdo_apps() -> Result<(HashMap<String, AppMetadata>, Vec<PathBuf>)> {
     let mut app_directories: Vec<PathBuf> = Vec::new();

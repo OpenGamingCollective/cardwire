@@ -5,10 +5,9 @@ use cardwire_config::{
 use cardwire_core::{
     gpu::{
         enumerator::GpuEnumerator, env::compute_switcheroo_env, inode::exp_nvidia_inodes, models::GpuVendor
-    }, modes::types::Modes, pci::{
-        models::{DbusPciDevice, PciDevice}, pci_device::read_pci_devices
-    }
+    }, modes::types::Modes, pci::{models::PciDevice, pci_device::read_pci_devices}
 };
+use cardwire_dbus::types::DbusPciDevice;
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
 use log::{error, info, warn};
 use std::{

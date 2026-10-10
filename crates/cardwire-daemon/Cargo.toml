@@ -34,6 +34,7 @@ cardwire-core = { path = "../cardwire-core" }
 cardwire-config = { path = "../cardwire-config" }
 cardwire-smart = { path = "../cardwire-smart" }
 cardwire-analyzer = { path = "../cardwire-analyzer" }
+cardwire-dbus = { path = "../cardwire-dbus" }
 anyhow.workspace = true
 
 [[bin]]

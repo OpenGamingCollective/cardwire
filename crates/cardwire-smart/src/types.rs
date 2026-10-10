@@ -4,8 +4,9 @@ use std::{
 
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
 use cardwire_analyzer::{
-    dynamic::{check_env, get_steam_app_id, read_process_environ}, helpers::{get_real_process_name, strip_nix_wrap}, r#static::{get_fdo_apps, watch_fdo_folders}, types::AppMetadata
+    dynamic::{check_env, get_steam_app_id, read_process_environ}, helpers::{get_real_process_name, strip_nix_wrap}, r#static::{get_fdo_apps, watch_fdo_folders}
 };
+use cardwire_core::app_metadata::types::AppMetadata;
 use cardwire_ebpf_userspace::{EbpfBlocker, types::ExecEvent};
 use log::{error, info, warn};
 use tokio::{

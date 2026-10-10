@@ -6,11 +6,12 @@ use std::{
 
 use anyhow::Result;
 use cardwire_config::state::{CardwireGpuState, CardwireModeState};
+use cardwire_dbus::types::DbusGpuDevice;
 
 use crate::interface::SwitcherooInterface;
 use cardwire_core::{
     gpu::{
-        env::is_gpu_launchable, generic::display::is_gpu_active, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, models::{DbusGpuDevice, GpuDevice, GpuType}, procfs::lsof_read
+        env::is_gpu_launchable, generic::display::is_gpu_active, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, models::{GpuDevice, GpuType}, procfs::lsof_read
     }, modes::types::Modes, pci::models::PciDevice
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};

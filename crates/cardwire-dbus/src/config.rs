@@ -1,4 +1,5 @@
-use zbus::proxy;
+use cardwire_core::modes::types::Modes;
+use zbus::{Result, proxy};
 
 #[proxy(
     default_service = "org.opengamingcollective.cardwire",
@@ -7,13 +8,27 @@ use zbus::proxy;
 )]
 pub trait CardwireConfig {
     #[zbus(property)]
-    pub fn experimental_nvidia_block(&self) -> zbus::Result<bool>;
+    fn experimental_nvidia_block(&self) -> Result<bool>;
+
+    fn set_experimental_nvidia_block(&self, state: bool) -> Result<()>;
+
     #[zbus(property)]
-    pub fn auto_apply_gpu_state(&self) -> zbus::Result<bool>;
+    fn auto_apply_gpu_state(&self) -> Result<bool>;
+
+    fn set_auto_apply_gpu_state(&self, state: bool) -> Result<()>;
+
     #[zbus(property)]
-    pub fn battery_auto_switch(&self) -> zbus::Result<bool>;
+    fn battery_auto_switch(&self) -> Result<bool>;
+
+    fn set_battery_auto_switch(&self, state: bool) -> Result<()>;
+
     #[zbus(property)]
-    pub fn battery_auto_switch_mode(&self) -> zbus::Result<u32>;
+    fn battery_auto_switch_mode(&self) -> Result<Modes>;
+
+    fn set_battery_auto_switch_mode(&self, mode: Modes) -> Result<()>;
+
     #[zbus(property)]
-    pub fn external_display_auto_switch(&self) -> zbus::Result<bool>;
+    fn external_display_auto_switch(&self) -> Result<bool>;
+
+    fn set_external_display_auto_switch(&self, state: bool) -> Result<()>;
 }

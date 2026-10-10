@@ -768,6 +768,8 @@ name = "cardwire-cli"
 version = "0.13.0-alpha.1"
 dependencies = [
  "anyhow",
+ "cardwire-core",
+ "cardwire-dbus",
  "clap",
  "clap_complete",
  "serde",
@@ -782,6 +784,7 @@ version = "0.13.0-alpha.1"
 dependencies = [
  "cardwire-analyzer",
  "cardwire-core",
+ "cardwire-dbus",
  "log",
  "rusqlite",
  "serde",
@@ -817,6 +820,7 @@ dependencies = [
  "cardwire-analyzer",
  "cardwire-config",
  "cardwire-core",
+ "cardwire-dbus",
  "cardwire-ebpf-userspace",
  "cardwire-smart",
  "env_logger",

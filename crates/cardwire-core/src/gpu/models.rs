@@ -196,39 +196,6 @@ impl GpuDevice {
     }
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, zbus::zvariant::Type)]
-pub struct DbusGpuDevice {
-    pub name: String,
-    pub pci: String,
-    pub render: u32,
-    pub card: u32,
-    pub default: bool,
-    pub device_type: GpuType,
-    pub vendor: String,
-    pub driver: String,
-    pub nvidia_minor: String,
-}
-
-impl From<&GpuDevice> for DbusGpuDevice {
-    fn from(gpu: &GpuDevice) -> Self {
-        DbusGpuDevice {
-            pci: gpu.pci.pci_address().to_string(),
-            render: *gpu.render(),
-            name: gpu.name().to_string(),
-            card: *gpu.card(),
-            default: gpu.is_default(),
-            device_type: gpu.device_type.clone(),
-            vendor: gpu.gpu_vendor().to_string(),
-            driver: gpu.pci.driver().clone().unwrap_or("none".to_string()),
-            nvidia_minor: if let Some(minor) = gpu.nvidia_minor() {
-                minor.to_string()
-            } else {
-                "none".to_string()
-            },
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
