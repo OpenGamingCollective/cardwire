@@ -1,0 +1,20 @@
+[package]
+name = "cardwire-analyzer"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Set of utilies to analyze a process"
+
+[dependencies]
+cardwire-core = { path = "../cardwire-core" }
+thiserror.workspace = true
+freedesktop-desktop-entry.workspace = true
+inotify.workspace = true
+log.workspace = true
+xdg.workspace = true
+tokio.workspace = true
+zbus.workspace = true
+serde.workspace = true

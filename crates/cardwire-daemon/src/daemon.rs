@@ -1,5 +1,4 @@
 //! entry point of cardwired
-mod analyzer;
 mod interface;
 mod manager;
 mod tasks;

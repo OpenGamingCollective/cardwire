@@ -1,7 +1,7 @@
 //! Daemon composition root: builds the shared [`DaemonContext`] and every D-Bus interface, owns
 //! startup tasks and background-task futures.
 use crate::{
-    analyzer::CardwireAnalyzer, interface::{
+    interface::{
         ConfigInterface, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, SmartPolicyInterface, SwitcherooInterface
     }, tasks, whitelist::ALLOWED_PROGRAMS
 };
@@ -12,6 +12,7 @@ use cardwire_core::{
     gpu::{enumerator::GpuEnumerator, env::compute_switcheroo_env}, modes::types::Modes, pci::{self, models::PciDevice}
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
+use cardwire_smart::SmartAnalyzer;
 use log::error;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -224,10 +225,8 @@ impl DaemonManager {
             res
         }
     }
-    pub fn run_analyzer(&self) -> impl Future<Output = Result<()>> + 'static {
+    pub fn run_analyzer(&self) -> impl Future<Output = cardwire_smart::Result<()>> + 'static {
         let blocker = Arc::clone(&self.inner.blocker);
-        let logger = Arc::clone(&self.logger_interface.report_logs);
-        let signal = Arc::clone(&self.logger_interface.signal_emitter);
         let db_cache = self.smart_policy_interface.database.cache.clone();
         let tx = self.smart_policy_interface.database.tx.clone();
 
@@ -235,7 +234,7 @@ impl DaemonManager {
 
         async move {
             let cardwire_analyzer =
-                CardwireAnalyzer::build(blocker, logger, signal, db_cache, tx, new_app_signal)
+                SmartAnalyzer::build(blocker, db_cache, tx)
                     .await
                     .map_err(|err| {
                         error!("Failed to build CardwireAnalyzer: {}", err);

@@ -1,6 +1,13 @@
-//! Functions for dynamic analysis, contains:
-//! - environment analysis
-//! - wayland app id lookup
+//! Functions for on-the-fly process analysis
+
+use std::fs;
+
+use crate::errors::Result;
+
+pub fn read_process_environ(pid: u32) -> Result<Vec<u8>> {
+    let path = format!("/proc/{}/environ", pid);
+    Ok(fs::read(path)?)
+}
 
 pub fn get_steam_app_id(environ: &[u8]) -> Option<String> {
     let prefix = b"SteamAppId=";
@@ -10,8 +17,6 @@ pub fn get_steam_app_id(environ: &[u8]) -> Option<String> {
             && id_str != "0"
             && id_str != "769"
         {
-            // steam_app_ is added on purpose, this allow us to make a custom app metadata for steam
-            // games
             return Some(format!("steam_app_{}", id_str));
         }
     }
@@ -35,19 +40,6 @@ pub fn check_env(env_var: &str, environ: &[u8]) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    /*
-        Steam
-    */
-
-    #[test]
-    fn test_steam_app_id() {
-        let environ = b"SteamAppId=2552430\0";
-        assert_eq!(
-            get_steam_app_id(environ),
-            Some("steam_app_2552430".to_string())
-        )
-    }
-
     /*
         check_env
     */

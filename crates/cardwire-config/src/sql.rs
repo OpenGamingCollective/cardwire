@@ -1,34 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{STATE_PATH, errors::Result};
+use cardwire_analyzer::types::{AppMetadata, DbusAppMetadata};
 use log::error;
 use rusqlite::{Connection, OptionalExtension};
 use tokio::sync::{RwLock, mpsc, oneshot};
-use zbus::zvariant;
-
-#[repr(i32)]
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum GpuPolicy {
-    Blocked = 0,
-    Allowed = 1,
-}
-impl GpuPolicy {
-    pub fn from_i32(val: i32) -> Self {
-        match val {
-            0 => GpuPolicy::Blocked,
-            1 => GpuPolicy::Allowed,
-            _ => GpuPolicy::Blocked,
-        }
-    }
-
-    pub fn try_from_i32(val: i32) -> Option<Self> {
-        match val {
-            0 => Some(GpuPolicy::Blocked),
-            1 => Some(GpuPolicy::Allowed),
-            _ => None,
-        }
-    }
-}
 
 fn open_db() -> Result<Connection> {
     let db_path = format!("{}/cardwire.db", STATE_PATH);
@@ -37,37 +13,12 @@ fn open_db() -> Result<Connection> {
     Ok(conn)
 }
 
-#[derive(Clone, Debug)]
-pub struct AppMetadata {
-    pub display_name: String,
-    pub desktop_file_id: Option<String>,
-    pub icon_name: Option<String>,
-}
-
-#[derive(Debug, Clone, zvariant::Type, serde::Serialize, serde::Deserialize)]
-pub struct DbusAppMetadata {
-    pub display_name: String,
-    pub desktop_file_id: Option<String>,
-    pub icon_name: Option<String>,
-    pub gpu_policy: u32,
-}
-
-impl DbusAppMetadata {
-    pub fn from_app_metadata(meta: &AppMetadata, gpu_policy: u32) -> Self {
-        Self {
-            display_name: meta.display_name.clone(),
-            desktop_file_id: meta.desktop_file_id.clone(),
-            icon_name: meta.icon_name.clone(),
-            gpu_policy,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct CardwireDatabase {
-    pub cache: Arc<RwLock<HashMap<String, GpuPolicy>>>,
+    pub cache: Arc<RwLock<HashMap<String, i32>>>,
     pub tx: mpsc::Sender<(String, AppMetadata, oneshot::Sender<bool>)>,
 }
+
 impl CardwireDatabase {
     pub fn build() -> Result<Self> {
         let conn = open_db()?;
@@ -88,7 +39,7 @@ impl CardwireDatabase {
             let rows = stmt.query_map([], |row| {
                 let name: String = row.get(0)?;
                 let policy: i32 = row.get(1)?;
-                Ok((name, GpuPolicy::from_i32(policy)))
+                Ok((name, policy))
             })?;
             for row in rows.flatten() {
                 cache_map.insert(row.0, row.1);
@@ -181,19 +132,5 @@ impl CardwireDatabase {
             return Err(rusqlite::Error::QueryReturnedNoRows.into());
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_gpu_policy_from_i32_defaults_to_blocked() {
-        assert_eq!(GpuPolicy::from_i32(-1), GpuPolicy::Blocked);
-        assert_eq!(GpuPolicy::from_i32(42), GpuPolicy::Blocked);
-        assert_eq!(GpuPolicy::try_from_i32(-1), None);
-        assert_eq!(GpuPolicy::try_from_i32(42), None);
-        assert_eq!(GpuPolicy::try_from_i32(1), Some(GpuPolicy::Allowed));
     }
 }

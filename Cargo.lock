@@ -749,6 +749,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "cardwire-analyzer"
+version = "0.13.0-alpha.1"
+dependencies = [
+ "cardwire-core",
+ "freedesktop-desktop-entry",
+ "inotify",
+ "log",
+ "serde",
+ "thiserror 2.0.21",
+ "tokio",
+ "xdg",
+ "zbus",
+]
+
+[[package]]
 name = "cardwire-cli"
 version = "0.13.0-alpha.1"
 dependencies = [
@@ -765,6 +780,7 @@ dependencies = [
 name = "cardwire-config"
 version = "0.13.0-alpha.1"
 dependencies = [
+ "cardwire-analyzer",
  "cardwire-core",
  "log",
  "rusqlite",
@@ -773,7 +789,6 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "toml",
- "zbus",
 ]
 
 [[package]]
@@ -799,9 +814,11 @@ dependencies = [
  "anyhow",
  "aya",
  "aya-log",
+ "cardwire-analyzer",
  "cardwire-config",
  "cardwire-core",
  "cardwire-ebpf-userspace",
+ "cardwire-smart",
  "env_logger",
  "freedesktop-desktop-entry",
  "inotify",
@@ -877,6 +894,19 @@ dependencies = [
  "toml",
  "xdg",
  "zbus",
+]
+
+[[package]]
+name = "cardwire-smart"
+version = "0.13.0-alpha.1"
+dependencies = [
+ "aya",
+ "cardwire-analyzer",
+ "cardwire-core",
+ "cardwire-ebpf-userspace",
+ "log",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
