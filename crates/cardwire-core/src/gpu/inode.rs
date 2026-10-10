@@ -3,12 +3,10 @@ use std::{
     collections::BTreeMap, fs::{self}, os::unix::fs::MetadataExt, path::Path
 };
 
-use crate::Result;
+use cardwire_ebpf_userspace::InodeKey;
 use log::{error, warn};
 
-use cardwire_ebpf_userspace::InodeKey;
-
-use crate::core::pci::PciDevice;
+use crate::{gpu::errors::Result, pci::models::PciDevice};
 
 pub fn get_inodes(
     render: u32,

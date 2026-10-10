@@ -1,13 +1,14 @@
 //! entry point of cardwired
 mod analyzer;
-mod core;
 mod file;
 mod interface;
 mod manager;
 mod tasks;
-pub mod types;
+pub mod whitelist;
 
-use crate::{core::errors::Result, manager::DaemonManager, tasks::watch_power_state};
+use anyhow::Result;
+
+use crate::{manager::DaemonManager, tasks::watch_power_state};
 use env_logger::Env;
 use log::info;
 use std::{future::pending, sync::Arc};

@@ -2,7 +2,7 @@ use std::{fmt::Display, str::FromStr};
 
 use zbus::zvariant;
 
-use crate::core::pci::PciDevice;
+use crate::pci::models::PciDevice;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum PowerState {
@@ -14,6 +14,7 @@ pub enum PowerState {
     #[default]
     Unknown,
 }
+
 impl FromStr for PowerState {
     type Err = std::io::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -231,7 +232,6 @@ impl From<&GpuDevice> for DbusGpuDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::pci::PciDevice;
 
     fn make_pci() -> PciDevice {
         PciDevice::new(

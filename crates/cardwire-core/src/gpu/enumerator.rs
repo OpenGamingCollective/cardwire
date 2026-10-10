@@ -2,16 +2,16 @@ use std::{collections::BTreeMap, io};
 
 use log::{debug, error, info, warn};
 
-use crate::core::{
+use crate::{
     gpu::{
-        GpuDevice, GpuVendor, check_default_drm_class, generic::{
-            udev::{sysfs_get_device_drm, wait_for_drm}, vulkan::Vulkan
-        }, models::GpuType, vendor_specific::{
+        generic::{
+            default_gpu::check_default_drm_class, udev::{sysfs_get_device_drm, wait_for_drm}, vulkan::Vulkan
+        }, models::{GpuDevice, GpuType, GpuVendor}, vendor_specific::{
             amd::AmdGpuDev, intel::intel_get_device_type, nvidia::{
                 nvidia_get_device_minor, nvidia_get_device_minor_nvml, nvidia_get_device_name, nvidia_get_device_name_nvml, nvidia_get_device_type, nvidia_get_device_type_nvml, wait_for_nvidia
             }
         }
-    }, pci::PciDevice
+    }, pci::models::PciDevice
 };
 
 pub struct GpuEnumerator {

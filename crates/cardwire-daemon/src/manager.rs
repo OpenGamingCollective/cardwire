@@ -1,17 +1,20 @@
 //! Daemon composition root: builds the shared [`DaemonContext`] and every D-Bus interface, owns
 //! startup tasks and background-task futures.
 use crate::{
-    Result, analyzer::CardwireAnalyzer, core::{
-        env::compute_switcheroo_env, gpu::GpuEnumerator, pci::{self}
-    }, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
-        ConfigInterface, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
-    }, tasks
+    analyzer::CardwireAnalyzer, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
+        ConfigInterface, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, SmartPolicyInterface, SwitcherooInterface
+    }, tasks, whitelist::ALLOWED_PROGRAMS
+};
+use cardwire_core::{
+    gpu::{enumerator::GpuEnumerator, env::compute_switcheroo_env}, modes::types::Modes, pci::{self, models::PciDevice}
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
 use log::error;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
+
+use anyhow::{Context, Result, anyhow};
 
 #[derive(Clone)]
 pub struct DaemonManager {
@@ -35,11 +38,11 @@ impl DaemonManager {
         let gpu_state: CardwireGpuState = CardwireGpuState::build()?;
         let gpu_state: Arc<RwLock<CardwireGpuState>> = Arc::new(RwLock::new(gpu_state));
 
-        let pci_devices: BTreeMap<String, pci::PciDevice> = pci::read_pci_devices()?;
+        let pci_devices: BTreeMap<String, PciDevice> = pci::pci_device::read_pci_devices()?;
+
         let gpu_enumerator = GpuEnumerator::build();
         let gpu_list = gpu_enumerator.enumerate(&pci_devices);
-        let pci_list: Arc<RwLock<BTreeMap<String, pci::PciDevice>>> =
-            Arc::new(RwLock::new(pci_devices));
+        let pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>> = Arc::new(RwLock::new(pci_devices));
 
         let mut blocker = EbpfBlocker::new()?;
         let database = CardwireDatabase::build()?;
@@ -165,7 +168,7 @@ impl DaemonManager {
         let mut blocker = self.inner.blocker.write().await;
 
         // Iter over the ALLOWED_PROGRAMS array and allow each comm
-        for comm in crate::core::whitelist::ALLOWED_PROGRAMS {
+        for comm in ALLOWED_PROGRAMS {
             blocker.allow_comm(comm)?;
         }
         Ok(())
@@ -190,7 +193,8 @@ impl DaemonManager {
                 Modes::into(mode_lock.mode())
             }
         };
-        let mode = Modes::try_from(mode_to_apply)?;
+        let mode = Modes::try_from(mode_to_apply)
+            .map_err(|err| anyhow!("could not parse mode {}: {:?}", err, mode_arg))?;
         // On first attempt: don't save (already persisted)
         // On fallback: persist so the broken mode isn't retried on every boot
         let save = mode_arg.is_some();

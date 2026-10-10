@@ -1,10 +1,11 @@
 //! KDE KWin-derived heuristic for identifying the default/boot GPU.
 
-use crate::core::gpu::models::GpuDevice;
 use log::{info, warn};
 use std::{
     collections::{BTreeMap, HashMap}, fs, io, path::Path
 };
+
+use crate::gpu::models::GpuDevice;
 
 /// Method from kwin
 pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io::Result<()> {

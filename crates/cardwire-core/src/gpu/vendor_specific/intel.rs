@@ -1,4 +1,4 @@
-use crate::core::gpu::models::GpuType;
+use crate::gpu::models::GpuType;
 
 /// Get the gpu type for an intel GPU
 pub fn intel_get_device_type(pci_id: &str) -> GpuType {

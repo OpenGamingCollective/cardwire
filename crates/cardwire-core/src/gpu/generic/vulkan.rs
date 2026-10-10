@@ -5,7 +5,7 @@ use vulkano::{
     VulkanLibrary, device::physical::{PhysicalDevice, PhysicalDeviceType}, instance::{Instance, InstanceCreateFlags, InstanceCreateInfo}
 };
 
-use crate::core::gpu::models::GpuType;
+use crate::gpu::models::GpuType;
 
 pub struct Vulkan {
     vlk_physical_devices: Option<HashMap<String, Arc<PhysicalDevice>>>,

@@ -30,6 +30,8 @@ rusqlite.workspace = true
 inotify.workspace = true
 libdrm_amdgpu_sys.workspace = true
 nvml-wrapper.workspace = true
+cardwire-core = { path = "../cardwire-core" }
+anyhow.workspace = true
 
 [[bin]]
 name = "cardwired"

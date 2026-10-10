@@ -9,13 +9,14 @@ use std::{
     }, time::Duration
 };
 
+use cardwire_core::{gpu::generic::display::is_gpu_active, modes::types::Modes};
 use log::warn;
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::RwLock
 };
 
 use crate::{
-    core::gpu::is_gpu_active, file::CardwireModeState, interface::{GpuInterface, ModeInterface, Modes}
+    file::CardwireModeState, interface::{GpuInterface, ModeInterface}
 };
 
 // Give connector status files time to settle after a burst of DRM uevents.

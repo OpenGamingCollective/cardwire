@@ -2,8 +2,8 @@ use libdrm_amdgpu_sys::{
     AMDGPU::{DeviceHandle, GPU_INFO, amdgpu_gpu_info}, LibDrmAmdgpu
 };
 
-use crate::{
-    Result, core::{errors::CardwireError::CardwireAmdGpuError, gpu::models::GpuType}
+use crate::gpu::{
+    errors::{GpuError::AmdGpuError, Result}, models::GpuType
 };
 
 pub struct AmdGpuDev {
@@ -21,9 +21,9 @@ impl AmdGpuDev {
 
             libdrm_amdgpu
                 .init_device_handle_with_fd(f)
-                .map_err(CardwireAmdGpuError)?
+                .map_err(AmdGpuError)?
         };
-        let gpu_info = amdgpu_dev.query_gpu_info().map_err(CardwireAmdGpuError)?;
+        let gpu_info = amdgpu_dev.query_gpu_info().map_err(AmdGpuError)?;
         Ok(Self {
             amdgpu_dev,
             amdgpu_gpu_info: gpu_info,

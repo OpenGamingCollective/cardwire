@@ -1,8 +1,6 @@
 //! helper to manage cardwired configs, include the user config .toml, and the .json states like
 //! gpu, mode or pci
-use crate::{
-    Result, core::errors::CardwireError, file::{CardwireConfig, CardwireGpuUnit, CardwireModeState}
-};
+use crate::file::{CardwireConfig, CardwireGpuUnit, CardwireModeState};
 use std::{collections::BTreeMap, fs, io};
 
 #[allow(dead_code)]

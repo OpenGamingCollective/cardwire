@@ -1,7 +1,6 @@
 //! Used to get GPU env for specific GPU
 
-use crate::{core::gpu::GpuVendor, types::Modes};
-
+use crate::{gpu::models::GpuVendor, modes::types::Modes};
 /// Launchable if not blocked and availble, or if in smart mode
 pub fn is_gpu_launchable(is_available: bool, is_blocked: bool, mode: Modes) -> bool {
     is_available && (!is_blocked || mode == Modes::Smart)
