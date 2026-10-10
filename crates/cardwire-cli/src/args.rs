@@ -1,3 +1,4 @@
+use cardwire_core::modes::types::Modes;
 use clap::{Args as ClapArgs, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,18 @@ impl fmt::Display for CliMode {
         }
     }
 }
+
+impl Into<Modes> for CliMode {
+    fn into(self) -> Modes {
+        match self {
+            CliMode::Integrated => Modes::Integrated,
+            CliMode::Hybrid => Modes::Hybrid,
+            CliMode::Manual => Modes::Manual,
+            CliMode::Smart => Modes::Smart,
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(version, about)]
 pub struct Args {
@@ -134,8 +147,6 @@ pub enum ConfigAction {
         #[arg(help = "Value to set")]
         set: Option<bool>,
     },
-    #[command(about = "Save current configuration to file")]
-    Save,
 }
 
 #[derive(Subcommand, Debug)]

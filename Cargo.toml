@@ -6,6 +6,11 @@ members = [
     "crates/cardwire-ebpf",
     "crates/cardwire-ebpf-userspace",
     "crates/cardwire-gui",
+    "crates/cardwire-core",
+    "crates/cardwire-dbus",
+    "crates/cardwire-config",
+    "crates/cardwire-analyzer",
+    "crates/cardwire-smart",
 ]
 
 default-members = [
@@ -13,6 +18,11 @@ default-members = [
     "crates/cardwire-cli",
     "crates/cardwire-ebpf-userspace",
     "crates/cardwire-gui",
+    "crates/cardwire-core",
+    "crates/cardwire-dbus",
+    "crates/cardwire-config",
+    "crates/cardwire-analyzer",
+    "crates/cardwire-smart",
 ]
 
 [workspace.package]
@@ -37,7 +47,9 @@ toml = "1.0.3"
 vulkano = "0.35.2"
 khronos-egl = { version = "6.0.0", features = ["dynamic", "1_5"] }
 rusqlite = { version = "0.40.1", features = ["bundled"] }
-libdrm_amdgpu_sys = { version = "0.9.0", default-features = false, features = ["dynamic_loading"]}
+libdrm_amdgpu_sys = { version = "0.9.0", default-features = false, features = [
+    "dynamic_loading",
+] }
 nvml-wrapper = "0.13.0"
 
 # EBPF

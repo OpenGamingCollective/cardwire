@@ -1,10 +1,17 @@
 //! Define the mode dbus
-use crate::{
-    Result, core::{
-        errors::CardwireError, gpu::{start_nvidia_powerd, stop_nvidia_powerd}
-    }, file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface}, types::SystemType
-};
+use crate::interface::{DaemonContext, GpuInterface, SwitcherooInterface};
+
+use anyhow::Result;
+
 use aya::maps::Array as AyaArray;
+use cardwire_config::{
+    config::CardwireConfig, state::{CardwireGpuState, CardwireModeState}
+};
+use cardwire_core::{
+    gpu::{
+        models::GpuType, vendor_specific::nvidia::{start_nvidia_powerd, stop_nvidia_powerd}
+    }, modes::types::Modes, system_type::types::SystemType
+};
 use log::{error, info, warn};
 use std::{
     collections::BTreeMap, sync::{Arc, OnceLock}
@@ -13,8 +20,6 @@ use tokio::{
     sync::{Mutex, RwLock}, task
 };
 use zbus::{fdo, interface, object_server::SignalEmitter};
-
-pub use crate::types::Modes;
 
 #[derive(Clone)]
 pub struct ModeInterface {
@@ -122,7 +127,19 @@ impl ModeInterface {
     /// Apply a mode to GPU blocking and the eBPF map without persisting it
     pub(crate) async fn apply_mode(&self, mode: Modes) -> fdo::Result<()> {
         let gpu_list = self.gpu_list.read().await;
-        let system_type = SystemType::from_gpulist(&gpu_list);
+        let gpus: Vec<(usize, bool, GpuType)> = gpu_list
+            .iter()
+            .filter(|(_, gpu)| gpu.device.is_available())
+            .map(|(id, gpu)| {
+                (
+                    *id,
+                    gpu.device.is_default(),
+                    gpu.device.device_type().clone(),
+                )
+            })
+            .collect();
+
+        let system_type = SystemType::from_gpus(&gpus);
 
         match mode {
             // Integrated and Smart modes only work on hybrid setups with a offload discrete GPU
@@ -215,7 +232,6 @@ impl ModeInterface {
         let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
         match self.internal_set_mode(mode, true).await {
             Ok(()) => Ok(()),
-            Err(CardwireError::FdoError(err)) => Err(err),
             Err(err) => Err(fdo::Error::Failed(err.to_string())),
         }
     }
@@ -235,9 +251,21 @@ impl ModeInterface {
     pub async fn available_modes(&self) -> fdo::Result<Vec<Modes>> {
         let system_type = {
             let gpu_list = self.gpu_list.read().await;
+            let gpus: Vec<(usize, bool, GpuType)> = gpu_list
+                .iter()
+                .filter(|(_, gpu)| gpu.device.is_available())
+                .map(|(id, gpu)| {
+                    (
+                        *id,
+                        gpu.device.is_default(),
+                        gpu.device.device_type().clone(),
+                    )
+                })
+                .collect();
 
-            SystemType::from_gpulist(&gpu_list)
+            SystemType::from_gpus(&gpus)
         };
+
         Ok(match system_type {
             SystemType::Laptop => {
                 vec![Modes::Integrated, Modes::Hybrid, Modes::Smart]

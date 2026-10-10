@@ -1,0 +1,21 @@
+[package]
+name = "cardwire-config"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+log.workspace = true
+thiserror.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+rusqlite.workspace = true
+tokio.workspace = true
+
+cardwire-core = { path = "../cardwire-core" }
+cardwire-analyzer = { path = "../cardwire-analyzer" }
+cardwire-dbus = { path = "../cardwire-dbus" }

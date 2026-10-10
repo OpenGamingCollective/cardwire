@@ -1,0 +1,231 @@
+//! helper to manage cardwired configs, include the user config .toml, and the .json states like
+//! gpu, mode or pci
+use cardwire_core::{gpu::models::GpuDevice, modes::types::Modes};
+use log::{info, warn};
+use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, fs};
+
+use crate::{
+    common::{FileKind, create_default_file}, errors::{ConfigError, Result}
+};
+
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
+pub struct CardwireModeState {
+    mode: Modes,
+}
+impl Default for CardwireModeState {
+    fn default() -> Self {
+        CardwireModeState {
+            mode: Modes::Hybrid,
+        }
+    }
+}
+
+impl CardwireModeState {
+    /// Read a mode.json file and return into a struct
+    pub fn build() -> Result<CardwireModeState> {
+        let mode_file = format!("{}/mode.json", crate::STATE_PATH);
+
+        let mode = Self::parse_mode_state(&mode_file);
+        if let Err(e) = mode {
+            warn!("mode.json could not get parsed {e}, overwriting with default one...");
+            Self::create_default_mode()?;
+        }
+        let mode = Self::parse_mode_state(&mode_file)?;
+        Ok(mode)
+    }
+    fn parse_mode_state(mode_file: &str) -> Result<CardwireModeState> {
+        if !(fs::exists(mode_file)?) {
+            Self::create_default_mode()?;
+        }
+        let mode_state = fs::read_to_string(mode_file)?;
+        let string_content: CardwireModeState = serde_json::from_str(&mode_state)
+            .map_err(|err| ConfigError::CardwireStateError(String::from("mode.json"), err))?;
+        Ok(string_content)
+    }
+    fn create_default_mode() -> Result<()> {
+        create_default_file(FileKind::ModeState)?;
+        Ok(())
+    }
+    pub fn mode(&self) -> Modes {
+        self.mode
+    }
+    /// Update the mode in daemon state, persisting it to mode_state.json only when `save` is true
+    pub async fn save_state(&mut self, new_mode: Modes, save: bool) -> Result<()> {
+        // Save to daemon state
+        self.mode = new_mode;
+        // Save the whole state into the json
+        if save {
+            let state_file = serde_json::to_string_pretty(&self)
+                .map_err(|err| ConfigError::CardwireStateError(String::from("mode.json"), err))?;
+            tokio::fs::write(format!("{}/mode.json", crate::STATE_PATH), state_file).await?;
+        }
+        Ok(())
+    }
+}
+
+// GPU PART
+// This is the easiest way i found to have a good looking json, might change later
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
+pub struct CardwireGpuState {
+    gpu: BTreeMap<String, CardwireGpuUnit>,
+}
+impl Default for CardwireGpuState {
+    fn default() -> Self {
+        let mut map: BTreeMap<String, CardwireGpuUnit> = BTreeMap::new();
+        map.insert("Null".to_string(), CardwireGpuUnit::default());
+        Self { gpu: map }
+    }
+}
+#[derive(Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct CardwireGpuUnit {
+    block: bool,
+}
+
+impl CardwireGpuState {
+    /// Build a CardwireGpuState struct
+    pub fn build() -> Result<CardwireGpuState> {
+        let state_file = format!("{}/gpu_state.json", crate::STATE_PATH);
+
+        let gpu_hash = Self::parse_gpu_state(&state_file);
+        if let Err(e) = gpu_hash {
+            warn!("gpu_hash.json could not get parsed {e}, overwriting with default one...");
+            Self::create_default_state()?;
+        }
+        let gpu_hash = Self::parse_gpu_state(&state_file)?;
+        let gpu_state = CardwireGpuState { gpu: gpu_hash };
+        Ok(gpu_state)
+    }
+    // Parse directly into CardwireGpuState
+    fn parse_gpu_state(state_file: &str) -> Result<BTreeMap<String, CardwireGpuUnit>> {
+        if !(fs::exists(state_file)?) {
+            Self::create_default_state()?;
+        }
+        let gpu_state = fs::read_to_string(state_file)?;
+
+        let content: BTreeMap<String, CardwireGpuUnit> = serde_json::from_str(&gpu_state)
+            .map_err(|err| ConfigError::CardwireStateError(String::from("gpu_state.json"), err))?;
+        Ok(content)
+    }
+    /// Create default gpu_state.json, including folders if missing
+    fn create_default_state() -> Result<()> {
+        create_default_file(FileKind::GpuState)?;
+        Ok(())
+    }
+    /// Save the new state into the daemon and to the gpu_state.json file
+    pub async fn save_state(&mut self, gpu: &GpuDevice, state: bool) -> Result<()> {
+        // Prevent overwriting default config if it's not replaceable
+        if self.gpu.contains_key("Null") {
+            info!("detected default gpu_state file, overwriting it...");
+            self.gpu.clear();
+        }
+        // Save to daemon state
+        self.gpu.insert(
+            gpu.pci.pci_address().to_string(),
+            CardwireGpuUnit { block: state },
+        );
+        // Save the whole hashmap into json
+        let state_file = serde_json::to_string_pretty(&self.gpu)
+            .map_err(|err| ConfigError::CardwireStateError(String::from("mode.json"), err))?;
+        tokio::fs::write(format!("{}/gpu_state.json", crate::STATE_PATH), state_file).await?;
+        Ok(())
+    }
+    /// return true if it was generated by default func
+    pub fn is_default_state(&self) -> bool {
+        self.gpu.contains_key("Null")
+    }
+    /// search key in gpu hashmap,
+    pub fn gpu_block_state(&self, pci: &str) -> bool {
+        match self.gpu.get_key_value(pci) {
+            Some(value) => value.1.block,
+            None => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /*
+        CardwireModeState
+    */
+
+    #[test]
+    fn test_mode_state_default_is_hybrid() {
+        let state = CardwireModeState::default();
+        assert_eq!(state.mode(), Modes::Hybrid);
+    }
+
+    #[test]
+    fn test_mode_state_json_roundtrip() {
+        let state = CardwireModeState::default();
+        let json = serde_json::to_string_pretty(&state).unwrap();
+        let parsed: CardwireModeState = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.mode(), state.mode());
+    }
+
+    #[test]
+    fn test_mode_state_json_parse_with_integrated_mode() {
+        let json = r#"{"mode":"integrated"}"#;
+        let parsed: CardwireModeState = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.mode(), Modes::Integrated);
+    }
+
+    #[test]
+    fn test_mode_state_json_parse_empty_uses_defaults() {
+        let json = "{}";
+        let parsed: CardwireModeState = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.mode(), Modes::Hybrid);
+    }
+
+    /*
+        CardwireGpuState
+    */
+
+    #[test]
+    fn test_gpu_state_default_contains_null() {
+        let state = CardwireGpuState::default();
+        assert!(state.is_default_state());
+    }
+
+    #[test]
+    fn test_gpu_state_is_default_state_false_after_custom_data() {
+        let json = r#"{"0000:01:00.0":{"block":true}}"#;
+        let gpu: BTreeMap<String, CardwireGpuUnit> = serde_json::from_str(json).unwrap();
+        let state = CardwireGpuState { gpu };
+        assert!(!state.is_default_state());
+    }
+
+    #[test]
+    fn test_gpu_state_gpu_block_state_returns_false_for_missing_key() {
+        let state = CardwireGpuState::default();
+        assert!(!state.gpu_block_state("0000:99:00.0"));
+    }
+
+    #[test]
+    fn test_gpu_state_gpu_block_state_returns_correct_value() {
+        let json = r#"{"0000:01:00.0":{"block":true},"0000:02:00.0":{"block":false}}"#;
+        let gpu: BTreeMap<String, CardwireGpuUnit> = serde_json::from_str(json).unwrap();
+        let state = CardwireGpuState { gpu };
+        assert!(state.gpu_block_state("0000:01:00.0"));
+        assert!(!state.gpu_block_state("0000:02:00.0"));
+    }
+
+    #[test]
+    fn test_gpu_unit_default_block_is_false() {
+        let unit = CardwireGpuUnit::default();
+        assert!(!unit.block);
+    }
+
+    #[test]
+    fn test_gpu_state_json_roundtrip() {
+        let state = CardwireGpuState::default();
+        let json = serde_json::to_string_pretty(&state.gpu).unwrap();
+        let parsed: BTreeMap<String, CardwireGpuUnit> = serde_json::from_str(&json).unwrap();
+        assert!(parsed.contains_key("Null"));
+    }
+}

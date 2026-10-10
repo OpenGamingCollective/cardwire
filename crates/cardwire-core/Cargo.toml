@@ -1,0 +1,20 @@
+[package]
+name = "cardwire-core"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+zbus.workspace = true
+thiserror.workspace = true
+log.workspace = true
+vulkano.workspace = true
+khronos-egl.workspace = true
+libdrm_amdgpu_sys.workspace = true
+nvml-wrapper.workspace = true
+tokio.workspace = true
+cardwire-ebpf-userspace = { path = "../cardwire-ebpf-userspace" }

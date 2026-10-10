@@ -4,10 +4,15 @@ use std::{
     collections::{BTreeMap, HashMap}, fs, sync::{Arc, OnceLock}
 };
 
-use crate::{
-    Result, core::{
-        env::is_gpu_launchable, gpu::{DbusGpuDevice, GpuDevice, GpuType, is_gpu_active}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
-    }, file::{CardwireGpuState, CardwireModeState}, interface::{Modes, SwitcherooInterface}
+use anyhow::Result;
+use cardwire_config::state::{CardwireGpuState, CardwireModeState};
+use cardwire_dbus::types::DbusGpuDevice;
+
+use crate::interface::SwitcherooInterface;
+use cardwire_core::{
+    gpu::{
+        env::is_gpu_launchable, generic::display::is_gpu_active, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, models::{GpuDevice, GpuType}, procfs::lsof_read
+    }, modes::types::Modes, pci::models::PciDevice
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
 use log::{info, warn};
@@ -265,7 +270,7 @@ impl GpuInterface {
         let mut proc_map: HashMap<String, Vec<String>> = HashMap::new();
 
         async fn read_lsof(path: String) -> fdo::Result<Vec<String>> {
-            tokio::task::spawn_blocking(move || procfs::lsof_read(&path))
+            tokio::task::spawn_blocking(move || lsof_read(&path))
                 .await
                 .map_err(|e| fdo::Error::Failed(e.to_string()))?
                 .map_err(|e| fdo::Error::Failed(e.to_string()))

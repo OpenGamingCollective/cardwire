@@ -749,10 +749,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "cardwire-analyzer"
+version = "0.13.0-alpha.1"
+dependencies = [
+ "cardwire-core",
+ "freedesktop-desktop-entry",
+ "inotify",
+ "log",
+ "serde",
+ "thiserror 2.0.21",
+ "tokio",
+ "xdg",
+ "zbus",
+]
+
+[[package]]
 name = "cardwire-cli"
 version = "0.13.0-alpha.1"
 dependencies = [
  "anyhow",
+ "cardwire-core",
+ "cardwire-dbus",
  "clap",
  "clap_complete",
  "serde",
@@ -762,12 +779,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "cardwire-config"
+version = "0.13.0-alpha.1"
+dependencies = [
+ "cardwire-analyzer",
+ "cardwire-core",
+ "cardwire-dbus",
+ "log",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "toml",
+]
+
+[[package]]
+name = "cardwire-core"
+version = "0.13.0-alpha.1"
+dependencies = [
+ "cardwire-ebpf-userspace",
+ "khronos-egl",
+ "libdrm_amdgpu_sys",
+ "log",
+ "nvml-wrapper",
+ "serde",
+ "thiserror 2.0.21",
+ "tokio",
+ "vulkano",
+ "zbus",
+]
+
+[[package]]
 name = "cardwire-daemon"
 version = "0.13.0-alpha.1"
 dependencies = [
+ "anyhow",
  "aya",
  "aya-log",
+ "cardwire-analyzer",
+ "cardwire-config",
+ "cardwire-core",
+ "cardwire-dbus",
  "cardwire-ebpf-userspace",
+ "cardwire-smart",
  "env_logger",
  "freedesktop-desktop-entry",
  "inotify",
@@ -785,6 +840,15 @@ dependencies = [
  "udev",
  "vulkano",
  "xdg",
+ "zbus",
+]
+
+[[package]]
+name = "cardwire-dbus"
+version = "0.13.0-alpha.1"
+dependencies = [
+ "cardwire-core",
+ "serde",
  "zbus",
 ]
 
@@ -834,6 +898,19 @@ dependencies = [
  "toml",
  "xdg",
  "zbus",
+]
+
+[[package]]
+name = "cardwire-smart"
+version = "0.13.0-alpha.1"
+dependencies = [
+ "aya",
+ "cardwire-analyzer",
+ "cardwire-core",
+ "cardwire-ebpf-userspace",
+ "log",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]

@@ -16,6 +16,8 @@ clap_complete.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
 serde.workspace = true
+cardwire-dbus = { path = "../cardwire-dbus" }
+cardwire-core = { path = "../cardwire-core" }
 
 [[bin]]
 name = "cardwire"

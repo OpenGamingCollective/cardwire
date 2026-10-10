@@ -1,5 +1,6 @@
 //! main lib code of cardwire-ebpf
 mod errors;
+pub mod types;
 
 use std::{fs, path::Path, sync::Arc};
 

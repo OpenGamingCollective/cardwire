@@ -1,4 +1,6 @@
 use aya::maps::{HashMap as AyaHashMap, MapError as AyaMapError};
+use cardwire_config::sql::CardwireDatabase;
+use cardwire_dbus::types::DbusAppMetadata;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use std::{
     collections::HashMap, path::Path, sync::{Arc, OnceLock}
@@ -8,8 +10,6 @@ use tokio::sync::{Mutex, RwLock};
 use zbus::{
     fdo::{self, Error::Failed}, interface, object_server::SignalEmitter
 };
-
-use crate::file::{CardwireDatabase, DbusAppMetadata, GpuPolicy};
 
 #[derive(Clone, Debug)]
 pub struct SmartPolicyInterface {
@@ -167,8 +167,12 @@ impl SmartPolicyInterface {
 
     /// Set the policy of an app using the app_id
     pub async fn set_app_policy(&self, app_id: String, policy: i32) -> Result<(), fdo::Error> {
-        let gpu_policy = GpuPolicy::try_from_i32(policy)
-            .ok_or_else(|| fdo::Error::InvalidArgs(format!("invalid policy: {}", policy)))?;
+        if policy > 2 {
+            return Err(fdo::Error::InvalidArgs(format!(
+                "invalid policy: {}",
+                policy
+            )));
+        }
 
         if !self.database.cache.read().await.contains_key(&app_id) {
             return Err(fdo::Error::UnknownObject(format!(
@@ -186,7 +190,7 @@ impl SmartPolicyInterface {
             .map_err(|e| fdo::Error::Failed(e.to_string()))?
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
-        self.database.cache.write().await.insert(app_id, gpu_policy);
+        self.database.cache.write().await.insert(app_id, policy);
 
         Ok(())
     }

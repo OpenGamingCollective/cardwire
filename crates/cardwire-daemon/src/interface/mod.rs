@@ -11,7 +11,8 @@ pub use config::ConfigInterface;
 pub use context::DaemonContext;
 pub use debug::DebugInterface;
 pub use gpu::{GpuInterface, GpuInterfaceSignals};
+#[allow(unused)]
 pub use logger::{LogEntry, LoggerInterface, LoggerInterfaceSignals};
-pub use mode::{ModeInterface, Modes};
+pub use mode::ModeInterface;
 pub use smart::SmartPolicyInterface;
 pub use switcheroo::SwitcherooInterface;
