@@ -762,11 +762,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "cardwire-config"
+version = "0.13.0-alpha.1"
+dependencies = [
+ "cardwire-core",
+ "log",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "toml",
+ "zbus",
+]
+
+[[package]]
+name = "cardwire-core"
+version = "0.13.0-alpha.1"
+dependencies = [
+ "cardwire-ebpf-userspace",
+ "khronos-egl",
+ "libdrm_amdgpu_sys",
+ "log",
+ "nvml-wrapper",
+ "serde",
+ "thiserror 2.0.21",
+ "tokio",
+ "vulkano",
+ "zbus",
+]
+
+[[package]]
 name = "cardwire-daemon"
 version = "0.13.0-alpha.1"
 dependencies = [
+ "anyhow",
  "aya",
  "aya-log",
+ "cardwire-config",
+ "cardwire-core",
  "cardwire-ebpf-userspace",
  "env_logger",
  "freedesktop-desktop-entry",
@@ -785,6 +819,15 @@ dependencies = [
  "udev",
  "vulkano",
  "xdg",
+ "zbus",
+]
+
+[[package]]
+name = "cardwire-dbus"
+version = "0.13.0-alpha.1"
+dependencies = [
+ "cardwire-core",
+ "serde",
  "zbus",
 ]
 

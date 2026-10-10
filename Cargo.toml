@@ -6,6 +6,9 @@ members = [
     "crates/cardwire-ebpf",
     "crates/cardwire-ebpf-userspace",
     "crates/cardwire-gui",
+    "crates/cardwire-core",
+    "crates/cardwire-dbus",
+    "crates/cardwire-config",
 ]
 
 default-members = [
@@ -13,6 +16,9 @@ default-members = [
     "crates/cardwire-cli",
     "crates/cardwire-ebpf-userspace",
     "crates/cardwire-gui",
+    "crates/cardwire-core",
+    "crates/cardwire-dbus",
+    "crates/cardwire-config",
 ]
 
 [workspace.package]
