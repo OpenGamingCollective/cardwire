@@ -1,6 +1,7 @@
 //! Functions for static analysis, contains:
 //! - FDO desktop entries analysis
 use crate::Result;
+use cardwire_config::sql::AppMetadata;
 use freedesktop_desktop_entry::{DesktopEntry, get_languages_from_env};
 use inotify::{EventMask, Inotify, StreamExt, WatchDescriptor, WatchMask};
 use log::error;
@@ -9,13 +10,6 @@ use std::{
 };
 use tokio::sync::RwLock;
 use xdg::BaseDirectories;
-
-#[derive(Clone, Debug)]
-pub struct AppMetadata {
-    pub display_name: String,
-    pub desktop_file_id: Option<String>,
-    pub icon_name: Option<String>,
-}
 
 /// Return a list of fdo apps present in the system
 pub async fn get_fdo_apps() -> Result<(HashMap<String, AppMetadata>, Vec<PathBuf>)> {

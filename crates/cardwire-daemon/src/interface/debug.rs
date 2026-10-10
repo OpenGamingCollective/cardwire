@@ -1,4 +1,7 @@
-use crate::{file::CardwireConfig, interface::SwitcherooInterface, tasks::watch_power_state};
+use crate::{interface::SwitcherooInterface, tasks::watch_power_state};
+use cardwire_config::{
+    config::CardwireConfig, state::{CardwireGpuState, CardwireModeState}
+};
 use cardwire_core::{
     gpu::{
         enumerator::GpuEnumerator, env::compute_switcheroo_env, inode::exp_nvidia_inodes, models::GpuVendor
@@ -15,7 +18,7 @@ use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    Result, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, ModeInterface}
+    Result, interface::{DaemonContext, GpuInterface, ModeInterface}
 };
 
 #[derive(Clone)]

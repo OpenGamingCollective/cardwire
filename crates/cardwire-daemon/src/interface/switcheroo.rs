@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, HashMap}, sync::{Arc, OnceLock}
 };
 
+use cardwire_config::state::CardwireModeState;
 use cardwire_core::{
     gpu::env::{compute_switcheroo_env, is_gpu_launchable}, modes::types::Modes
 };
@@ -11,7 +12,7 @@ use zbus::{
     interface, object_server::SignalEmitter, zvariant::{self, OwnedValue, Value}
 };
 
-use crate::{file::CardwireModeState, interface::GpuInterface};
+use crate::interface::GpuInterface;
 
 #[derive(Clone)]
 pub struct SwitcherooInterface {

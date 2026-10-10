@@ -31,6 +31,7 @@ inotify.workspace = true
 libdrm_amdgpu_sys.workspace = true
 nvml-wrapper.workspace = true
 cardwire-core = { path = "../cardwire-core" }
+cardwire-config = { path = "../cardwire-config" }
 anyhow.workspace = true
 
 [[bin]]
@@ -48,19 +49,71 @@ extended-description = """\
 depends = "hwdata, dbus, systemd, upower, udev, libgcc-s1, libc6, libudev1, libdrm2, libdrm-amdgpu1"
 
 assets = [
-    ["target/release/cardwired", "usr/bin/", "755"],
-    ["target/release/cardwire", "usr/bin/", "755"],
-    ["target/release/cardwire-gui", "usr/bin/", "755"],
-    ["../../assets/cardwired.service", "usr/lib/systemd/system/", "644"],
-    ["../../assets/99-cardwired.preset", "usr/lib/systemd/system-preset/", "644"],
-    ["../../assets/org.opengamingcollective.cardwire.conf", "usr/share/dbus-1/system.d/", "644"],
-    ["../../assets/cardwire-gui.desktop", "usr/share/applications/", "644"],
-    ["../../assets/org.opengamingcollective.cardwire.metainfo.xml", "usr/share/metainfo/", "644"],
-    ["../../assets/icons/org.opengamingcollective.cardwire.tray.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["../../assets/icons/org.opengamingcollective.cardwire.tray-integrated.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["../../assets/icons/org.opengamingcollective.cardwire.tray-hybrid.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["../../assets/icons/org.opengamingcollective.cardwire.tray-manual.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["../../assets/icons/org.opengamingcollective.cardwire.tray-smart.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    [
+        "target/release/cardwired",
+        "usr/bin/",
+        "755",
+    ],
+    [
+        "target/release/cardwire",
+        "usr/bin/",
+        "755",
+    ],
+    [
+        "target/release/cardwire-gui",
+        "usr/bin/",
+        "755",
+    ],
+    [
+        "../../assets/cardwired.service",
+        "usr/lib/systemd/system/",
+        "644",
+    ],
+    [
+        "../../assets/99-cardwired.preset",
+        "usr/lib/systemd/system-preset/",
+        "644",
+    ],
+    [
+        "../../assets/org.opengamingcollective.cardwire.conf",
+        "usr/share/dbus-1/system.d/",
+        "644",
+    ],
+    [
+        "../../assets/cardwire-gui.desktop",
+        "usr/share/applications/",
+        "644",
+    ],
+    [
+        "../../assets/org.opengamingcollective.cardwire.metainfo.xml",
+        "usr/share/metainfo/",
+        "644",
+    ],
+    [
+        "../../assets/icons/org.opengamingcollective.cardwire.tray.svg",
+        "usr/share/icons/hicolor/scalable/apps/",
+        "644",
+    ],
+    [
+        "../../assets/icons/org.opengamingcollective.cardwire.tray-integrated.svg",
+        "usr/share/icons/hicolor/scalable/apps/",
+        "644",
+    ],
+    [
+        "../../assets/icons/org.opengamingcollective.cardwire.tray-hybrid.svg",
+        "usr/share/icons/hicolor/scalable/apps/",
+        "644",
+    ],
+    [
+        "../../assets/icons/org.opengamingcollective.cardwire.tray-manual.svg",
+        "usr/share/icons/hicolor/scalable/apps/",
+        "644",
+    ],
+    [
+        "../../assets/icons/org.opengamingcollective.cardwire.tray-smart.svg",
+        "usr/share/icons/hicolor/scalable/apps/",
+        "644",
+    ],
 ]
 maintainer-scripts = "../../packages/debian/DEBIAN"
 changelog = "../../packages/debian/changelog"

@@ -1,4 +1,5 @@
 use aya::maps::{HashMap as AyaHashMap, MapError as AyaMapError};
+use cardwire_config::sql::{CardwireDatabase, DbusAppMetadata, GpuPolicy};
 use cardwire_ebpf_userspace::EbpfBlocker;
 use std::{
     collections::HashMap, path::Path, sync::{Arc, OnceLock}
@@ -8,8 +9,6 @@ use tokio::sync::{Mutex, RwLock};
 use zbus::{
     fdo::{self, Error::Failed}, interface, object_server::SignalEmitter
 };
-
-use crate::file::{CardwireDatabase, DbusAppMetadata, GpuPolicy};
 
 #[derive(Clone, Debug)]
 pub struct SmartPolicyInterface {

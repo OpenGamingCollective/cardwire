@@ -1,11 +1,12 @@
 //! Define the mode dbus
-use crate::{
-    file::{CardwireConfig, CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface}
-};
+use crate::interface::{DaemonContext, GpuInterface, SwitcherooInterface};
 
 use anyhow::Result;
 
 use aya::maps::Array as AyaArray;
+use cardwire_config::{
+    config::CardwireConfig, state::{CardwireGpuState, CardwireModeState}
+};
 use cardwire_core::{
     gpu::{
         models::GpuType, vendor_specific::nvidia::{start_nvidia_powerd, stop_nvidia_powerd}

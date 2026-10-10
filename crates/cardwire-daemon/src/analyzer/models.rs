@@ -1,10 +1,11 @@
 use crate::{
     Result, analyzer::{
-        dynamic_analysis::{check_env, get_steam_app_id}, helpers::{get_real_process_name, strip_nix_wrap}, static_analysis::{self, AppMetadata, watch_fdo_folders}
-    }, file::{DbusAppMetadata, GpuPolicy}, interface::{LogEntry, LoggerInterfaceSignals, SmartPolicyInterface}
+        dynamic_analysis::{check_env, get_steam_app_id}, helpers::{get_real_process_name, strip_nix_wrap}, static_analysis::{self, watch_fdo_folders}
+    }, interface::{LogEntry, LoggerInterfaceSignals, SmartPolicyInterface}
 };
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
 use aya_log::EbpfLogger;
+use cardwire_config::sql::{AppMetadata, DbusAppMetadata, GpuPolicy};
 use cardwire_ebpf_userspace::EbpfBlocker;
 use log::{Log, debug, error, info, warn};
 use std::{

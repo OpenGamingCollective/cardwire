@@ -1,9 +1,12 @@
 //! Daemon composition root: builds the shared [`DaemonContext`] and every D-Bus interface, owns
 //! startup tasks and background-task futures.
 use crate::{
-    analyzer::CardwireAnalyzer, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
+    analyzer::CardwireAnalyzer, interface::{
         ConfigInterface, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, SmartPolicyInterface, SwitcherooInterface
     }, tasks, whitelist::ALLOWED_PROGRAMS
+};
+use cardwire_config::{
+    config::CardwireConfig, sql::CardwireDatabase, state::{CardwireGpuState, CardwireModeState}
 };
 use cardwire_core::{
     gpu::{enumerator::GpuEnumerator, env::compute_switcheroo_env}, modes::types::Modes, pci::{self, models::PciDevice}

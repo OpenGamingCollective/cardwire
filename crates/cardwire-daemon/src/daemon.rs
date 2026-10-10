@@ -1,6 +1,5 @@
 //! entry point of cardwired
 mod analyzer;
-mod file;
 mod interface;
 mod manager;
 mod tasks;
@@ -14,11 +13,6 @@ use log::info;
 use std::{future::pending, sync::Arc};
 use tokio::task;
 use zbus::connection;
-
-/// Cardwire configuration directory.
-pub const CONFIG_PATH: &str = "/etc/cardwire";
-/// Cardwire state directory.
-pub const STATE_PATH: &str = "/var/lib/cardwire";
 
 #[tokio::main]
 async fn main() -> Result<()> {

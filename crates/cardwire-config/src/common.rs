@@ -2,7 +2,9 @@
 //! gpu, mode or pci
 use std::{collections::BTreeMap, fs, io};
 
-use crate::{config::CardwireConfig, errors::{ConfigError, Result}, state::{CardwireGpuUnit, CardwireModeState}};
+use crate::{
+    config::CardwireConfig, errors::{ConfigError, Result}, state::{CardwireGpuUnit, CardwireModeState}
+};
 
 #[allow(dead_code)]
 pub enum FileKind {
@@ -47,8 +49,8 @@ pub fn create_default_file(kind: FileKind) -> Result<()> {
             // Default gpu_state for cardwire
             let mut gpu_hash: BTreeMap<String, CardwireGpuUnit> = BTreeMap::new();
             gpu_hash.insert("Null".to_string(), CardwireGpuUnit::default());
-            let default_gpu_state = serde_json::to_string_pretty(&gpu_hash)
-                .map_err(ConfigError::DefaultStateError)?;
+            let default_gpu_state =
+                serde_json::to_string_pretty(&gpu_hash).map_err(ConfigError::DefaultStateError)?;
             // write
             fs::write(
                 format!("{}/gpu_state.json", crate::STATE_PATH),
