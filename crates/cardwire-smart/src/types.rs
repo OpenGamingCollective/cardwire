@@ -31,6 +31,7 @@ impl GpuPolicy {
         }
     }
 
+    #[allow(unused)]
     pub fn try_from_i32(val: i32) -> Option<Self> {
         match val {
             0 => Some(GpuPolicy::Blocked),
@@ -214,6 +215,8 @@ impl SmartAnalyzer {
 
         // App wasnt in DB, try to discover it using the xdg desktop entries
 
+        let _ = self.discover_app(comm).await;
+
         None
     }
 
@@ -241,6 +244,8 @@ impl SmartAnalyzer {
         // TODO: add support for binaries that do not have a desktop entry
         if let Some(metadata) = xdg_entries.get(&comm) {
             let metadata = metadata.clone();
+            // TODO: Refactor error handling in that crate
+            let _ = self.insert_to_db(&comm, metadata).await;
             // app was discovered, return now
             return Ok(());
         }
@@ -252,6 +257,7 @@ impl SmartAnalyzer {
                 desktop_file_id: None,
                 icon_name: Some(format!("steam_app_{}", app_id)),
             };
+            let _ = self.insert_to_db(&comm, metadata).await;
             return Ok(());
         }
 

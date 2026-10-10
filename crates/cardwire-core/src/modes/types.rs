@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt, sync::Arc};
+use std::fmt;
 
 #[derive(Deserialize, Serialize, PartialEq, zbus::zvariant::Type, Clone, Copy, Default, Debug)]
 #[serde(rename_all = "snake_case")]

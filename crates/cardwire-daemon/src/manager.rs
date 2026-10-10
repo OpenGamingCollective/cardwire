@@ -230,7 +230,7 @@ impl DaemonManager {
         let db_cache = self.smart_policy_interface.database.cache.clone();
         let tx = self.smart_policy_interface.database.tx.clone();
 
-        let new_app_signal = Arc::clone(&self.smart_policy_interface.new_app_signal);
+        let _new_app_signal = Arc::clone(&self.smart_policy_interface.new_app_signal);
 
         async move {
             let cardwire_analyzer =
