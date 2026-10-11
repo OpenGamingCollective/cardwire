@@ -8,7 +8,7 @@ use aya::{
     Btf, Ebpf, maps::{Array, HashMap, MapError, RingBuf}, programs::{Lsm, TracePoint}
 };
 use aya_log::EbpfLogger;
-use log::{Log, error, info, warn};
+use log::{Log, debug, error, info, warn};
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::RwLock
 };
@@ -150,12 +150,15 @@ impl EbpfBlocker {
             }
             Err(err) => {
                 // If we cannot load the program, it usually mean the kernel lockdown is enabled
-                let lockdown = is_lockdown_enabled();
-                warn!(
-                    "Failed to load sys_exit_getdents64. Lockdown status: {}",
-                    lockdown
-                );
-                warn!("{}", err);
+                if is_lockdown_enabled() {
+                    // Expected under lockdown, the verifier log is only noise then
+                    warn!(
+                        "Kernel lockdown is enabled (e.g. by Secure Boot), sys_exit_getdents64 cannot be loaded: blocked GPUs will still show up in directory listings"
+                    );
+                    debug!("{}", err);
+                } else {
+                    warn!("Failed to load sys_exit_getdents64: {}", err);
+                }
                 warn!("falling back to a weakened cardwired...");
             }
         };
