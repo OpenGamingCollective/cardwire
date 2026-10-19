@@ -63,3 +63,20 @@ sudo systemctl restart nvidia-powerd.service
 
 > [!NOTE]
 > This was fixed in cardwire 0.12.1, cardwired now stop and start nvidia-powerd on mode switch instead of a naive restart
+
+## Secure Boot and kernel lockdown
+
+With Secure Boot, most distributions enable kernel lockdown. Check it with:
+
+```bash
+cat /sys/kernel/security/lockdown
+```
+
+If `[integrity]` or `[confidentiality]` is selected, the kernel refuses the eBPF program that hides blocked GPUs from directory listings, and cardwired logs:
+
+```
+Kernel lockdown is enabled (e.g. by Secure Boot), sys_exit_getdents64 cannot be loaded: blocked GPUs will still show up in directory listings
+falling back to a weakened cardwired...
+```
+
+Blocking still works: apps cannot open a blocked GPU, and it can still power down. The GPU's sysfs entries stay visible but cannot be read, so for example `lspci` shows a blocked GPU as `Unassigned class [ffff]: Illegal Vendor ID Device ffff`. This is expected and harmless.
