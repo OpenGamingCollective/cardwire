@@ -24,9 +24,9 @@ impl fmt::Display for CliMode {
     }
 }
 
-impl Into<Modes> for CliMode {
-    fn into(self) -> Modes {
-        match self {
+impl From<CliMode> for Modes {
+    fn from(value: CliMode) -> Self {
+        match value {
             CliMode::Integrated => Modes::Integrated,
             CliMode::Hybrid => Modes::Hybrid,
             CliMode::Manual => Modes::Manual,

@@ -13,7 +13,7 @@ pub enum SystemType {
 
 impl SystemType {
     /// Get the SystemType from a vec of available gpus (id, default, device_type)
-    pub fn from_gpus(gpus: &Vec<(usize, bool, GpuType)>) -> Self {
+    pub fn from_gpus(gpus: &[(usize, bool, GpuType)]) -> Self {
         // Directly assign system with less or more than 2 GPUs
         if gpus.len() != 2 {
             Self::Manual

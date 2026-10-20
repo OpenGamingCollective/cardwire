@@ -115,7 +115,7 @@ impl SmartAnalyzer {
         let cloned_xdg_list = shared_self.xdg_entries.xdg_list.clone();
 
         // Task that watch the xdg folders for new desktop entries
-        task::spawn(async move { watch_fdo_folders(cloned_xdg_folders, cloned_xdg_list) });
+        task::spawn(async move { watch_fdo_folders(cloned_xdg_folders, cloned_xdg_list).await });
 
         // smart task is the only one locking it, it shouldn't dead lock
         let mut exec_ring = exec_arc.lock().await;
@@ -240,7 +240,7 @@ impl SmartAnalyzer {
         let xdg_entries = self.xdg_entries.xdg_list.read().await;
 
         // strip the nix wrapper
-        let comm = strip_nix_wrap(&comm);
+        let comm = strip_nix_wrap(comm);
 
         // TODO: add support for binaries that do not have a desktop entry
         if let Some(metadata) = xdg_entries.get(&comm) {
@@ -320,22 +320,22 @@ impl SmartAnalyzer {
     }
 }
 
-fn get_cardwire_envs(environ: &Vec<u8>) -> Option<EvaluationResult> {
-    if let Some(allow) = check_env("CARDWIRE_ALLOW", &environ) {
+fn get_cardwire_envs(environ: &[u8]) -> Option<EvaluationResult> {
+    if let Some(allow) = check_env("CARDWIRE_ALLOW", environ) {
         return Some(EvaluationResult {
             do_action: allow == 1,
             policy: GpuPolicy::Allowed,
             gpu_id: 0,
         });
     }
-    if let Some(value) = check_env("CARDWIRE_FORCE_DGPU", &environ) {
+    if let Some(value) = check_env("CARDWIRE_FORCE_DGPU", environ) {
         return Some(EvaluationResult {
             do_action: value == 1,
             policy: GpuPolicy::Forced,
             gpu_id: value,
         });
     }
-    if let Some(value) = check_env("CARDWIRE_FORCE_GPU", &environ) {
+    if let Some(value) = check_env("CARDWIRE_FORCE_GPU", environ) {
         return Some(EvaluationResult {
             do_action: true,
             policy: GpuPolicy::Forced,

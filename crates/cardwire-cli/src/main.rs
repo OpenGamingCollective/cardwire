@@ -5,7 +5,7 @@ mod display;
 
 use std::{collections::BTreeMap, process::Stdio};
 
-use args::{Args, CliMode, Commands, ConfigAction, DebugAction, ManagerAction};
+use args::{Args, Commands, ConfigAction, DebugAction, ManagerAction};
 use cardwire_core::{gpu::models::GpuType, system_type::types::SystemType};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
@@ -62,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Set { mode } => {
             match client.set_mode(mode.into()).await {
                 Ok(_) => println!("Mode has been set to {}", mode),
-                Err(e) => handle_error(e.into()),
+                Err(e) => handle_error(e),
             };
         }
         Commands::Get => {
@@ -104,12 +104,12 @@ async fn main() -> anyhow::Result<()> {
             if action.block {
                 match client.set_block(id, true).await {
                     Ok(_) => println!("GPU {} has been blocked", id),
-                    Err(e) => handle_error(e.into()),
+                    Err(e) => handle_error(e),
                 };
             } else if action.unblock {
                 match client.set_block(id, false).await {
                     Ok(_) => println!("GPU {} has been unblocked", id),
-                    Err(e) => handle_error(e.into()),
+                    Err(e) => handle_error(e),
                 };
             } else if action.lsof {
                 match client.lsof(id).await {
@@ -133,7 +133,7 @@ async fn main() -> anyhow::Result<()> {
             ConfigAction::AutoApplyGpuState { set } => {
                 if let Some(val) = set {
                     if let Err(e) = client.set_auto_apply_gpu_state(val).await {
-                        handle_error(e.into());
+                        handle_error(e);
                     } else {
                         println!("AutoApplyGpuState set to {}", val);
                     }
@@ -147,7 +147,7 @@ async fn main() -> anyhow::Result<()> {
             ConfigAction::ExperimentalNvidiaBlock { set } => {
                 if let Some(val) = set {
                     if let Err(e) = client.set_experimental_nvidia_block(val).await {
-                        handle_error(e.into());
+                        handle_error(e);
                     } else {
                         println!("ExperimentalNvidiaBlock set to {}", val);
                     }
@@ -161,7 +161,7 @@ async fn main() -> anyhow::Result<()> {
             ConfigAction::BatteryAutoSwitch { set } => {
                 if let Some(val) = set {
                     if let Err(e) = client.set_battery_auto_switch(val).await {
-                        handle_error(e.into());
+                        handle_error(e);
                     } else {
                         println!("BatteryAutoSwitch set to {}", val);
                     }
@@ -177,7 +177,7 @@ async fn main() -> anyhow::Result<()> {
                     {
                         match client.set_battery_auto_switch_mode(val.into()).await {
                             Ok(_) => println!("Auto switch mode has been set to {}", val),
-                            Err(e) => handle_error(e.into()),
+                            Err(e) => handle_error(e),
                         };
                     }
                 } else {
@@ -192,7 +192,7 @@ async fn main() -> anyhow::Result<()> {
             ConfigAction::ExternalDisplayAutoSwitch { set } => {
                 if let Some(val) = set {
                     if let Err(e) = client.set_external_display_auto_switch(val).await {
-                        handle_error(e.into());
+                        handle_error(e);
                     } else {
                         println!("ExternalDisplayAutoSwitch set to {}", val);
                     }
@@ -385,7 +385,7 @@ async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::
     let mut map: BTreeMap<usize, display::GpuDevice> = BTreeMap::new();
     let objects = match client.get_gpu_objects().await {
         Ok(objects) => objects,
-        Err(e) => handle_error(e.into()),
+        Err(e) => handle_error(e),
     };
     for (path, interfaces) in objects {
         let path_str = path.as_str();

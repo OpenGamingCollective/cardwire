@@ -5,7 +5,7 @@ use cardwire_dbus::{
     config::CardwireConfigProxy, debug::CardwireDebugProxy, gpus::{CardwireGpuIntProxy, CardwireGpuProxy}, manager::CardwireManagerProxy, mode::CardwireModeProxy, smart::CardwireSmartPolicyProxy, types::{DbusAppMetadata, DbusGpuDevice, DbusPciDevice}
 };
 use zbus::{
-    Connection, Proxy, names::OwnedInterfaceName, proxy::Defaults, zvariant::{OwnedObjectPath, OwnedValue}
+    Connection, Proxy, names::OwnedInterfaceName, zvariant::{OwnedObjectPath, OwnedValue}
 };
 
 use zbus::Result;
@@ -105,6 +105,7 @@ impl<'a> DaemonClient<'a> {
 
     // Smart Policy
 
+    #[allow(unused)]
     pub async fn get_app_policies(&self) -> Result<HashMap<String, DbusAppMetadata>> {
         let proxy = CardwireSmartPolicyProxy::new(self.proxy.connection()).await?;
         proxy.get_app_policies().await
@@ -128,6 +129,7 @@ impl<'a> DaemonClient<'a> {
         proxy.get_device().await
     }
 
+    #[allow(unused)]
     pub async fn block(&self, id: u32) -> zbus::Result<bool> {
         let proxy = CardwireGpuProxy::builder(self.proxy.connection())
             .path(format!("/org/opengamingcollective/cardwire/Gpu/{}", id))?
@@ -168,6 +170,7 @@ impl<'a> DaemonClient<'a> {
         proxy.env().await
     }
 
+    #[allow(unused)]
     pub async fn launchable(&self, id: u32) -> zbus::Result<bool> {
         let proxy = CardwireGpuProxy::builder(self.proxy.connection())
             .path(format!("/org/opengamingcollective/cardwire/Gpu/{}", id))?
