@@ -2,7 +2,7 @@ use cardwire_core::modes::types::Modes;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{create_dir, read_to_string, write}, io, path::Path
+    fs::{create_dir, read_to_string, write}, io::{self, ErrorKind}, path::Path
 };
 
 use crate::{CONFIG_PATH, errors::Result};
@@ -66,8 +66,17 @@ impl CardwireConfig {
                     }
                 };
                 let conf_toml = toml::to_string_pretty(&cardwire_config)?;
-                write(&config_file, conf_toml)?;
-                info!("[CONFIG]: wrote config to {:?}", config_file);
+                match write(&config_file, conf_toml) {
+                    Ok(_) => {
+                        info!("[CONFIG]: wrote config to {:?}", config_file);
+                    }
+                    Err(err) => match err.kind() {
+                        ErrorKind::ReadOnlyFilesystem => {
+                            warn!("[CONFIG]: cannot write to cardwire.toml, FS is RO, skipping...")
+                        }
+                        _ => return Err(err.into()),
+                    },
+                };
                 return Ok(cardwire_config);
             }
             // config exist and it is not the old one
