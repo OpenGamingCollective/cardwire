@@ -782,7 +782,6 @@ dependencies = [
 name = "cardwire-config"
 version = "0.13.0-alpha.1"
 dependencies = [
- "cardwire-analyzer",
  "cardwire-core",
  "cardwire-dbus",
  "log",
