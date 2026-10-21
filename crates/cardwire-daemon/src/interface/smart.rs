@@ -167,7 +167,7 @@ impl SmartPolicyInterface {
 
     /// Set the policy of an app using the app_id
     pub async fn set_app_policy(&self, app_id: String, policy: i32) -> Result<(), fdo::Error> {
-        if policy > 2 {
+        if !(0..=2).contains(&policy) {
             return Err(fdo::Error::InvalidArgs(format!(
                 "invalid policy: {}",
                 policy
