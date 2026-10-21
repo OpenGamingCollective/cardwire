@@ -1,5 +1,10 @@
+#[cfg(feature = "app_metadata")]
 pub mod app_metadata;
+#[cfg(feature = "gpu")]
 pub mod gpu;
+#[cfg(feature = "modes")]
 pub mod modes;
+#[cfg(feature = "pci")]
 pub mod pci;
+#[cfg(feature = "system_type")]
 pub mod system_type;

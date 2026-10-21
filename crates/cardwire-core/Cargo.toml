@@ -7,14 +7,32 @@ repository.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+gpu = ["gpu_enumeration", "pci", "modes"]
+
+gpu_enumeration = [
+    "dep:vulkano",
+    "dep:khronos-egl",
+    "dep:libdrm_amdgpu_sys",
+    "dep:nvml-wrapper",
+]
+
+app_metadata = []
+
+pci = []
+
+system_type = []
+
+modes = []
+
 [dependencies]
 serde.workspace = true
 zbus.workspace = true
 thiserror.workspace = true
 log.workspace = true
-vulkano.workspace = true
-khronos-egl.workspace = true
-libdrm_amdgpu_sys.workspace = true
-nvml-wrapper.workspace = true
+vulkano = { workspace = true, optional = true }
+khronos-egl = { workspace = true, optional = true }
+libdrm_amdgpu_sys = { workspace = true, optional = true }
+nvml-wrapper = { workspace = true, optional = true }
 tokio.workspace = true
 cardwire-ebpf-userspace = { path = "../cardwire-ebpf-userspace" }
