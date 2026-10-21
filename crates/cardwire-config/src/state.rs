@@ -129,7 +129,7 @@ impl CardwireGpuState {
         );
         // Save the whole hashmap into json
         let state_file = serde_json::to_string_pretty(&self.gpu)
-            .map_err(|err| ConfigError::CardwireStateError(String::from("mode.json"), err))?;
+            .map_err(|err| ConfigError::CardwireStateError(String::from("gpu_state.json"), err))?;
         tokio::fs::write(format!("{}/gpu_state.json", crate::STATE_PATH), state_file).await?;
         Ok(())
     }
