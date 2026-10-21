@@ -10,6 +10,7 @@ pub trait CardwireMode {
     #[zbus(property)]
     fn mode(&self) -> zbus::Result<Modes>;
 
+    #[zbus(property)]
     fn set_mode(&self, mode: Modes) -> zbus::Result<()>;
 
     fn available_modes(&self) -> zbus::Result<Vec<Modes>>;
