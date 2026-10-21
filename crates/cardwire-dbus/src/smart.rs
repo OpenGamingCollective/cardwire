@@ -12,6 +12,8 @@ use crate::types::DbusAppMetadata;
 pub trait CardwireSmartPolicy {
     fn get_app_policies(&self) -> Result<HashMap<String, DbusAppMetadata>>;
 
+    fn set_app_policy(&self, app_id: String, policy: i32) -> Result<()>;
+
     fn request_process_access(&self, pid: u32, policy: String, value: u32) -> Result<()>;
 
     fn get_process_status(&self, pid: u32) -> Result<(String, Option<u32>)>;

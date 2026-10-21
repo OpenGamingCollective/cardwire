@@ -35,6 +35,7 @@ pub trait CardwireGpu {
     #[zbus(property)]
     fn block(&self) -> Result<bool>;
 
+    #[zbus(property)]
     fn set_block(&self, state: bool) -> Result<()>;
 
     fn lsof(&self) -> Result<HashMap<String, Vec<String>>>;
