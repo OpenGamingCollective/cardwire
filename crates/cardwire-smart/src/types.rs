@@ -202,7 +202,7 @@ impl SmartAnalyzer {
 
         // Now use cardwire's application policy
 
-        let mut process = comm.to_lowercase();
+        let mut process = strip_nix_wrap(comm).to_lowercase();
 
         // Its easier to use Steam AppId for steam games matching
         if let Some(steam_app_id) = get_steam_app_id(&environ) {
@@ -216,7 +216,7 @@ impl SmartAnalyzer {
 
         // App wasnt in DB, try to discover it using the xdg desktop entries
 
-        let _ = self.discover_app(comm).await;
+        let _ = self.discover_app(&process).await;
 
         None
     }
@@ -239,14 +239,11 @@ impl SmartAnalyzer {
     async fn discover_app(&self, comm: &str) -> Result<()> {
         let xdg_entries = self.xdg_entries.xdg_list.read().await;
 
-        // strip the nix wrapper
-        let comm = strip_nix_wrap(comm);
-
         // TODO: add support for binaries that do not have a desktop entry
-        if let Some(metadata) = xdg_entries.get(&comm) {
+        if let Some(metadata) = xdg_entries.get(comm) {
             let metadata = metadata.clone();
             // TODO: Refactor error handling in that crate
-            let _ = self.insert_to_db(&comm, metadata).await;
+            let _ = self.insert_to_db(comm, metadata).await;
             // app was discovered, return now
             return Ok(());
         }
@@ -258,7 +255,7 @@ impl SmartAnalyzer {
                 desktop_file_id: None,
                 icon_name: Some(format!("steam_app_{}", app_id)),
             };
-            let _ = self.insert_to_db(&comm, metadata).await;
+            let _ = self.insert_to_db(comm, metadata).await;
             return Ok(());
         }
 
