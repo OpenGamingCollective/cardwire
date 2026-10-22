@@ -2,12 +2,13 @@
 
 use std::sync::Arc;
 
+use cardwire_config::config::CardwireConfig;
 use log::{info, warn};
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use zbus::{Connection, Result, proxy};
 
-use crate::{file::CardwireConfig, interface::ModeInterface};
+use crate::interface::ModeInterface;
 
 #[proxy(
     interface = "org.freedesktop.UPower",

@@ -4,12 +4,9 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Ok, Result};
+use cardwire_core::gpu::models::GpuType;
+use cardwire_dbus::types::DbusPciDevice;
 
-use crate::dbus::GpuType;
-// Define the struct here instead of importing from cardwire_core,
-// I want cardwire-cli to be independent of the rest of cardwire
-// This allow other dev to make their own client for cardwire
-// Here the struct are used to parse the json
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug)]
 pub struct GpuDevice {
     pub id: u32,
@@ -25,18 +22,6 @@ pub struct GpuDevice {
     pub launchable: bool,
     pub nvidia_minor: String,
 }
-#[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type)]
-pub struct PciDevice {
-    iommu_group: String,
-    vendor_id: String,
-    device_id: String,
-    vendor_name: String,
-    device_name: String,
-    driver: String,
-    class: String,
-    parent_pci: String,
-    child_pci: String,
-}
 
 /// Take a Map and print it
 pub fn print_devices(gpu_list: BTreeMap<usize, GpuDevice>, is_json: bool) -> Result<()> {
@@ -49,7 +34,7 @@ pub fn print_devices(gpu_list: BTreeMap<usize, GpuDevice>, is_json: bool) -> Res
     Ok(())
 }
 /// Take a Map and print it
-pub fn print_devices_pci(pci_list: BTreeMap<String, PciDevice>) -> Result<()> {
+pub fn print_devices_pci(pci_list: BTreeMap<String, DbusPciDevice>) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&pci_list)?);
     Ok(())
 }
