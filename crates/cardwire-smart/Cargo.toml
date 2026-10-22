@@ -9,9 +9,8 @@ license.workspace = true
 description = "Cardwire task used to process on-the-fly GPU whitelisting"
 
 [dependencies]
-cardwire-core = { path = "../cardwire-core" }
+cardwire-core = { path = "../cardwire-core", features = ["fdo", "process"] }
 cardwire-ebpf-userspace = { path = "../cardwire-ebpf-userspace" }
-cardwire-analyzer = { path = "../cardwire-analyzer" }
 tokio.workspace = true
 aya.workspace = true
 thiserror.workspace = true

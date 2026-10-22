@@ -17,6 +17,15 @@ gpu_enumeration = [
     "dep:nvml-wrapper",
 ]
 
+fdo = [
+    "dep:freedesktop-desktop-entry",
+    "dep:inotify",
+    "dep:xdg",
+    "app_metadata",
+]
+
+process = []
+
 app_metadata = []
 
 pci = []
@@ -36,3 +45,6 @@ libdrm_amdgpu_sys = { workspace = true, optional = true }
 nvml-wrapper = { workspace = true, optional = true }
 tokio.workspace = true
 cardwire-ebpf-userspace = { path = "../cardwire-ebpf-userspace" }
+freedesktop-desktop-entry = { workspace = true, optional = true }
+inotify = { workspace = true, optional = true }
+xdg = { workspace = true, optional = true }

@@ -9,7 +9,6 @@ members = [
     "crates/cardwire-core",
     "crates/cardwire-dbus",
     "crates/cardwire-config",
-    "crates/cardwire-analyzer",
     "crates/cardwire-smart",
 ]
 
@@ -21,7 +20,6 @@ default-members = [
     "crates/cardwire-core",
     "crates/cardwire-dbus",
     "crates/cardwire-config",
-    "crates/cardwire-analyzer",
     "crates/cardwire-smart",
 ]
 

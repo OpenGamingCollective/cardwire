@@ -1,7 +1,6 @@
 use std::io;
 
-use cardwire_analyzer::errors::AnalyzerError;
-use cardwire_core::app_metadata::types::AppMetadata;
+use cardwire_core::{app_metadata::types::AppMetadata, fdo::errors::FdoError};
 use cardwire_ebpf_userspace::CardwireEbpfError;
 use thiserror::Error;
 use tokio::sync::{mpsc::error::SendError, oneshot::error::RecvError};
@@ -17,8 +16,8 @@ pub enum SmartAnalyzerError {
     #[error("eBPF error: {0}")]
     CardwireEbpfError(#[from] CardwireEbpfError),
 
-    #[error("Analyzer error: {0}")]
-    AnalyzerError(#[from] AnalyzerError),
+    #[error("FDO error: {0}")]
+    FdoError(#[from] FdoError),
 
     #[error("IO Error: {0}")]
     Io(#[from] io::Error),

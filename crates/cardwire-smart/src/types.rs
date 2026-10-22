@@ -3,10 +3,11 @@ use std::{
 };
 
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
-use cardwire_analyzer::{
-    dynamic::{check_env, get_steam_app_id, read_process_environ}, helpers::{get_real_process_name, strip_nix_wrap}, r#static::{get_fdo_apps, watch_fdo_folders}
+use cardwire_core::{
+    app_metadata::types::AppMetadata, fdo::{fdo_entries::get_fdo_apps, tasks::watch_fdo_folders}, process::process::{
+        check_env, get_real_process_name, get_steam_app_id, read_proc_cmdline, read_proc_environ, strip_nix_wrap
+    }
 };
-use cardwire_core::app_metadata::types::AppMetadata;
 use cardwire_ebpf_userspace::{EbpfBlocker, types::ExecEvent};
 use log::{error, info, warn};
 use tokio::{
@@ -151,7 +152,12 @@ impl SmartAnalyzer {
         }
         drop(pid_map);
 
-        let comm = match get_real_process_name(event.pid) {
+        let cmdline = match read_proc_cmdline(event.pid) {
+            Ok(cmdline) => cmdline,
+            Err(_) => return,
+        };
+
+        let comm = match get_real_process_name(&cmdline) {
             Some(name) => name,
             None => return,
         };
@@ -182,7 +188,7 @@ impl SmartAnalyzer {
 
     /// Evaluate if the process should be blocked, allowed or forced
     async fn evaluate_process(&self, pid: u32, comm: &str, mode: u8) -> Option<EvaluationResult> {
-        let environ = match read_process_environ(pid) {
+        let environ = match read_proc_environ(pid) {
             Ok(b) => b,
             Err(_) => return None,
         };

@@ -749,21 +749,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cardwire-analyzer"
-version = "0.13.0-alpha.1"
-dependencies = [
- "cardwire-core",
- "freedesktop-desktop-entry",
- "inotify",
- "log",
- "serde",
- "thiserror 2.0.21",
- "tokio",
- "xdg",
- "zbus",
-]
-
-[[package]]
 name = "cardwire-cli"
 version = "0.13.0-alpha.1"
 dependencies = [
@@ -798,6 +783,8 @@ name = "cardwire-core"
 version = "0.13.0-alpha.1"
 dependencies = [
  "cardwire-ebpf-userspace",
+ "freedesktop-desktop-entry",
+ "inotify",
  "khronos-egl",
  "libdrm_amdgpu_sys",
  "log",
@@ -806,6 +793,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "vulkano",
+ "xdg",
  "zbus",
 ]
 
@@ -816,7 +804,6 @@ dependencies = [
  "anyhow",
  "aya",
  "aya-log",
- "cardwire-analyzer",
  "cardwire-config",
  "cardwire-core",
  "cardwire-dbus",
@@ -904,7 +891,6 @@ name = "cardwire-smart"
 version = "0.13.0-alpha.1"
 dependencies = [
  "aya",
- "cardwire-analyzer",
  "cardwire-core",
  "cardwire-ebpf-userspace",
  "log",
