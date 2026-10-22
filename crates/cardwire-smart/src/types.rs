@@ -4,7 +4,7 @@ use std::{
 
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
 use cardwire_core::{
-    app_metadata::types::AppMetadata, fdo::{fdo_entries::get_fdo_apps, tasks::watch_fdo_folders}, process::process::{
+    app_metadata::types::AppMetadata, fdo::{fdo_entries::get_fdo_apps, tasks::watch_fdo_folders}, process::{
         check_env, get_real_process_name, get_steam_app_id, read_proc_cmdline, read_proc_environ, strip_nix_wrap
     }
 };
