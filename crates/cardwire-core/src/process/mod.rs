@@ -1,4 +1,5 @@
 pub mod errors;
+#[allow(clippy::module_inception)]
 mod process;
 
 pub use process::{
