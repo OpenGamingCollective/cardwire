@@ -136,6 +136,7 @@ mod tests {
         vendor: &str,
         driver: &str,
         blocked: bool,
+        additional_properties: HashMap<String, OwnedValue>,
     ) -> DisplayGpuDevice {
         DisplayGpuDevice {
             id,
@@ -148,7 +149,7 @@ mod tests {
             vendor: vendor.to_string(),
             driver: driver.to_string(),
             blocked,
-            additional_properties: HashMap::default(),
+            additional_properties: additional_properties,
         }
     }
 
@@ -166,8 +167,11 @@ mod tests {
                 "Intel",
                 "xe",
                 false,
+                HashMap::default(),
             ),
         );
+        let mut prop: HashMap<String, OwnedValue> = HashMap::default();
+        prop.insert("nvidia_minor".into(), OwnedValue::from(0));
         map.insert(
             1,
             make_gpu(
@@ -179,6 +183,7 @@ mod tests {
                 "Nvidia",
                 "nouveau",
                 true,
+                prop,
             ),
         );
 
@@ -188,6 +193,12 @@ mod tests {
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[&0].name, "Intel UHD");
         assert!(parsed[&1].blocked);
+        assert!(
+            parsed[&1]
+                .additional_properties
+                .get("nvidia_minor")
+                .is_some()
+        )
     }
 
     #[test]
@@ -208,6 +219,7 @@ mod tests {
             "AMD",
             "amdgpu",
             false,
+            HashMap::default(),
         );
         let json = serde_json::to_string(&gpu).unwrap();
         let parsed: DisplayGpuDevice = serde_json::from_str(&json).unwrap();
