@@ -122,9 +122,8 @@ impl SmartAnalyzer {
         let mut exec_ring = exec_arc.lock().await;
 
         loop {
-            if let Ok(mut guard) = exec_ring.ready_mut(Interest::READABLE).await
-                && guard.ready().is_readable()
-            {
+            let mut guard = exec_ring.ready_mut(Interest::READABLE).await?;
+            if guard.ready().is_readable() {
                 while let Some(item) = guard.get_inner_mut().next() {
                     match ExecEvent::from_item(item) {
                         Some(event) => {
