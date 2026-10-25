@@ -6,11 +6,11 @@ mod display;
 use std::{collections::BTreeMap, process::Stdio};
 
 use args::{Args, Commands, ConfigAction, DebugAction, ManagerAction};
-use cardwire_core::{gpu::models::GpuType, system_type::types::SystemType};
+use cardwire_core::{gpu::models::GpuType, modes::types::Modes, system_type::types::SystemType};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
 
-use crate::display::print_devices_pci;
+use crate::display::{DisplayGpuDevice, print_devices_pci};
 
 const BIN_NAME: &str = "cardwire";
 
@@ -242,51 +242,87 @@ async fn main() -> anyhow::Result<()> {
 
             available_gpu.retain(|_, gpu| gpu.device_type != GpuType::Unavailable);
 
-            let target_gpu = if let Some(gpu_id) = gpu {
-                let target = available_gpu.get(&(gpu_id as usize));
-                if let Some(gpu) = target
-                    && !gpu.launchable
-                {
-                    let reason = if gpu.blocked {
-                        "it is blocked in the current mode"
-                    } else {
-                        "the daemon reports it as unavailable for launching"
-                    };
-                    return Err(anyhow::anyhow!(
-                        "GPU {} ({}) cannot be launched on: {reason};",
-                        gpu.id,
-                        gpu.name
-                    ));
-                }
-                target
-            // No gpu specified
-            } else {
-                available_gpu
-                    .retain(|_, gpu| gpu.device_type != GpuType::Unavailable && gpu.launchable);
-                let available_gpus: Vec<(usize, bool, GpuType)> = available_gpu
-                    .iter()
-                    .map(|(id, gpu)| (*id, gpu.default, gpu.device_type.clone()))
-                    .collect();
+            let available_gpus: Vec<(usize, bool, GpuType)> = available_gpu
+                .iter()
+                .map(|(id, gpu)| (*id, gpu.default, gpu.device_type.clone()))
+                .collect();
 
-                let system_type = SystemType::from_gpus(&available_gpus);
+            let mode = client.get_mode().await?;
+
+            let system_type = SystemType::from_gpus(&available_gpus);
+
+            let target_gpu = {
                 match system_type {
-                    // 2 GPUs, one iGPU and one dGPU
-                    SystemType::Laptop => available_gpu
-                        .iter()
-                        .find(|(_, gpu)| !gpu.default && gpu.device_type == GpuType::Discrete),
-                    // 1 GPU or 3+ GPUs, get in this priority:
-                    // 0. Default Discrete GPU
-                    // 1. non-Default discrete GPU
-                    // 2. Others
-                    SystemType::Manual => available_gpu.iter().max_by_key(|(_, gpu)| {
-                        (
-                            gpu.default && gpu.device_type == GpuType::Discrete,
-                            gpu.device_type == GpuType::Discrete,
-                            gpu.default,
-                        )
-                    }),
+                    SystemType::Laptop => {
+                        // Check if the user specified a GPU and if the mode allows its usage
+                        // If the GPU isnt blocked OR the mode is smart, in smart mode, the dGPU is
+                        // marked as blocked, but launching an app on it is possible
+                        if let Some(user_gpu_request) = gpu
+                            && let Some(user_gpu) = available_gpu
+                                .get(&(user_gpu_request as usize))
+                                .filter(|g| !g.blocked || mode == Modes::Smart)
+                        {
+                            Some(user_gpu)
+                        } else {
+                            if gpu.is_some() {
+                                // GPU does not exists or blocked
+                                eprintln!(
+                                    "[CARDWIRE]: The requested GPU couldn't be used to launch... falling back to automatic selection"
+                                )
+                            }
+                            // We know it's a laptop (2 GPUs, one iGPU and one dGPU), tho that
+                            // SystemType could get a rewrite
+                            #[allow(clippy::wildcard_in_or_patterns)]
+                            match mode {
+                                // Use the GPU that isn't default and is Discrete
+                                Modes::Hybrid | Modes::Smart => available_gpu
+                                    .iter()
+                                    .find(|(_, gpu)| {
+                                        !gpu.default && gpu.device_type == GpuType::Discrete
+                                    })
+                                    .map(|(_, gpu)| gpu),
+                                // If Integrated or Other (???), launch on the iGPU
+                                Modes::Integrated | _ => available_gpu
+                                    .iter()
+                                    .find(|(_, gpu)| {
+                                        gpu.default && gpu.device_type == GpuType::Integrated
+                                    })
+                                    .map(|(_, gpu)| gpu),
+                            }
+                        }
+                    }
+                    SystemType::Manual => {
+                        // Check if the user specified a GPU and if the mode allows its usage
+                        // As of 0.13.0, there is no separation between Manual mode and its "Smart"
+                        // features, so we just allow specifying one
+                        if let Some(user_gpu_request) = gpu
+                            && let Some(user_gpu) = available_gpu.get(&(user_gpu_request as usize))
+                        {
+                            Some(user_gpu)
+                        } else {
+                            if gpu.is_some() {
+                                // GPU does not exists or blocked
+                                eprintln!(
+                                    "[CARDWIRE]: The requested GPU couldn't be used to launch... falling back to automatic selection"
+                                )
+                            }
+                            // 1 GPU or 3+ GPUs, get in this priority:
+                            // 0. Default Discrete GPU
+                            // 1. non-Default discrete GPU
+                            // 2. Others
+                            available_gpu
+                                .iter()
+                                .max_by_key(|(_, gpu)| {
+                                    (
+                                        gpu.default && gpu.device_type == GpuType::Discrete,
+                                        gpu.device_type == GpuType::Discrete,
+                                        gpu.default,
+                                    )
+                                })
+                                .map(|(_, gpu)| gpu)
+                        }
+                    }
                 }
-                .map(|(_, gpu)| gpu)
             };
 
             if let Some(gpu) = target_gpu {
@@ -381,8 +417,8 @@ fn handle_error(err: zbus::Error) -> ! {
     std::process::exit(1)
 }
 
-async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::GpuDevice> {
-    let mut map: BTreeMap<usize, display::GpuDevice> = BTreeMap::new();
+async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, DisplayGpuDevice> {
+    let mut map: BTreeMap<usize, DisplayGpuDevice> = BTreeMap::new();
     let objects = match client.get_gpu_objects().await {
         Ok(objects) => objects,
         Err(e) => handle_error(e),
@@ -393,19 +429,15 @@ async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::
             && let Ok(id) = id_str.parse::<u32>()
         {
             let mut blocked = false;
-            let mut launchable = false;
             for (iface, props) in interfaces {
-                if iface.as_str() == "org.opengamingcollective.cardwire.Gpu" {
-                    if let Some(block_val) = props.get("Block") {
-                        blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
-                    }
-                    if let Some(launchable_val) = props.get("Launchable") {
-                        launchable = launchable_val.downcast_ref::<bool>().unwrap_or(false);
-                    }
+                if iface.as_str() == "org.opengamingcollective.cardwire.Gpu"
+                    && let Some(block_val) = props.get("Block")
+                {
+                    blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
                 }
             }
             if let Ok(dbus_dev) = client.get_gpu_device(id).await {
-                let dev = display::GpuDevice {
+                let dev = DisplayGpuDevice {
                     id,
                     name: dbus_dev.name,
                     pci: dbus_dev.pci,
@@ -416,8 +448,7 @@ async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::
                     vendor: dbus_dev.vendor,
                     driver: dbus_dev.driver,
                     blocked,
-                    launchable,
-                    nvidia_minor: dbus_dev.nvidia_minor,
+                    additional_properties: dbus_dev.additional_properties,
                 };
                 map.insert(id as usize, dev);
             }

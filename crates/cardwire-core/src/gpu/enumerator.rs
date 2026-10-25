@@ -1,4 +1,6 @@
-use std::{collections::BTreeMap, io};
+use std::{
+    collections::{BTreeMap, HashMap}, io
+};
 
 use log::{debug, error, info, warn};
 
@@ -6,7 +8,7 @@ use crate::{
     gpu::{
         generic::{
             default_gpu::check_default_drm_class, udev::{sysfs_get_device_drm, wait_for_drm}, vulkan::Vulkan
-        }, models::{GpuDevice, GpuType, GpuVendor}, vendor_specific::{
+        }, models::{AdditionalProperty, GpuDevice, GpuType, GpuVendor}, vendor_specific::{
             amd::AmdGpuDev, intel::intel_get_device_type, nvidia::{
                 nvidia_get_device_minor, nvidia_get_device_minor_nvml, nvidia_get_device_name, nvidia_get_device_name_nvml, nvidia_get_device_type, nvidia_get_device_type_nvml, wait_for_nvidia
             }
@@ -95,7 +97,7 @@ impl GpuEnumerator {
                 u32::MAX,
                 None,
                 gpu_vendor,
-                None,
+                HashMap::default(),
                 gpu_type,
             );
             return Ok(gpu_device);
@@ -109,6 +111,17 @@ impl GpuEnumerator {
             let gpu_type = self.vulkan.get_gpu_type(pci_id);
             let gpu_name = self.vulkan.get_gpu_name(pci_id);
 
+            let mut prop: HashMap<String, AdditionalProperty> = HashMap::default();
+
+            if device.driver().as_ref().is_some_and(|d| d == "nvidia")
+                && let Some(minor) = nvidia_get_device_minor(device.pci_address())
+            {
+                prop.insert(
+                    "nvidia_minor".into(),
+                    AdditionalProperty::NvidiaMinor(minor),
+                );
+            };
+
             if let (Some(card), Some(render)) = (
                 self.vulkan.get_gpu_card(pci_id),
                 self.vulkan.get_gpu_render(pci_id),
@@ -120,7 +133,7 @@ impl GpuEnumerator {
                     card as u32,
                     None,
                     gpu_vendor,
-                    None,
+                    prop,
                     gpu_type,
                 );
                 info!("{}: Used Vulkan to build", gpu_device.name());
@@ -156,6 +169,13 @@ impl GpuEnumerator {
                         let nvidia_minor = nvidia_get_device_minor_nvml(&nvml, pci_id);
                         // return a working GPU if drm available
                         if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
+                            let mut prop: HashMap<String, AdditionalProperty> = HashMap::default();
+                            if let Some(minor) = nvidia_minor {
+                                prop.insert(
+                                    "nvidia_minor".to_string(),
+                                    AdditionalProperty::NvidiaMinor(minor),
+                                );
+                            }
                             let gpu_device = GpuDevice::new(
                                 gpu_name,
                                 device.clone(),
@@ -163,7 +183,7 @@ impl GpuEnumerator {
                                 card,
                                 None,
                                 gpu_vendor,
-                                nvidia_minor,
+                                prop,
                                 gpu_type,
                             );
                             info!("{}: Used Nvidia+NVML to build", gpu_device.name());
@@ -188,6 +208,13 @@ impl GpuEnumerator {
                     if let Some((card, render)) = sysfs_get_device_drm(pci_id) {
                         let gpu_type = nvidia_get_device_type(&gpu_name);
                         let nvidia_minor = nvidia_get_device_minor(pci_id);
+                        let mut prop: HashMap<String, AdditionalProperty> = HashMap::default();
+                        if let Some(minor) = nvidia_minor {
+                            prop.insert(
+                                "nvidia_minor".to_string(),
+                                AdditionalProperty::NvidiaMinor(minor),
+                            );
+                        }
                         let gpu_device = GpuDevice::new(
                             gpu_name,
                             device.clone(),
@@ -195,7 +222,7 @@ impl GpuEnumerator {
                             card,
                             None,
                             gpu_vendor,
-                            nvidia_minor,
+                            prop,
                             gpu_type,
                         );
                         info!("{}: Used Nvidia+SysFS to build", gpu_device.name());
@@ -226,7 +253,7 @@ impl GpuEnumerator {
                         card,
                         None,
                         gpu_vendor,
-                        None,
+                        HashMap::default(),
                         gpu_type,
                     );
                     info!("{}: Used Intel to build", gpu_device.name());
@@ -255,7 +282,7 @@ impl GpuEnumerator {
                             card,
                             None,
                             gpu_vendor,
-                            None,
+                            HashMap::default(),
                             gpu_type,
                         );
                         info!("{}: Used AMDGPU to build", gpu_device.name());
@@ -291,7 +318,7 @@ impl GpuEnumerator {
                         card,
                         None,
                         gpu_vendor,
-                        None,
+                        HashMap::default(),
                         gpu_type,
                     );
                     info!("{}: Used Virtio to build", gpu_device.name());
@@ -315,7 +342,7 @@ impl GpuEnumerator {
                         card,
                         None,
                         gpu_vendor,
-                        None,
+                        HashMap::default(),
                         gpu_type,
                     );
                     warn!(
@@ -341,7 +368,7 @@ impl GpuEnumerator {
             u32::MAX,
             None,
             gpu_vendor,
-            None,
+            HashMap::default(),
             GpuType::Unavailable,
         ))
     }

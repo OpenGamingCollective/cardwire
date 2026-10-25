@@ -1,6 +1,6 @@
-use std::{fmt::Display, str::FromStr};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 
-use zbus::zvariant;
+use zbus::zvariant::{self, OwnedValue};
 
 use crate::pci::models::PciDevice;
 
@@ -103,6 +103,19 @@ pub enum GpuType {
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
+pub enum AdditionalProperty {
+    NvidiaMinor(u32),
+}
+
+impl From<AdditionalProperty> for OwnedValue {
+    fn from(value: AdditionalProperty) -> Self {
+        match value {
+            AdditionalProperty::NvidiaMinor(minor) => OwnedValue::from(minor),
+        }
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, zbus::zvariant::Type, PartialEq)]
 pub struct GpuDevice {
     name: String,
     pub pci: PciDevice,
@@ -110,8 +123,8 @@ pub struct GpuDevice {
     card: u32,
     default: Option<bool>,
     gpu_vendor: GpuVendor,
-    nvidia_minor: Option<u32>,
     device_type: GpuType,
+    additional_properties: HashMap<String, AdditionalProperty>,
 }
 impl GpuDevice {
     pub fn pci(&self) -> &PciDevice {
@@ -140,8 +153,19 @@ impl GpuDevice {
     pub fn gpu_vendor(&self) -> GpuVendor {
         self.gpu_vendor
     }
-    pub fn nvidia_minor(&self) -> &Option<u32> {
-        &self.nvidia_minor
+
+    pub fn additional_properties(&self) -> &HashMap<String, AdditionalProperty> {
+        &self.additional_properties
+    }
+
+    pub fn nvidia_minor(&self) -> Option<u32> {
+        let prop = &self.additional_properties.get("nvidia_minor")?;
+        match prop {
+            AdditionalProperty::NvidiaMinor(minor) => Some(*minor),
+            #[allow(unreachable_patterns)]
+            // allow for future cases
+            _ => None,
+        }
     }
 
     pub fn device_type(&self) -> &GpuType {
@@ -176,7 +200,7 @@ impl GpuDevice {
         card: u32,
         default: Option<bool>,
         gpu_vendor: GpuVendor,
-        nvidia_minor: Option<u32>,
+        additional_properties: HashMap<String, AdditionalProperty>,
         device_type: GpuType,
     ) -> GpuDevice {
         GpuDevice {
@@ -186,7 +210,7 @@ impl GpuDevice {
             card,
             default,
             gpu_vendor,
-            nvidia_minor,
+            additional_properties,
             device_type,
         }
     }
@@ -296,6 +320,7 @@ mod tests {
     #[test]
     fn test_gpu_device_accessors_return_constructed_values() {
         let pci = make_pci();
+        let prop: HashMap<String, AdditionalProperty> = HashMap::new();
         let gpu = GpuDevice::new(
             "RX 7900 XTX".to_string(),
             pci,
@@ -303,7 +328,7 @@ mod tests {
             0,
             Some(true),
             GpuVendor::Amd,
-            None,
+            prop,
             GpuType::Discrete,
         );
         assert_eq!(gpu.name(), "RX 7900 XTX");
@@ -311,7 +336,7 @@ mod tests {
         assert_eq!(*gpu.card(), 0);
         assert_eq!(gpu.default(), Some(true));
         assert_eq!(gpu.gpu_vendor(), GpuVendor::Amd);
-        assert_eq!(*gpu.nvidia_minor(), None);
+        assert_eq!(gpu.nvidia_minor(), None);
         assert!(gpu.is_discrete());
         assert_eq!(gpu.pci().pci_address(), "0000:01:00.0");
     }
@@ -325,7 +350,7 @@ mod tests {
             0,
             Some(true),
             GpuVendor::Amd,
-            None,
+            HashMap::default(),
             GpuType::Other,
         );
         assert!(gpu.is_default());
@@ -340,7 +365,7 @@ mod tests {
             0,
             Some(false),
             GpuVendor::Amd,
-            None,
+            HashMap::default(),
             GpuType::Other,
         );
         assert!(!gpu.is_default());
@@ -355,7 +380,7 @@ mod tests {
             0,
             None,
             GpuVendor::Amd,
-            None,
+            HashMap::default(),
             GpuType::Other,
         );
         assert!(!gpu.is_default());
@@ -371,7 +396,7 @@ mod tests {
             0,
             None,
             GpuVendor::Amd,
-            None,
+            HashMap::default(),
             GpuType::Other,
         );
         assert!(!gpu.is_default());
@@ -381,6 +406,11 @@ mod tests {
 
     #[test]
     fn test_gpu_device_with_nvidia_minor() {
+        let mut prop: HashMap<String, AdditionalProperty> = HashMap::new();
+        prop.insert(
+            "nvidia_minor".to_string(),
+            AdditionalProperty::NvidiaMinor(0),
+        );
         let gpu = GpuDevice::new(
             "RTX 4090".to_string(),
             make_pci(),
@@ -388,11 +418,11 @@ mod tests {
             0,
             Some(false),
             GpuVendor::Nvidia,
-            Some(0),
+            prop,
             GpuType::Discrete,
         );
         assert_eq!(gpu.gpu_vendor(), GpuVendor::Nvidia);
-        assert_eq!(*gpu.nvidia_minor(), Some(0));
+        assert_eq!(gpu.nvidia_minor(), Some(0));
         assert!(gpu.is_discrete());
     }
 }
