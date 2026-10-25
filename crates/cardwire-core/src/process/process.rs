@@ -47,7 +47,7 @@ pub fn read_proc_cmdline(pid: u32) -> Result<Vec<u8>> {
     Ok(fs::read(path)?)
 }
 
-/// Read the real process name from `/proc/{pid}/cmdline`
+/// Read the real process name from the process cmdline
 pub fn get_real_process_name(cmdline: &[u8]) -> Option<String> {
     if cmdline.is_empty() {
         return None;
