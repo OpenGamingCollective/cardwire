@@ -1,15 +1,19 @@
 # Requirements
 
-To run Cardwire, your system needs to meet a few core requirements. **Good news: if you are using a modern Linux distribution, you likely already meet all of these out of the box!**
+To run Cardwire, your system needs to meet a few core requirements.
+
+**Good news: if you are using a modern Linux distribution, you likely already meet all of these out of the box!**
 
 ## 1. Supported Distributions (Kernel & System)
 
 Cardwire requires:
+
 - **Linux Kernel 5.8 or later** (with `CONFIG_BPF_LSM` enabled).
 - **systemd** as the init system.
 
 > [!TIP]
 > The following distributions are known to work out of the box with zero manual configuration required:
+>
 > - **OGC Distros (Officially Supported)**: see [ogc website](https://opengamingcollective.org/)
 > - **NixOS (Officially Supported)**
 > - Arch Linux / CachyOS
