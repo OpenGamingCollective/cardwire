@@ -300,6 +300,12 @@ async fn main() -> anyhow::Result<()> {
                         {
                             Some(user_gpu)
                         } else {
+                            if gpu.is_some() {
+                                // GPU does not exists or blocked
+                                eprintln!(
+                                    "[CARDWIRE]: The requested GPU couldn't be used to launch... falling back to automatic selection"
+                                )
+                            }
                             // 1 GPU or 3+ GPUs, get in this priority:
                             // 0. Default Discrete GPU
                             // 1. non-Default discrete GPU
