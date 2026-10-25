@@ -265,6 +265,7 @@ async fn main() -> anyhow::Result<()> {
                         } else {
                             // We know it's a laptop (2 GPUs, one iGPU and one dGPU), tho that
                             // SystemType could get a rewrite
+                            #[allow(clippy::wildcard_in_or_patterns)]
                             match mode {
                                 // Use the GPU that isn't default and is Discrete
                                 Modes::Hybrid | Modes::Smart => available_gpu
@@ -273,7 +274,7 @@ async fn main() -> anyhow::Result<()> {
                                         !gpu.default && gpu.device_type == GpuType::Discrete
                                     })
                                     .map(|(_, gpu)| gpu),
-                                // If Integrated, launch on the iGPU
+                                // If Integrated or Other (???), launch on the iGPU
                                 Modes::Integrated | _ => available_gpu
                                     .iter()
                                     .find(|(_, gpu)| {

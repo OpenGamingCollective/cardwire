@@ -149,7 +149,7 @@ mod tests {
             vendor: vendor.to_string(),
             driver: driver.to_string(),
             blocked,
-            additional_properties: additional_properties,
+            additional_properties,
         }
     }
 
@@ -196,8 +196,7 @@ mod tests {
         assert!(
             parsed[&1]
                 .additional_properties
-                .get("nvidia_minor")
-                .is_some()
+                .contains_key("nvidia_minor")
         )
     }
 
