@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use cardwire_core::{
     app_metadata::types::AppMetadata, gpu::models::{GpuDevice, GpuType}, pci::models::PciDevice
 };
-use zbus::zvariant;
+use zbus::zvariant::{self, OwnedValue};
 
 /// The GpuDevice communicated over D-Bus
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug)]
@@ -14,7 +16,7 @@ pub struct DbusGpuDevice {
     pub device_type: GpuType,
     pub vendor: String,
     pub driver: String,
-    pub nvidia_minor: String,
+    pub additional_properties: HashMap<String, OwnedValue>,
 }
 
 impl From<&GpuDevice> for DbusGpuDevice {
@@ -29,11 +31,11 @@ impl From<&GpuDevice> for DbusGpuDevice {
             device_type: gpu.device_type().clone(),
             vendor: gpu.gpu_vendor().to_string(),
             driver: gpu.pci.driver().clone().unwrap_or("none".to_string()),
-            nvidia_minor: if let Some(minor) = gpu.nvidia_minor() {
-                minor.to_string()
-            } else {
-                "none".to_string()
-            },
+            additional_properties: gpu
+                .additional_properties()
+                .iter()
+                .map(|(s, p)| (s.clone(), p.clone().into()))
+                .collect(),
         }
     }
 }

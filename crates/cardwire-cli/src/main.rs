@@ -10,7 +10,7 @@ use cardwire_core::{gpu::models::GpuType, system_type::types::SystemType};
 use clap::{CommandFactory, Parser};
 use dbus::DaemonClient;
 
-use crate::display::print_devices_pci;
+use crate::display::{DisplayGpuDevice, print_devices_pci};
 
 const BIN_NAME: &str = "cardwire";
 
@@ -366,8 +366,8 @@ fn handle_error(err: zbus::Error) -> ! {
     std::process::exit(1)
 }
 
-async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::GpuDevice> {
-    let mut map: BTreeMap<usize, display::GpuDevice> = BTreeMap::new();
+async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, DisplayGpuDevice> {
+    let mut map: BTreeMap<usize, DisplayGpuDevice> = BTreeMap::new();
     let objects = match client.get_gpu_objects().await {
         Ok(objects) => objects,
         Err(e) => handle_error(e),
@@ -379,14 +379,14 @@ async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::
         {
             let mut blocked = false;
             for (iface, props) in interfaces {
-                if iface.as_str() == "org.opengamingcollective.cardwire.Gpu" {
-                    if let Some(block_val) = props.get("Block") {
-                        blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
-                    }
+                if iface.as_str() == "org.opengamingcollective.cardwire.Gpu"
+                    && let Some(block_val) = props.get("Block")
+                {
+                    blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
                 }
             }
             if let Ok(dbus_dev) = client.get_gpu_device(id).await {
-                let dev = display::GpuDevice {
+                let dev = DisplayGpuDevice {
                     id,
                     name: dbus_dev.name,
                     pci: dbus_dev.pci,
@@ -397,7 +397,7 @@ async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::
                     vendor: dbus_dev.vendor,
                     driver: dbus_dev.driver,
                     blocked,
-                    nvidia_minor: dbus_dev.nvidia_minor,
+                    additional_properties: dbus_dev.additional_properties,
                 };
                 map.insert(id as usize, dev);
             }

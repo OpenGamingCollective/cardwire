@@ -83,7 +83,7 @@ impl GpuInterface {
                 *self.device.card(),
                 self.device.pci().pci_address().to_owned(),
                 self.device.pci().parent_pci().to_owned(),
-                *self.device.nvidia_minor(),
+                self.device.nvidia_minor(),
                 pci_list_guard.clone(),
             )
         };
@@ -167,7 +167,7 @@ impl GpuInterface {
         let nvidia = match self.device.nvidia_minor() {
             // GPU is nvidia
             Some(minor) => {
-                if let Ok(inode) = nvidia_to_inode(*minor) {
+                if let Ok(inode) = nvidia_to_inode(minor) {
                     blocker.is_inode_blocked(inode, gpu_id).into_fdo()?
                 } else {
                     false

@@ -67,7 +67,7 @@ pub fn get_inodes(
             Ok(inode) => total_inodes.push(inode),
             Err(err) => {
                 error!("failed to get inode for nvidia{}: {}", minor, err);
-                return Err(err);
+                //return Err(err);
             }
         };
         match backlight_to_inode(minor) {
