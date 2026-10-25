@@ -111,6 +111,17 @@ impl GpuEnumerator {
             let gpu_type = self.vulkan.get_gpu_type(pci_id);
             let gpu_name = self.vulkan.get_gpu_name(pci_id);
 
+            let mut prop: HashMap<String, AdditionalProperty> = HashMap::default();
+
+            if device.driver().as_ref().is_some_and(|d| d == "nvidia")
+                && let Some(minor) = nvidia_get_device_minor(device.pci_address())
+            {
+                prop.insert(
+                    "nvidia_minor".into(),
+                    AdditionalProperty::NvidiaMinor(minor),
+                );
+            };
+
             if let (Some(card), Some(render)) = (
                 self.vulkan.get_gpu_card(pci_id),
                 self.vulkan.get_gpu_render(pci_id),
@@ -122,7 +133,7 @@ impl GpuEnumerator {
                     card as u32,
                     None,
                     gpu_vendor,
-                    HashMap::default(),
+                    prop,
                     gpu_type,
                 );
                 info!("{}: Used Vulkan to build", gpu_device.name());
