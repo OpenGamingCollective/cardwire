@@ -857,8 +857,6 @@ dependencies = [
  "aya-log",
  "cardwire-ebpf",
  "cargo_metadata",
- "clap",
- "env_logger",
  "log",
  "thiserror 2.0.21",
  "tokio",

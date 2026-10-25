@@ -49,6 +49,7 @@ pub struct InodeKey {
     pub name: [u8; 64],
     pub ino: u64,
 }
+#[cfg(feature = "bpf")]
 unsafe impl aya::Pod for InodeKey {}
 
 impl InodeKey {
