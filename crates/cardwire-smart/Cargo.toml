@@ -1,0 +1,17 @@
+[package]
+name = "cardwire-smart"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Cardwire task used to process on-the-fly GPU whitelisting"
+
+[dependencies]
+cardwire-core = { path = "../cardwire-core", features = ["fdo", "process"] }
+cardwire-ebpf-userspace = { path = "../cardwire-ebpf-userspace" }
+tokio.workspace = true
+aya.workspace = true
+thiserror.workspace = true
+log.workspace = true

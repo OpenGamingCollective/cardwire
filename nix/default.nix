@@ -47,7 +47,7 @@ pkgs.rustPlatform.buildRustPackage {
     find . -name config.toml -path "*/.cargo/config.toml" -exec sed -i 's/build-std = \["core"\]//g' {} +
 
     # Point to the correct hwdata location
-    substituteInPlace crates/cardwire-daemon/src/core/pci/pci_device.rs \
+    substituteInPlace crates/cardwire-core/src/pci/pci_device.rs \
       --replace-fail "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
   '';
 

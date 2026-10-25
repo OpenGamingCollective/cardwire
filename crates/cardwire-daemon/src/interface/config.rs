@@ -1,8 +1,8 @@
 use std::{io::ErrorKind, sync::Arc};
 
-use crate::{
-    Result, file::CardwireConfig, interface::{DaemonContext, Modes}
-};
+use crate::{Result, interface::DaemonContext};
+use cardwire_config::config::CardwireConfig;
+use cardwire_core::modes::types::Modes;
 use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
 use log::warn;
 use tokio::sync::RwLock;

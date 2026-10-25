@@ -1,7 +1,8 @@
 //! Watch the power state and send a signal when it changes, one task is spawned per gpu
 use crate::{
-    Result, core::gpu::PowerState, interface::{GpuInterface, GpuInterfaceSignals}
+    Result, interface::{GpuInterface, GpuInterfaceSignals}
 };
+use cardwire_core::gpu::models::PowerState;
 use log::{error, info, warn};
 use std::{fs, str::FromStr, sync::Arc, time::Duration};
 use tokio::time::sleep;

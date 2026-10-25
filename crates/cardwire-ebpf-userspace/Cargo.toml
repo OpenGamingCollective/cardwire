@@ -7,18 +7,20 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+# Enable bpf building
+bpf = ["dep:aya-build", "dep:aya-log", "dep:tokio", "dep:cardwire-ebpf"]
+
+
 [dependencies]
 thiserror.workspace = true
-aya.workspace = true
-tokio.workspace = true
-aya-log.workspace = true
+aya = { workspace = true }
+tokio = { workspace = true, optional = true }
+aya-log = { workspace = true, optional = true }
 log.workspace = true
-clap.workspace = true
-anyhow.workspace = true
-env_logger.workspace = true
 
 [build-dependencies]
 anyhow = { workspace = true }
-aya-build = { workspace = true }
+aya-build = { workspace = true, optional = true }
 cargo_metadata = { workspace = true }
-cardwire-ebpf = { path = "../cardwire-ebpf" }
+cardwire-ebpf = { path = "../cardwire-ebpf", optional = true }

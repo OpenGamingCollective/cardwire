@@ -1,0 +1,51 @@
+[package]
+name = "cardwire-core"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+gpu = ["pci", "modes"]
+
+gpu_enumeration = [
+    "dep:vulkano",
+    "dep:khronos-egl",
+    "dep:libdrm_amdgpu_sys",
+    "dep:nvml-wrapper",
+    "gpu",
+]
+
+fdo = [
+    "dep:freedesktop-desktop-entry",
+    "dep:inotify",
+    "dep:xdg",
+    "app_metadata",
+]
+
+process = []
+
+app_metadata = []
+
+pci = []
+
+system_type = ["gpu"]
+
+modes = ["system_type"]
+
+[dependencies]
+serde.workspace = true
+zbus.workspace = true
+thiserror.workspace = true
+log.workspace = true
+vulkano = { workspace = true, optional = true }
+khronos-egl = { workspace = true, optional = true }
+libdrm_amdgpu_sys = { workspace = true, optional = true }
+nvml-wrapper = { workspace = true, optional = true }
+tokio.workspace = true
+cardwire-ebpf-userspace = { path = "../cardwire-ebpf-userspace" }
+freedesktop-desktop-entry = { workspace = true, optional = true }
+inotify = { workspace = true, optional = true }
+xdg = { workspace = true, optional = true }

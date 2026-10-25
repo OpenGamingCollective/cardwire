@@ -1,35 +1,14 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
-use zbus::{Proxy, connection::Connection, zvariant};
+use cardwire_core::modes::types::Modes;
+use cardwire_dbus::{
+    config::CardwireConfigProxy, debug::CardwireDebugProxy, gpus::{CardwireGpuIntProxy, CardwireGpuProxy}, manager::CardwireManagerProxy, mode::CardwireModeProxy, smart::CardwireSmartPolicyProxy, types::{DbusAppMetadata, DbusGpuDevice, DbusPciDevice}
+};
+use zbus::{
+    Connection, Proxy, names::OwnedInterfaceName, zvariant::{OwnedObjectPath, OwnedValue}
+};
 
-use crate::display::PciDevice;
-
-// Cardwire dbus doesnt send blocked state nor the id
-#[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug)]
-pub struct DbusGpuDevice {
-    pub name: String,
-    pub pci: String,
-    pub render: u32,
-    pub card: u32,
-    pub default: bool,
-    pub device_type: GpuType,
-    pub vendor: String,
-    pub driver: String,
-    pub nvidia_minor: String,
-}
-#[derive(
-    Clone, Debug, serde::Serialize, serde::Deserialize, Default, PartialEq, zvariant::Type,
-)]
-#[repr(u32)]
-pub enum GpuType {
-    Integrated = 0,
-    Discrete = 1,
-    Virtual = 2,
-    Other = 3,
-    Unavailable = 4,
-    #[default]
-    Unknown = 5,
-}
+use zbus::Result;
 
 pub struct DaemonClient<'a> {
     proxy: Proxy<'a>,
@@ -48,280 +27,161 @@ impl<'a> DaemonClient<'a> {
         Ok(Self { proxy })
     }
 
-    pub async fn get_managed_objects(
-        &self,
-    ) -> zbus::fdo::Result<
-        std::collections::HashMap<
-            zbus::zvariant::OwnedObjectPath,
-            std::collections::HashMap<
-                zbus::names::OwnedInterfaceName,
-                std::collections::HashMap<String, zbus::zvariant::OwnedValue>,
-            >,
-        >,
-    > {
-        let proxy = zbus::fdo::ObjectManagerProxy::builder(self.proxy.connection())
-            .destination("org.opengamingcollective.cardwire")?
-            .path("/org/opengamingcollective/cardwire")?
+    // DEBUG INTERFACE
+
+    async fn dbus_proxy(&self) -> Result<CardwireDebugProxy<'_>> {
+        CardwireDebugProxy::new(self.proxy.connection()).await
+    }
+
+    pub async fn get_pci_devices(&self) -> zbus::Result<BTreeMap<String, DbusPciDevice>> {
+        self.dbus_proxy().await?.get_pci_devices().await
+    }
+
+    pub async fn refresh_gpus(&self) -> Result<()> {
+        self.dbus_proxy().await?.refresh_gpu().await
+    }
+
+    // MODE INTERFACE
+
+    async fn mode_proxy(&self) -> Result<CardwireModeProxy<'_>> {
+        CardwireModeProxy::new(self.proxy.connection()).await
+    }
+
+    pub async fn get_mode(&self) -> Result<Modes> {
+        self.mode_proxy().await?.mode().await
+    }
+
+    pub async fn set_mode(&self, mode: Modes) -> Result<()> {
+        self.mode_proxy().await?.set_mode(mode).await
+    }
+
+    pub async fn get_available_modes(&self) -> Result<Vec<Modes>> {
+        self.mode_proxy().await?.available_modes().await
+    }
+
+    // CONFIG INTERFACE
+
+    async fn config_proxy(&self) -> Result<CardwireConfigProxy<'_>> {
+        CardwireConfigProxy::new(self.proxy.connection()).await
+    }
+
+    pub async fn experimental_nvidia_block(&self) -> Result<bool> {
+        self.config_proxy().await?.experimental_nvidia_block().await
+    }
+    pub async fn set_experimental_nvidia_block(&self, state: bool) -> Result<()> {
+        self.config_proxy()
+            .await?
+            .set_experimental_nvidia_block(state)
+            .await
+    }
+
+    pub async fn auto_apply_gpu_state(&self) -> Result<bool> {
+        self.config_proxy().await?.auto_apply_gpu_state().await
+    }
+    pub async fn set_auto_apply_gpu_state(&self, state: bool) -> Result<()> {
+        self.config_proxy()
+            .await?
+            .set_auto_apply_gpu_state(state)
+            .await
+    }
+
+    pub async fn battery_auto_switch(&self) -> Result<bool> {
+        self.config_proxy().await?.battery_auto_switch().await
+    }
+
+    pub async fn set_battery_auto_switch(&self, state: bool) -> Result<()> {
+        self.config_proxy()
+            .await?
+            .set_battery_auto_switch(state)
+            .await
+    }
+
+    pub async fn battery_auto_switch_mode(&self) -> Result<Modes> {
+        self.config_proxy().await?.battery_auto_switch_mode().await
+    }
+    pub async fn set_battery_auto_switch_mode(&self, state: Modes) -> Result<()> {
+        self.config_proxy()
+            .await?
+            .set_battery_auto_switch_mode(state)
+            .await
+    }
+
+    pub async fn external_display_auto_switch(&self) -> Result<bool> {
+        self.config_proxy()
+            .await?
+            .external_display_auto_switch()
+            .await
+    }
+
+    pub async fn set_external_display_auto_switch(&self, state: bool) -> Result<()> {
+        self.config_proxy()
+            .await?
+            .set_external_display_auto_switch(state)
+            .await
+    }
+
+    // Smart Policy
+
+    async fn smart_proxy(&self) -> Result<CardwireSmartPolicyProxy<'_>> {
+        CardwireSmartPolicyProxy::new(self.proxy.connection()).await
+    }
+
+    #[allow(unused)]
+    pub async fn get_app_policies(&self) -> Result<HashMap<String, DbusAppMetadata>> {
+        self.smart_proxy().await?.get_app_policies().await
+    }
+
+    // GPU INTERFACE
+
+    async fn build_gpu_proxy(&self, id: u32) -> Result<CardwireGpuProxy<'_>> {
+        CardwireGpuProxy::builder(self.proxy.connection())
+            .path(format!("/org/opengamingcollective/cardwire/Gpu/{}", id))?
             .build()
-            .await?;
+            .await
+    }
+
+    pub async fn get_gpu_objects(
+        &self,
+    ) -> Result<HashMap<OwnedObjectPath, HashMap<OwnedInterfaceName, HashMap<String, OwnedValue>>>>
+    {
+        let proxy = CardwireGpuIntProxy::new(self.proxy.connection()).await?;
         proxy.get_managed_objects().await
     }
 
-    pub async fn get_device(&self, id: u32) -> zbus::Result<DbusGpuDevice> {
-        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            path.as_str(),
-            "org.opengamingcollective.cardwire.Gpu",
-        )
-        .await?;
-        proxy.call("GetDevice", &()).await
-    }
-    pub async fn get_pci_device(&self) -> zbus::Result<BTreeMap<String, PciDevice>> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Debug",
-        )
-        .await?;
-        proxy.call("GetPciDevices", &()).await
+    pub async fn get_gpu_device(&self, id: u32) -> zbus::Result<DbusGpuDevice> {
+        self.build_gpu_proxy(id).await?.get_device().await
     }
 
-    pub async fn set_mode(&self, mode: &u32) -> zbus::fdo::Result<()> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Mode",
-        )
-        .await
-        .map_err(|e| zbus::fdo::Error::Failed(format!("Failed to create Mode proxy: {}", e)))?;
-        proxy.set_property("Mode", mode).await
+    #[allow(unused)]
+    pub async fn block(&self, id: u32) -> zbus::Result<bool> {
+        self.build_gpu_proxy(id).await?.block().await
     }
 
-    pub async fn get_mode(&self) -> zbus::Result<u32> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Mode",
-        )
-        .await?;
-        proxy.get_property("Mode").await
+    pub async fn set_block(&self, id: u32, state: bool) -> zbus::Result<()> {
+        self.build_gpu_proxy(id).await?.set_block(state).await
     }
 
-    pub async fn get_available_modes(&self) -> zbus::Result<Vec<crate::args::CliMode>> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Mode",
-        )
-        .await?;
-        proxy.call("AvailableModes", &()).await
+    pub async fn lsof(&self, id: u32) -> zbus::Result<HashMap<String, Vec<String>>> {
+        self.build_gpu_proxy(id).await?.lsof().await
     }
 
-    pub async fn set_gpu_block(&self, id: u32, blocked: bool) -> zbus::fdo::Result<()> {
-        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
-        let block_proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            path.as_str(),
-            "org.opengamingcollective.cardwire.Gpu",
-        )
-        .await
-        .map_err(|e| zbus::fdo::Error::Failed(format!("Failed to create proxy: {}", e)))?;
-        block_proxy.set_property("Block", &(blocked)).await
+    pub async fn power_state(&self, id: u32) -> zbus::Result<String> {
+        self.build_gpu_proxy(id).await?.power_state().await
     }
 
-    pub async fn get_power_state(&self, id: u32) -> zbus::Result<String> {
-        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            path.as_str(),
-            "org.opengamingcollective.cardwire.Gpu",
-        )
-        .await?;
-        proxy.call("PowerState", &()).await
+    pub async fn env(&self, id: u32) -> zbus::Result<Vec<String>> {
+        self.build_gpu_proxy(id).await?.env().await
     }
 
-    pub async fn lsof(
-        &self,
-        id: u32,
-    ) -> zbus::Result<std::collections::HashMap<String, Vec<String>>> {
-        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            path.as_str(),
-            "org.opengamingcollective.cardwire.Gpu",
-        )
-        .await?;
-        proxy.call("Lsof", &()).await
-    }
-    pub async fn get_gpu_env(&self, id: u32) -> zbus::Result<Vec<String>> {
-        let path = format!("/org/opengamingcollective/cardwire/Gpu/{}", id);
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            path.as_str(),
-            "org.opengamingcollective.cardwire.Gpu",
-        )
-        .await?;
-        proxy.get_property("Env").await
+    #[allow(unused)]
+    pub async fn launchable(&self, id: u32) -> zbus::Result<bool> {
+        self.build_gpu_proxy(id).await?.launchable().await
     }
 
-    pub async fn get_auto_apply_gpu_state(&self) -> zbus::Result<bool> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Config",
-        )
-        .await?;
-        proxy.get_property("AutoApplyGpuState").await
-    }
-    pub async fn set_auto_apply_gpu_state(&self, state: bool) -> zbus::fdo::Result<()> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Config",
-        )
-        .await
-        .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
-        proxy.set_property("AutoApplyGpuState", state).await
-    }
+    // MANAGER INTERFACE
 
-    pub async fn get_experimental_nvidia_block(&self) -> zbus::Result<bool> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Config",
-        )
-        .await?;
-        proxy.get_property("ExperimentalNvidiaBlock").await
-    }
-    pub async fn set_experimental_nvidia_block(&self, state: bool) -> zbus::fdo::Result<()> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Config",
-        )
-        .await
-        .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
-        proxy.set_property("ExperimentalNvidiaBlock", state).await
-    }
-
-    pub async fn get_battery_auto_switch(&self) -> zbus::Result<bool> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Config",
-        )
-        .await?;
-        proxy.get_property("BatteryAutoSwitch").await
-    }
-    pub async fn set_battery_auto_switch(&self, state: bool) -> zbus::fdo::Result<()> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Config",
-        )
-        .await
-        .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
-        proxy.set_property("BatteryAutoSwitch", state).await
-    }
-    pub async fn get_battery_auto_switch_mode(&self) -> zbus::Result<u32> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Config",
-        )
-        .await?;
-        proxy.get_property("BatteryAutoSwitchMode").await
-    }
-    pub async fn set_battery_auto_switch_mode(&self, mode: &u32) -> zbus::fdo::Result<()> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Config",
-        )
-        .await
-        .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
-        proxy.set_property("BatteryAutoSwitchMode", mode).await
-    }
-    pub async fn get_external_display_auto_switch(&self) -> zbus::Result<bool> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Config",
-        )
-        .await?;
-        proxy.get_property("ExternalDisplayAutoSwitch").await
-    }
-    pub async fn set_external_display_auto_switch(&self, state: bool) -> zbus::fdo::Result<()> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Config",
-        )
-        .await
-        .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
-        proxy.set_property("ExternalDisplayAutoSwitch", state).await
-    }
-    pub async fn save_to_file(&self) -> zbus::Result<()> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Config",
-        )
-        .await?;
-        proxy.call("SaveToFile", &()).await
-    }
-
-    pub async fn manager_status(&self) -> zbus::Result<()> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Manager",
-        )
-        .await?;
-        proxy.call("Status", &()).await
-    }
-
-    pub async fn diagnostic_gpu(&self) -> zbus::Result<()> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Debug",
-        )
-        .await?;
-        proxy.call("DiagnosticGpu", &()).await
-    }
-
-    pub async fn refresh_gpu(&self) -> zbus::Result<()> {
-        let proxy = zbus::Proxy::new(
-            self.proxy.connection(),
-            "org.opengamingcollective.cardwire",
-            "/org/opengamingcollective/cardwire",
-            "org.opengamingcollective.cardwire.Debug",
-        )
-        .await?;
-        proxy.call("RefreshGpu", &()).await
+    pub async fn get_daemon_status(&self) -> zbus::Result<()> {
+        let proxy = CardwireManagerProxy::new(self.proxy.connection()).await?;
+        proxy.status().await
     }
 }
