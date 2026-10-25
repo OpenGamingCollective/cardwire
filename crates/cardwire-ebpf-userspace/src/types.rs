@@ -75,3 +75,35 @@ impl InodeKey {
         key
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn same_inode_with_different_names_is_not_the_same_key() {
+        let card = InodeKey::new("card1", 259);
+        let render = InodeKey::new("renderD129", 259);
+
+        assert_ne!(card, render);
+        assert_eq!(card.ino, render.ino);
+    }
+
+    #[test]
+    fn short_names_are_zero_padded() {
+        let key = InodeKey::new("sys", 13670);
+
+        assert_eq!(&key.name[..3], b"sys");
+        assert_eq!(&key.name[3..], &[0u8; 61]);
+        assert_eq!(key.ino, 13670);
+    }
+
+    #[test]
+    fn names_longer_than_63_bytes_are_truncated() {
+        let long = "x".repeat(100);
+        let key = InodeKey::new(&long, 1);
+
+        assert_eq!(&key.name[..63], &long.as_bytes()[..63]);
+        assert_eq!(&key.name[63..], &[0u8; 1]);
+    }
+}
