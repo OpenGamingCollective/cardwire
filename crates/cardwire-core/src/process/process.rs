@@ -81,7 +81,6 @@ pub fn get_real_process_name(cmdline: &[u8]) -> Option<String> {
     }
 
     if let Some(bin_name) = binary.split('/').next_back() {
-        println!("BIN: {}", bin_name);
         match bin_name {
             _ if bin_name == "steam" => {
                 for arg in args.iter().skip(1) {
