@@ -277,3 +277,5 @@ pub fn sys_hwmon(pci: &str) -> Result<Vec<InodeKey>> {
 
     Ok(inodes)
 }
+
+// TODO: move that to daemon ?

@@ -7,6 +7,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+# Disable bpf building
+bpf = []
+
+
+
 [dependencies]
 thiserror.workspace = true
 aya.workspace = true

@@ -9,7 +9,6 @@ license.workspace = true
 description = "Daemon for cardwire GPU management"
 
 [dependencies]
-cardwire-ebpf-userspace = { path = "../cardwire-ebpf-userspace" }
 tokio.workspace = true
 zbus.workspace = true
 serde.workspace = true
@@ -33,6 +32,9 @@ nvml-wrapper.workspace = true
 cardwire-core = { path = "../cardwire-core", features = [
     "gpu",
     "gpu_enumeration",
+] }
+cardwire-ebpf-userspace = { path = "../cardwire-ebpf-userspace", features = [
+    "bpf",
 ] }
 cardwire-config = { path = "../cardwire-config" }
 cardwire-smart = { path = "../cardwire-smart" }

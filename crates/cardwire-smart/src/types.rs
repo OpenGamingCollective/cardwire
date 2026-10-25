@@ -8,7 +8,7 @@ use cardwire_core::{
         check_env, get_real_process_name, get_steam_app_id, read_proc_cmdline, read_proc_environ, strip_nix_wrap
     }
 };
-use cardwire_ebpf_userspace::{EbpfBlocker, types::ExecEvent};
+use cardwire_ebpf_userspace::{EbpfBlocker, ExecEvent};
 use log::{error, info, warn};
 use tokio::{
     io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, mpsc, oneshot}, task

@@ -31,9 +31,9 @@ app_metadata = []
 
 pci = []
 
-system_type = []
+system_type = ["gpu"]
 
-modes = []
+modes = ["system_type"]
 
 [dependencies]
 serde.workspace = true
