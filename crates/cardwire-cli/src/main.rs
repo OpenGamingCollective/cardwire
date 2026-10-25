@@ -258,11 +258,18 @@ async fn main() -> anyhow::Result<()> {
                         // If the GPU isnt blocked OR the mode is smart, in smart mode, the dGPU is
                         // marked as blocked, but launching an app on it is possible
                         if let Some(user_gpu_request) = gpu
-                            && let Some(user_gpu) = available_gpu.get(&(user_gpu_request as usize))
-                            && (!user_gpu.blocked || mode == Modes::Smart)
+                            && let Some(user_gpu) = available_gpu
+                                .get(&(user_gpu_request as usize))
+                                .filter(|g| !g.blocked || mode == Modes::Smart)
                         {
                             Some(user_gpu)
                         } else {
+                            if gpu.is_some() {
+                                // GPU does not exists or blocked
+                                eprintln!(
+                                    "[CARDWIRE]: The requested GPU couldn't be used to launch... falling back to automatic selection"
+                                )
+                            }
                             // We know it's a laptop (2 GPUs, one iGPU and one dGPU), tho that
                             // SystemType could get a rewrite
                             #[allow(clippy::wildcard_in_or_patterns)]
