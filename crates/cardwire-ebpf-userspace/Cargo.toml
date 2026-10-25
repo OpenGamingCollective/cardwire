@@ -9,18 +9,12 @@ license.workspace = true
 
 [features]
 # Enable bpf building
-bpf = [
-    "dep:aya",
-    "dep:aya-build",
-    "dep:aya-log",
-    "dep:tokio",
-    "dep:cardwire-ebpf",
-]
+bpf = ["dep:aya-build", "dep:aya-log", "dep:tokio", "dep:cardwire-ebpf"]
 
 
 [dependencies]
 thiserror.workspace = true
-aya = { workspace = true, optional = true }
+aya = { workspace = true }
 tokio = { workspace = true, optional = true }
 aya-log = { workspace = true, optional = true }
 log.workspace = true
