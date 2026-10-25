@@ -8,13 +8,14 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
-gpu = ["gpu_enumeration", "pci", "modes"]
+gpu = ["pci", "modes"]
 
 gpu_enumeration = [
     "dep:vulkano",
     "dep:khronos-egl",
     "dep:libdrm_amdgpu_sys",
     "dep:nvml-wrapper",
+    "gpu",
 ]
 
 fdo = [

@@ -30,7 +30,10 @@ rusqlite.workspace = true
 inotify.workspace = true
 libdrm_amdgpu_sys.workspace = true
 nvml-wrapper.workspace = true
-cardwire-core = { path = "../cardwire-core", features = ["gpu"] }
+cardwire-core = { path = "../cardwire-core", features = [
+    "gpu",
+    "gpu_enumeration",
+] }
 cardwire-config = { path = "../cardwire-config" }
 cardwire-smart = { path = "../cardwire-smart" }
 cardwire-dbus = { path = "../cardwire-dbus" }
