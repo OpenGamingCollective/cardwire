@@ -243,20 +243,8 @@ async fn main() -> anyhow::Result<()> {
             available_gpu.retain(|_, gpu| gpu.device_type != GpuType::Unavailable);
 
             let target_gpu = if let Some(gpu_id) = gpu {
-                let target = available_gpu.get(&(gpu_id as usize));
-                if let Some(gpu) = target {
-                    let reason = if gpu.blocked {
-                        "it is blocked in the current mode"
-                    } else {
-                        "the daemon reports it as unavailable for launching"
-                    };
-                    return Err(anyhow::anyhow!(
-                        "GPU {} ({}) cannot be launched on: {reason};",
-                        gpu.id,
-                        gpu.name
-                    ));
-                }
-                target
+                // GPU specified by the user
+                available_gpu.get(&(gpu_id as usize))
             // No gpu specified
             } else {
                 available_gpu.retain(|_, gpu| gpu.device_type != GpuType::Unavailable);
