@@ -47,7 +47,4 @@ pub trait CardwireGpu {
 
     #[zbus(property)]
     fn env(&self) -> Result<Vec<String>>;
-
-    #[zbus(property)]
-    fn launchable(&self) -> Result<bool>;
 }

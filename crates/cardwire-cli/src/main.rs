@@ -244,9 +244,7 @@ async fn main() -> anyhow::Result<()> {
 
             let target_gpu = if let Some(gpu_id) = gpu {
                 let target = available_gpu.get(&(gpu_id as usize));
-                if let Some(gpu) = target
-                    && !gpu.launchable
-                {
+                if let Some(gpu) = target {
                     let reason = if gpu.blocked {
                         "it is blocked in the current mode"
                     } else {
@@ -261,8 +259,7 @@ async fn main() -> anyhow::Result<()> {
                 target
             // No gpu specified
             } else {
-                available_gpu
-                    .retain(|_, gpu| gpu.device_type != GpuType::Unavailable && gpu.launchable);
+                available_gpu.retain(|_, gpu| gpu.device_type != GpuType::Unavailable);
                 let available_gpus: Vec<(usize, bool, GpuType)> = available_gpu
                     .iter()
                     .map(|(id, gpu)| (*id, gpu.default, gpu.device_type.clone()))
@@ -393,14 +390,10 @@ async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::
             && let Ok(id) = id_str.parse::<u32>()
         {
             let mut blocked = false;
-            let mut launchable = false;
             for (iface, props) in interfaces {
                 if iface.as_str() == "org.opengamingcollective.cardwire.Gpu" {
                     if let Some(block_val) = props.get("Block") {
                         blocked = block_val.downcast_ref::<bool>().unwrap_or(false);
-                    }
-                    if let Some(launchable_val) = props.get("Launchable") {
-                        launchable = launchable_val.downcast_ref::<bool>().unwrap_or(false);
                     }
                 }
             }
@@ -416,7 +409,6 @@ async fn get_gpu_list(client: &'_ DaemonClient<'_>) -> BTreeMap<usize, display::
                     vendor: dbus_dev.vendor,
                     driver: dbus_dev.driver,
                     blocked,
-                    launchable,
                     nvidia_minor: dbus_dev.nvidia_minor,
                 };
                 map.insert(id as usize, dev);

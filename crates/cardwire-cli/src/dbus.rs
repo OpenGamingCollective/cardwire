@@ -173,11 +173,6 @@ impl<'a> DaemonClient<'a> {
         self.build_gpu_proxy(id).await?.env().await
     }
 
-    #[allow(unused)]
-    pub async fn launchable(&self, id: u32) -> zbus::Result<bool> {
-        self.build_gpu_proxy(id).await?.launchable().await
-    }
-
     // MANAGER INTERFACE
 
     pub async fn get_daemon_status(&self) -> zbus::Result<()> {
