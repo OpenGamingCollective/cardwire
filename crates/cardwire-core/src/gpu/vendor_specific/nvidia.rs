@@ -2,7 +2,10 @@ use std::{fs, path::Path, thread, time::Duration};
 
 use log::{debug, error, info, warn};
 use nvml_wrapper::{
-    Nvml, enum_wrappers::device::{Brand, GpuVirtualizationMode}, enums::device::DeviceArchitecture, error::NvmlError
+    Nvml,
+    enum_wrappers::device::{Brand, GpuVirtualizationMode},
+    enums::device::DeviceArchitecture,
+    error::NvmlError,
 };
 use tokio::{process::Command, time::timeout};
 

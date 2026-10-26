@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs};
 
 use crate::{
-    common::{FileKind, create_default_file}, errors::{ConfigError, Result}
+    common::{FileKind, create_default_file},
+    errors::{ConfigError, Result},
 };
 
 #[derive(Serialize, Deserialize)]

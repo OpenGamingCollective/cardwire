@@ -1,5 +1,6 @@
 use std::{
-    collections::HashSet, path::{Path, PathBuf}
+    collections::HashSet,
+    path::{Path, PathBuf},
 };
 
 use crate::models::{DbusAppMetadata, ResolvedApp};

@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
 use iced::{
-    Subscription, futures::{SinkExt, StreamExt, channel::mpsc::Sender}, stream
+    Subscription,
+    futures::{SinkExt, StreamExt, channel::mpsc::Sender},
+    stream,
 };
 
 use log::{info, warn};
@@ -9,10 +11,16 @@ use tokio::select;
 use tokio_stream::StreamMap;
 
 use crate::{
-    helpers::CardwireDbus, message::Message, models::{DaemonSettings, LogEntry, Mode, PciDevice}, tray
+    helpers::CardwireDbus,
+    message::Message,
+    models::{DaemonSettings, LogEntry, Mode, PciDevice},
+    tray,
 };
 use zbus::{
-    Connection, Proxy, names::OwnedInterfaceName, proxy, zvariant::{OwnedObjectPath, OwnedValue}
+    Connection, Proxy,
+    names::OwnedInterfaceName,
+    proxy,
+    zvariant::{OwnedObjectPath, OwnedValue},
 };
 
 pub fn tray_sub() -> Subscription<Message> {

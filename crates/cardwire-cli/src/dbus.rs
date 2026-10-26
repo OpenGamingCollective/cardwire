@@ -2,10 +2,18 @@ use std::collections::{BTreeMap, HashMap};
 
 use cardwire_core::modes::types::Modes;
 use cardwire_dbus::{
-    config::CardwireConfigProxy, debug::CardwireDebugProxy, gpus::{CardwireGpuIntProxy, CardwireGpuProxy}, manager::CardwireManagerProxy, mode::CardwireModeProxy, smart::CardwireSmartPolicyProxy, types::{DbusAppMetadata, DbusGpuDevice, DbusPciDevice}
+    config::CardwireConfigProxy,
+    debug::CardwireDebugProxy,
+    gpus::{CardwireGpuIntProxy, CardwireGpuProxy},
+    manager::CardwireManagerProxy,
+    mode::CardwireModeProxy,
+    smart::CardwireSmartPolicyProxy,
+    types::{DbusAppMetadata, DbusGpuDevice, DbusPciDevice},
 };
 use zbus::{
-    Connection, Proxy, names::OwnedInterfaceName, zvariant::{OwnedObjectPath, OwnedValue}
+    Connection, Proxy,
+    names::OwnedInterfaceName,
+    zvariant::{OwnedObjectPath, OwnedValue},
 };
 
 use zbus::Result;

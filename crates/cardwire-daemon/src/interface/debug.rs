@@ -1,23 +1,29 @@
 use crate::{interface::SwitcherooInterface, tasks::watch_power_state};
 use cardwire_config::{
-    config::CardwireConfig, state::{CardwireGpuState, CardwireModeState}
+    config::CardwireConfig,
+    state::{CardwireGpuState, CardwireModeState},
 };
 use cardwire_core::{
     gpu::{
-        enumerator::GpuEnumerator, env::compute_switcheroo_env, inode::exp_nvidia_inodes, models::GpuVendor
-    }, modes::types::Modes, pci::{models::PciDevice, pci_device::read_pci_devices}
+        enumerator::GpuEnumerator, env::compute_switcheroo_env, inode::exp_nvidia_inodes,
+        models::GpuVendor,
+    },
+    modes::types::Modes,
+    pci::{models::PciDevice, pci_device::read_pci_devices},
 };
 use cardwire_dbus::types::DbusPciDevice;
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
 use log::{error, info, warn};
 use std::{
-    collections::{BTreeMap, HashSet}, sync::Arc
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
 };
 use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    Result, interface::{DaemonContext, GpuInterface, ModeInterface}
+    Result,
+    interface::{DaemonContext, GpuInterface, ModeInterface},
 };
 
 #[derive(Clone)]

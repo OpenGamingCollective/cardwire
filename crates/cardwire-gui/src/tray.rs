@@ -1,5 +1,6 @@
 use std::{
-    collections::{BTreeMap, HashMap}, fmt
+    collections::{BTreeMap, HashMap},
+    fmt,
 };
 
 use ksni::{MenuItem, Tray, TrayMethods};

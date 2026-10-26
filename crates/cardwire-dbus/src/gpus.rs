@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use zbus::{
-    Result, names::OwnedInterfaceName, proxy, zvariant::{OwnedObjectPath, OwnedValue}
+    Result,
+    names::OwnedInterfaceName,
+    proxy,
+    zvariant::{OwnedObjectPath, OwnedValue},
 };
 
 use crate::types::DbusGpuDevice;

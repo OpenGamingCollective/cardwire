@@ -1,6 +1,9 @@
 //! Used to get inodes for specific files
 use std::{
-    collections::BTreeMap, fs::{self}, os::unix::fs::MetadataExt, path::Path
+    collections::BTreeMap,
+    fs::{self},
+    os::unix::fs::MetadataExt,
+    path::Path,
 };
 
 use cardwire_ebpf_userspace::InodeKey;

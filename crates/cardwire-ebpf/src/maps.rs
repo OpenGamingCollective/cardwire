@@ -1,5 +1,7 @@
 use aya_ebpf::{
-    btf_maps::RingBuf, macros::{btf_map, map}, maps::{Array, HashMap}
+    btf_maps::RingBuf,
+    macros::{btf_map, map},
+    maps::{Array, HashMap},
 };
 
 use crate::models::{InodeKey, InodeState};

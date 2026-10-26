@@ -1,17 +1,23 @@
 use std::{
-    collections::{HashMap, HashSet}, sync::Arc
+    collections::{HashMap, HashSet},
+    sync::Arc,
 };
 
 use aya::maps::{HashMap as AyaHashMap, RingBuf};
 use cardwire_core::{
-    app_metadata::types::AppMetadata, fdo::{fdo_entries::get_fdo_apps, tasks::watch_fdo_folders}, process::{
-        check_env, get_real_process_name, get_steam_app_id, read_proc_cmdline, read_proc_environ, strip_nix_wrap
-    }
+    app_metadata::types::AppMetadata,
+    fdo::{fdo_entries::get_fdo_apps, tasks::watch_fdo_folders},
+    process::{
+        check_env, get_real_process_name, get_steam_app_id, read_proc_cmdline, read_proc_environ,
+        strip_nix_wrap,
+    },
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, ExecEvent};
 use log::{error, info, warn};
 use tokio::{
-    io::{Interest, unix::AsyncFd}, sync::{Mutex, RwLock, mpsc, oneshot}, task
+    io::{Interest, unix::AsyncFd},
+    sync::{Mutex, RwLock, mpsc, oneshot},
+    task,
 };
 
 use crate::errors::{Result, SmartAnalyzerError};

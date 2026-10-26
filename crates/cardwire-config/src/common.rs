@@ -3,7 +3,9 @@
 use std::{collections::BTreeMap, fs, io};
 
 use crate::{
-    config::CardwireConfig, errors::{ConfigError, Result}, state::{CardwireGpuUnit, CardwireModeState}
+    config::CardwireConfig,
+    errors::{ConfigError, Result},
+    state::{CardwireGpuUnit, CardwireModeState},
 };
 
 #[allow(dead_code)]

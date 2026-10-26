@@ -4,12 +4,15 @@ use std::{fs, path::Path, sync::Arc};
 use crate::InodeKey;
 pub use crate::errors::{CardwireEbpfError, CardwireEbpfResult};
 use aya::{
-    Btf, Ebpf, maps::{Array, HashMap, MapError, RingBuf}, programs::{Lsm, TracePoint}
+    Btf, Ebpf,
+    maps::{Array, HashMap, MapError, RingBuf},
+    programs::{Lsm, TracePoint},
 };
 use aya_log::EbpfLogger;
 use log::{Log, error, info, warn};
 use tokio::{
-    io::{Interest, unix::AsyncFd}, sync::RwLock
+    io::{Interest, unix::AsyncFd},
+    sync::RwLock,
 };
 
 pub enum EbpfSettings {

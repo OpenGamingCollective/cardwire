@@ -1,9 +1,11 @@
 use libdrm_amdgpu_sys::{
-    AMDGPU::{DeviceHandle, GPU_INFO, amdgpu_gpu_info}, LibDrmAmdgpu
+    AMDGPU::{DeviceHandle, GPU_INFO, amdgpu_gpu_info},
+    LibDrmAmdgpu,
 };
 
 use crate::gpu::{
-    errors::{GpuError::AmdGpuError, Result}, models::GpuType
+    errors::{GpuError::AmdGpuError, Result},
+    models::GpuType,
 };
 
 pub struct AmdGpuDev {

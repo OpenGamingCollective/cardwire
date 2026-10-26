@@ -5,19 +5,25 @@ use anyhow::Result;
 
 use aya::maps::Array as AyaArray;
 use cardwire_config::{
-    config::CardwireConfig, state::{CardwireGpuState, CardwireModeState}
+    config::CardwireConfig,
+    state::{CardwireGpuState, CardwireModeState},
 };
 use cardwire_core::{
     gpu::{
-        models::GpuType, vendor_specific::nvidia::{start_nvidia_powerd, stop_nvidia_powerd}
-    }, modes::types::Modes, system_type::types::SystemType
+        models::GpuType,
+        vendor_specific::nvidia::{start_nvidia_powerd, stop_nvidia_powerd},
+    },
+    modes::types::Modes,
+    system_type::types::SystemType,
 };
 use log::{error, info, warn};
 use std::{
-    collections::BTreeMap, sync::{Arc, OnceLock}
+    collections::BTreeMap,
+    sync::{Arc, OnceLock},
 };
 use tokio::{
-    sync::{Mutex, RwLock}, task
+    sync::{Mutex, RwLock},
+    task,
 };
 use zbus::{fdo, interface, object_server::SignalEmitter};
 

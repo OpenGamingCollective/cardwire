@@ -1,5 +1,6 @@
 use crate::pci::{
-    errors::{PciError, Result}, models::IommuGroup
+    errors::{PciError, Result},
+    models::IommuGroup,
 };
 use log::error;
 use std::{collections::BTreeMap, fs, path::Path};

@@ -2,7 +2,9 @@
 
 use log::{info, warn};
 use std::{
-    collections::{BTreeMap, HashMap}, fs, io, path::Path
+    collections::{BTreeMap, HashMap},
+    fs, io,
+    path::Path,
 };
 
 use crate::gpu::models::GpuDevice;

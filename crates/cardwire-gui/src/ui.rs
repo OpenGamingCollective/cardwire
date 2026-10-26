@@ -1,17 +1,24 @@
 use chrono::{DateTime, Local};
 use iced::{
-    Alignment, Border, Color, Element, Font, Length::{Fill, FillPortion, Fixed}, widget::{
-        button, column, container, pick_list, row, scrollable, space::horizontal, text, text_input, toggler
-    }
+    Alignment, Border, Color, Element, Font,
+    Length::{Fill, FillPortion, Fixed},
+    widget::{
+        button, column, container, pick_list, row, scrollable, space::horizontal, text, text_input,
+        toggler,
+    },
 };
 use iced_aw::DropDown;
 use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    gui_config::{GuiConfig, PrimaryClickAction}, helpers::{GpuDevice, GpuType}, message::Message, models::{
-        LogEntry, LogState, LsofData, MainState, Mode, Page, PciDevice, ResolvedApp, SettingState, SmartState
-    }
+    gui_config::{GuiConfig, PrimaryClickAction},
+    helpers::{GpuDevice, GpuType},
+    message::Message,
+    models::{
+        LogEntry, LogState, LsofData, MainState, Mode, Page, PciDevice, ResolvedApp, SettingState,
+        SmartState,
+    },
 };
 
 // Custom macro for box theming, used by cards

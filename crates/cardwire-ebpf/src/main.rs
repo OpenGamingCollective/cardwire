@@ -2,14 +2,20 @@
 #![no_main]
 
 use aya_ebpf::{
-    helpers::{bpf_get_current_pid_tgid, bpf_loop}, macros::{lsm, tracepoint}, programs::{LsmContext, TracePointContext}
+    helpers::{bpf_get_current_pid_tgid, bpf_loop},
+    macros::{lsm, tracepoint},
+    programs::{LsmContext, TracePointContext},
 };
 use aya_log_ebpf::{error, warn};
 
 use crate::{
     helpers::{
-        MAX_DIRENTS, ScanCtx, get_dentry_inode, get_dentry_name, is_cardwired, is_comm_whitelisted, is_hybrid, is_inode_blocked, is_manual, is_smart, scan_dirent
-    }, maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent}, models::{InodeKey, ReturnCode, ScanCode}, vmlinux::{dentry, file, inode, path}
+        MAX_DIRENTS, ScanCtx, get_dentry_inode, get_dentry_name, is_cardwired, is_comm_whitelisted,
+        is_hybrid, is_inode_blocked, is_manual, is_smart, scan_dirent,
+    },
+    maps::{CW_ALLOWED_PID, CW_DIRENT, CW_EXEC_EVENTS, CW_FORCED_PID, ExecEvent},
+    models::{InodeKey, ReturnCode, ScanCode},
+    vmlinux::{dentry, file, inode, path},
 };
 
 #[allow(

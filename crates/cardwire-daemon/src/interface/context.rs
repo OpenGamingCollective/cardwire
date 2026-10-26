@@ -1,7 +1,8 @@
 //! Shared daemon state passed to interface constructors.
 use crate::{Result, interface::GpuInterface};
 use cardwire_config::{
-    config::CardwireConfig, state::{CardwireGpuState, CardwireModeState}
+    config::CardwireConfig,
+    state::{CardwireGpuState, CardwireModeState},
 };
 use cardwire_core::pci::models::PciDevice;
 use cardwire_ebpf_userspace::EbpfBlocker;

@@ -2,7 +2,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use log::warn;
 use vulkano::{
-    VulkanLibrary, device::physical::{PhysicalDevice, PhysicalDeviceType}, instance::{Instance, InstanceCreateFlags, InstanceCreateInfo}
+    VulkanLibrary,
+    device::physical::{PhysicalDevice, PhysicalDeviceType},
+    instance::{Instance, InstanceCreateFlags, InstanceCreateInfo},
 };
 
 use crate::gpu::models::GpuType;

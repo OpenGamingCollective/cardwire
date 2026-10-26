@@ -1,5 +1,6 @@
 use std::{
-    collections::{BTreeMap, HashMap}, io
+    collections::{BTreeMap, HashMap},
+    io,
 };
 
 use log::{debug, error, info, warn};
@@ -7,13 +8,22 @@ use log::{debug, error, info, warn};
 use crate::{
     gpu::{
         generic::{
-            default_gpu::check_default_drm_class, udev::{sysfs_get_device_drm, wait_for_drm}, vulkan::Vulkan
-        }, models::{AdditionalProperty, GpuDevice, GpuType, GpuVendor}, vendor_specific::{
-            amd::AmdGpuDev, intel::intel_get_device_type, nvidia::{
-                nvidia_get_device_minor, nvidia_get_device_minor_nvml, nvidia_get_device_name, nvidia_get_device_name_nvml, nvidia_get_device_type, nvidia_get_device_type_nvml, wait_for_nvidia
-            }
-        }
-    }, pci::models::PciDevice
+            default_gpu::check_default_drm_class,
+            udev::{sysfs_get_device_drm, wait_for_drm},
+            vulkan::Vulkan,
+        },
+        models::{AdditionalProperty, GpuDevice, GpuType, GpuVendor},
+        vendor_specific::{
+            amd::AmdGpuDev,
+            intel::intel_get_device_type,
+            nvidia::{
+                nvidia_get_device_minor, nvidia_get_device_minor_nvml, nvidia_get_device_name,
+                nvidia_get_device_name_nvml, nvidia_get_device_type, nvidia_get_device_type_nvml,
+                wait_for_nvidia,
+            },
+        },
+    },
+    pci::models::PciDevice,
 };
 
 pub struct GpuEnumerator {

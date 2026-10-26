@@ -3,12 +3,16 @@ use cardwire_config::sql::CardwireDatabase;
 use cardwire_dbus::types::DbusAppMetadata;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use std::{
-    collections::HashMap, path::Path, sync::{Arc, OnceLock}
+    collections::HashMap,
+    path::Path,
+    sync::{Arc, OnceLock},
 };
 
 use tokio::sync::{Mutex, RwLock};
 use zbus::{
-    fdo::{self, Error::Failed}, interface, object_server::SignalEmitter
+    fdo::{self, Error::Failed},
+    interface,
+    object_server::SignalEmitter,
 };
 
 #[derive(Clone, Debug)]

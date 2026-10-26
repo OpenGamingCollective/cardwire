@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, HashMap};
 
 use zbus::{
-    self, Connection, fdo, names::OwnedInterfaceName, zvariant::{OwnedObjectPath, OwnedValue}
+    self, Connection, fdo,
+    names::OwnedInterfaceName,
+    zvariant::{OwnedObjectPath, OwnedValue},
 };
 
 use crate::models::{DaemonSettings, DbusAppMetadata, LsofData, Mode};

@@ -3,7 +3,9 @@
 use crate::app_metadata::types::AppMetadata;
 use freedesktop_desktop_entry::{DesktopEntry, get_languages_from_env};
 use std::{
-    collections::HashMap, fs, path::{Path, PathBuf}
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
 };
 use xdg::BaseDirectories;
 

@@ -1,15 +1,19 @@
 use std::{
-    collections::{BTreeMap, HashMap}, sync::{Arc, OnceLock}
+    collections::{BTreeMap, HashMap},
+    sync::{Arc, OnceLock},
 };
 
 use cardwire_config::state::CardwireModeState;
 use cardwire_core::{
-    gpu::env::{compute_switcheroo_env, is_gpu_launchable}, modes::types::Modes
+    gpu::env::{compute_switcheroo_env, is_gpu_launchable},
+    modes::types::Modes,
 };
 use log::warn;
 use tokio::sync::RwLock;
 use zbus::{
-    interface, object_server::SignalEmitter, zvariant::{self, OwnedValue, Value}
+    interface,
+    object_server::SignalEmitter,
+    zvariant::{self, OwnedValue, Value},
 };
 
 use crate::interface::GpuInterface;

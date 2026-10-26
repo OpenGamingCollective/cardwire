@@ -2,7 +2,9 @@ use cardwire_core::modes::types::Modes;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{create_dir, read_to_string, write}, io::{self, ErrorKind}, path::Path
+    fs::{create_dir, read_to_string, write},
+    io::{self, ErrorKind},
+    path::Path,
 };
 
 use crate::{CONFIG_PATH, errors::Result};

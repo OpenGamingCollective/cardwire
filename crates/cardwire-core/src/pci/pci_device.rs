@@ -1,9 +1,16 @@
 use crate::pci::{
-    errors::{PciError, Result}, iommu::{is_iommu_enabled, read_iommu_groups}, models::PciDevice
+    errors::{PciError, Result},
+    iommu::{is_iommu_enabled, read_iommu_groups},
+    models::PciDevice,
 };
 use log::{error, info, warn};
 use std::{
-    collections::{BTreeMap, HashMap}, fs, fs::File, io, io::BufRead, path::Path
+    collections::{BTreeMap, HashMap},
+    fs,
+    fs::File,
+    io,
+    io::BufRead,
+    path::Path,
 };
 
 pub fn read_pci_devices() -> Result<BTreeMap<String, PciDevice>, PciError> {

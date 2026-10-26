@@ -2,14 +2,21 @@
 //! startup tasks and background-task futures.
 use crate::{
     interface::{
-        ConfigInterface, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, SmartPolicyInterface, SwitcherooInterface
-    }, tasks, whitelist::ALLOWED_PROGRAMS
+        ConfigInterface, DaemonContext, DebugInterface, GpuInterface, LoggerInterface,
+        ModeInterface, SmartPolicyInterface, SwitcherooInterface,
+    },
+    tasks,
+    whitelist::ALLOWED_PROGRAMS,
 };
 use cardwire_config::{
-    config::CardwireConfig, sql::CardwireDatabase, state::{CardwireGpuState, CardwireModeState}
+    config::CardwireConfig,
+    sql::CardwireDatabase,
+    state::{CardwireGpuState, CardwireModeState},
 };
 use cardwire_core::{
-    gpu::{enumerator::GpuEnumerator, env::compute_switcheroo_env}, modes::types::Modes, pci::{self, models::PciDevice}
+    gpu::{enumerator::GpuEnumerator, env::compute_switcheroo_env},
+    modes::types::Modes,
+    pci::{self, models::PciDevice},
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
 use cardwire_smart::SmartAnalyzer;
@@ -210,7 +217,7 @@ impl DaemonManager {
         async move {
             let res = tasks::watch_battery_status(config, mode_interface).await;
             if let Err(ref e) = res {
-                error!("battery_switch task failed: {}", e);
+                error!("battery_sewitch task failed: {}", e);
             }
             res
         }

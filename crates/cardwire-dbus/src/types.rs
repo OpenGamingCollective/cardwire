@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use cardwire_core::{
-    app_metadata::types::AppMetadata, gpu::models::{GpuDevice, GpuType}, pci::models::PciDevice
+    app_metadata::types::AppMetadata,
+    gpu::models::{GpuDevice, GpuType},
+    pci::models::PciDevice,
 };
 use zbus::zvariant::{self, OwnedValue};
 
