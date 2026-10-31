@@ -106,12 +106,12 @@ sudo systemctl enable cardwired --now
 > [!NOTE]
 > Thanks to the Fyra Labs / Terra team for packaging and maintaining Cardwire on Fedora !!
 
-## AerynOS
+## aerynOS
 
-Cardwire is available in the official AerynOS repositories.
+Cardwire is available in the official aerynOS repositories.
 
 ```bash
-sudo moss install cardwire
+sudo moss pkg add cardwire
 ```
 
 And start the service:
