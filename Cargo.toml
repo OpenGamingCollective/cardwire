@@ -44,18 +44,18 @@ env_logger = "0.11"
 toml = "1.0.3"
 vulkano = "0.35.2"
 khronos-egl = { version = "6.0.0", features = ["dynamic", "1_5"] }
-rusqlite = { version = "0.40.1", features = ["bundled"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
 libdrm_amdgpu_sys = { version = "0.9.0", default-features = false, features = [
     "dynamic_loading",
 ] }
 nvml-wrapper = "0.13.0"
 
 # EBPF
-aya = "0.14.0"
+aya = "0.16.0"
 aya-build = "0.2.0"
-aya-log = "0.3.0"
-aya-ebpf = "0.2.1"
-aya-log-ebpf = "0.2.0"
+aya-log = "0.4.0"
+aya-ebpf = "0.3.0"
+aya-log-ebpf = "0.3.0"
 which = "8.0.5"
 cargo_metadata = "0.23.1"
 
