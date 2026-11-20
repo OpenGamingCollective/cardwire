@@ -17,7 +17,7 @@ test:
 
 [group: 'check']
 check:
-    cargo check --all
+    cargo check --workspace --exclude cardwire-ebpf
 
 [group: 'lint']
 lint:
