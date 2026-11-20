@@ -39,11 +39,10 @@
         {
           pkgs,
           system,
-          toolchain,
           ...
         }:
         {
-          default = pkgs.callPackage ./nix { inherit toolchain; };
+          default = pkgs.callPackage ./nix { };
           vm-test = self.checks.${system}.vm-ci-2gpu;
           vm-test-2gpu = self.checks.${system}.vm-ci-2gpu;
           vm-test-3gpu = self.checks.${system}.vm-ci-3gpu;

@@ -1,7 +1,6 @@
 {
   lib,
   pkgs,
-  toolchain ? null,
 }:
 let
   cargoToml = builtins.fromTOML (builtins.readFile ../Cargo.toml);
@@ -25,6 +24,7 @@ pkgs.rustPlatform.buildRustPackage {
   buildInputs = [
     pkgs.udev
     pkgs.libxcb
+    pkgs.sqlite
   ];
 
   doCheck = false;
