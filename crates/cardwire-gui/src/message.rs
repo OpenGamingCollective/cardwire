@@ -1,5 +1,8 @@
 use crate::{
-    gui_config::GuiConfig, helpers::GpuDevice, models::{DaemonSettings, LogEntry, LsofData, Mode, Page, PciDevice}, tray::{TrayAction, TrayHandle}
+    gui_config::GuiConfig,
+    helpers::GpuDevice,
+    models::{DaemonSettings, LogEntry, LsofData, Mode, Page, PciDevice},
+    tray::{TrayAction, TrayHandle},
 };
 use std::collections::{BTreeMap, VecDeque};
 

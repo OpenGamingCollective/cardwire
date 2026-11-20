@@ -42,7 +42,9 @@ cardwire get
 
 GPU modes can be switched using the `cardwire set` command.
 
-### Integrated
+### Laptops with discrete GPU
+
+#### Integrated
 
 To have cardwire block the dGPU, use:
 
@@ -56,7 +58,7 @@ cardwire set integrated
 > [!TIP]
 > The dedicated GPU can still power down even if your desktop has it open, as long as nothing is actively using it. To double-check, run: `cardwire gpu 1 --lsof`
 
-### Hybrid
+#### Hybrid
 
 To have cardwire allow access to all GPUs, use
 
@@ -64,9 +66,9 @@ To have cardwire allow access to all GPUs, use
 cardwire set hybrid
 ```
 
-### Smart Mode
+#### Smart Mode
 
-Smart mode blocks the dedicated GPU by default like integrated mode, but uses a real-time analyzer to scan each application at launch and selectively allow GPU access for approved apps.
+Smart mode blocks the dedicated GPU by default like integrated mode, but uses a real-time process analyzer to scan each application at launch and selectively allow GPU access for approved apps.
 
 Cardwire natively integrates with desktop environments (GNOME, KDE) via a **Switcheroo DBus shim**. This means you can simply right-click an application in your app launcher and select **"Launch using Discrete Graphics Card"**, and Cardwire will automatically unblock the GPU for that application.
 
@@ -81,9 +83,6 @@ When launching apps in Smart mode, cardwire checks for the following to allow th
 - Steam games, identified by `SteamAppId`, are discovered into the internal application list and blocked by default until allowed
 - The per-app policies stored in cardwire's internal application list
 
-> [!NOTE]
-> The former auto-approval inputs are deprecated in favor of the internal application list. Steam auto-allow, `PrefersNonDefaultGpu` desktop entries and the automatic approval of GPU environment variables (`DRI_PRIME`, `__NV_PRIME_RENDER_OFFLOAD`) are no longer evaluated.
-
 ```bash
 cardwire set smart
 ```
@@ -91,12 +90,22 @@ cardwire set smart
 > [!Note]
 > This feature is a work in progress. The detection methods will be improved in future updates.
 
-### Manual
+### Other Systems
+
+#### Hybrid
+
+To have cardwire allow access to all GPUs, use
+
+```bash
+cardwire set hybrid
+```
+
+#### Manual
 
 > [!IMPORTANT]
 > To prevent system breakage, cardwire will not block the default GPU, even when explicitly instructed to do so.
 
-If more granular control over several GPUs is required, cardwire also allows manually blocking individual GPUs by ID. To do so, it needs to be set to manual mode:
+Cardwire also allows manually blocking individual GPUs by ID. To do so, it needs to be set to manual mode:
 
 ```bash
 cardwire set manual
@@ -125,9 +134,7 @@ cardwire launch --gpu 1 nvtop
 cardwire launch glxgears
 ```
 
-Without `--gpu`, cardwire picks the best GPU for the job, in this order: a discrete non-default GPU, a discrete GPU, the default GPU, then the first available one. The command fetches the launch environment from the daemon.
-
-Launching on a blocked or unavailable GPU is refused with a clear error, switch to Smart mode or unblock the GPU first.
+Without `--gpu`, cardwire picks the best GPU for the job, in this order: a discrete non-default GPU, a discrete GPU, the default GPU, then the first available one.
 
 ## System information
 
@@ -137,11 +144,14 @@ To check that the daemon is running:
 cardwire manager status
 ```
 
-To refresh the GPU list held by the daemon (useful after a hotplug event):
+To refresh the GPU list held by the daemon:
 
 ```bash
 cardwire debug refresh-gpu
 ```
+
+> [!NOTE]
+> This is done automatically be the daemon on pci bind/unbind events or thunderbolt bind/unbind events
 
 To check the power state of a GPU (for example whether it reached `D3Cold`):
 
@@ -199,24 +209,6 @@ To set the battery auto switch mode:
 
 ```bash
 cardwire config battery-auto-switch-mode hybrid
-```
-
-### External Display Auto Switch
-
-When an external display is connected to a port wired directly to the dedicated GPU, Cardwire can
-temporarily switch Integrated and Smart modes to Hybrid. It restores the requested mode after the
-display is disconnected.
-
-This feature is disabled by default. To get if external display auto switch is enabled:
-
-```bash
-cardwire config external-display-auto-switch
-```
-
-To enable/disable it:
-
-```bash
-cardwire config external-display-auto-switch true
 ```
 
 ### Auto Apply Gpu State

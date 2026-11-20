@@ -53,6 +53,9 @@ https://extensions.gnome.org/extension/9919/cardwire-gpu-toggle/
 KDE Plasmoid:
 https://github.com/Neo-AzTeK/cardwire-plasmoid
 
+Shiftray (asusctl + Cardwire tray app for ASUS laptops):
+https://github.com/sprinterz5/shiftray
+
 ## Discord
 
 Need help or have a question about Cardwire? Join us on the OGC Discord:

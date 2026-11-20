@@ -1,6 +1,10 @@
 [Unit]
 Description=Cardwire Daemon
-After=dbus.service
+Before=graphical.target display-manager.service
+# drm-module-load.target is from cachyos
+# <https://github.com/CachyOS/CachyOS-PKGBUILDS/pull/1695>
+After=drm-module-load.target
+Wants=drm-module-load.target
 
 
 [Service]

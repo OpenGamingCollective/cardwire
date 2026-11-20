@@ -1,7 +1,10 @@
 //! Shared daemon state passed to interface constructors.
-use crate::{
-    Result, core::pci::PciDevice, file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, GpuInterface}
+use crate::{Result, interface::GpuInterface};
+use cardwire_config::{
+    config::CardwireConfig,
+    state::{CardwireGpuState, CardwireModeState},
 };
+use cardwire_core::pci::models::PciDevice;
 use cardwire_ebpf_userspace::EbpfBlocker;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, task};
@@ -11,7 +14,7 @@ pub struct DaemonContext {
     pub mode_state: Arc<RwLock<CardwireModeState>>,
     pub gpu_state: Arc<RwLock<CardwireGpuState>>,
     pub gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
-    pub config: Arc<ConfigMemory>,
+    pub config: Arc<RwLock<CardwireConfig>>,
     pub blocker: Arc<RwLock<EbpfBlocker>>,
     pub power_tasks: Arc<RwLock<BTreeMap<usize, task::JoinHandle<Result<()>>>>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,

@@ -1,17 +1,24 @@
 use chrono::{DateTime, Local};
 use iced::{
-    Alignment, Border, Color, Element, Font, Length::{Fill, FillPortion, Fixed}, widget::{
-        button, column, container, pick_list, row, scrollable, space::horizontal, text, text_input, toggler
-    }
+    Alignment, Border, Color, Element, Font,
+    Length::{Fill, FillPortion, Fixed},
+    widget::{
+        button, column, container, pick_list, row, scrollable, space::horizontal, text, text_input,
+        toggler,
+    },
 };
 use iced_aw::DropDown;
 use std::collections::BTreeMap;
 use strum::{IntoEnumIterator, VariantArray};
 
 use crate::{
-    gui_config::{GuiConfig, PrimaryClickAction}, helpers::GpuDevice, message::Message, models::{
-        LogEntry, LogState, LsofData, MainState, Mode, Page, PciDevice, ResolvedApp, SettingState, SmartState
-    }
+    gui_config::{GuiConfig, PrimaryClickAction},
+    helpers::{GpuDevice, GpuType},
+    message::Message,
+    models::{
+        LogEntry, LogState, LsofData, MainState, Mode, Page, PciDevice, ResolvedApp, SettingState,
+        SmartState,
+    },
 };
 
 // Custom macro for box theming, used by cards
@@ -358,7 +365,7 @@ fn gpu_cards(
             let gpu_id = *id;
             let is_blocked = gpu.blocked;
 
-            let is_available = gpu.available;
+            let is_available = gpu.device_type != GpuType::Unavailable;
 
             // Build dropdown menu items
             let mut dropdown_col = column![];
@@ -428,7 +435,7 @@ fn gpu_cards(
                             .size(15)
                             .color(Color::from_rgb(0.72, 0.72, 0.75))
                             .width(width),
-                        text(gpu.discrete)
+                        text(gpu.device_type == GpuType::Discrete)
                             .size(15)
                             .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
@@ -473,7 +480,7 @@ fn gpu_cards(
                             .size(15)
                             .color(Color::from_rgb(0.72, 0.72, 0.75))
                             .width(width),
-                        text(gpu.virtual_gpu)
+                        text(gpu.device_type == GpuType::Virtual)
                             .size(15)
                             .color(Color::from_rgb(0.92, 0.92, 0.92))
                     ],
@@ -525,11 +532,9 @@ fn gpu_cards(
                             .size(15)
                             .color(Color::from_rgb(0.72, 0.72, 0.75))
                             .width(width),
-                        text(gpu.available).size(15).color(Color::from_rgb(
-                            239.0 / 255.0,
-                            68.0 / 255.0,
-                            68.0 / 255.0
-                        ))
+                        text(gpu.device_type != GpuType::Unavailable)
+                            .size(15)
+                            .color(Color::from_rgb(239.0 / 255.0, 68.0 / 255.0, 68.0 / 255.0))
                     ]
                 ]
                 .spacing(8)

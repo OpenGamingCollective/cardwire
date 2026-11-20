@@ -70,28 +70,12 @@ jobs:
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config gcc-multilib libegl1-mesa-dev libvulkan-dev libglvnd-dev libwayland-dev libxkbcommon-dev libx11-dev libxcb1-dev libx11-xcb-dev
-      - name: Install Nightly Rust (for aya-ebpf)
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly-2026-08-12
-          components: rust-src
-      - name: Install Stable Rust
-        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
-        with:
-          components: clippy
-      - uses: cargo-bins/cargo-binstall@b874e25ea559687bec77e281e9b271aa1367b624 # v1.23.0
-        with:
-          version: "1.21.1"
-      - name: Install bpf-linker
-        run: cargo binstall bpf-linker
-      - name: Clippy Workspace
-        uses: auguwu/clippy-action@9817d076b82df0194935be9db6154c56ac07b317 # 1.5.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          check-args: --all-targets --all-features
-          args: -D warnings
+      - name: Remove preinstalled Rust
+        run: rm -rf ~/.cargo ~/.rustup
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
+      - name: Cargo Clippy
+        run: nix develop .# --command just lint
+
   rust-test:
     name: Rust Test
     runs-on: ubuntu-latest
@@ -101,22 +85,12 @@ jobs:
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config gcc-multilib libegl1-mesa-dev libvulkan-dev libglvnd-dev libwayland-dev libxkbcommon-dev libx11-dev libxcb1-dev libx11-xcb-dev
-      - name: Install Nightly Rust (for aya-ebpf)
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly-2026-08-12
-          components: rust-src
-      - name: Install Stable Rust
-        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
-      - uses: cargo-bins/cargo-binstall@b874e25ea559687bec77e281e9b271aa1367b624 # v1.23.0
-        with:
-          version: "1.21.1"
-      - name: Install bpf-linker
-        run: cargo binstall bpf-linker
-      - name: Test code
-        run: cargo test
+      - name: Remove preinstalled Rust
+        run: rm -rf ~/.cargo ~/.rustup
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
+      - name: Cargo Test
+        run: nix develop .# --command just test
+
   rust-format:
     name: Rust Format
     runs-on: ubuntu-latest
@@ -127,15 +101,12 @@ jobs:
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@nightly # Nightly
-        with:
-          components: rustfmt
-      - name: Format code
-        run: cargo +nightly fmt --all --check
-      - name: Suggest formatting changes
-        uses: reviewdog/action-suggester@2558ba17e65a9039e73764a73009fc05fef28a46 # v1.24.3
-        with:
-          tool_name: rustfmt
+      - name: Remove preinstalled Rust
+        run: rm -rf ~/.cargo ~/.rustup
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
+      - name: Cargo Format
+        run: nix develop .# --command just fmt-ci
+  
   vm-test:
     name: VM Test (${{ matrix.vm }})
     runs-on: ubuntu-latest
@@ -149,7 +120,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: determinateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - uses: determinateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: cardwire
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
       - run: nix build .#checks.x86_64-linux.${{ matrix.vm }}
   mdbook-test:
     runs-on: ubuntu-latest
@@ -159,14 +134,6 @@ jobs:
       MDBOOK_VERSION: 0.5.2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install mdBook
-        run: |
-          curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf -y | sh
-          rustup update
-          cargo install --version ${MDBOOK_VERSION} mdbook
-          cargo install mdbook-mermaid
-      - name: Test Pages
-        id: pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-      - name: Test with mdBook
-        run: mdbook test
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
+      - name: mdBook Test
+        run: nix develop .# --command mdbook test

@@ -1,5 +1,7 @@
 use std::{
-    collections::{HashMap, VecDeque}, fmt::{self, Display}, time::SystemTime
+    collections::{HashMap, VecDeque},
+    fmt::{self, Display},
+    time::SystemTime,
 };
 use strum::{EnumIter, FromRepr, VariantArray};
 

@@ -1,27 +1,39 @@
-use crate::{
-    core::{
-        env::compute_switcheroo_env, gpu::{GpuEnumerator, GpuVendor}, inode::exp_nvidia_inodes, pci::{self, DbusPciDevice, PciDevice}
-    }, interface::SwitcherooInterface, tasks::watch_power_state
+use crate::{interface::SwitcherooInterface, tasks::watch_power_state};
+use cardwire_config::{
+    config::CardwireConfig,
+    state::{CardwireGpuState, CardwireModeState},
 };
+use cardwire_core::{
+    gpu::{
+        enumerator::GpuEnumerator, env::compute_switcheroo_env, inode::exp_nvidia_inodes,
+        models::GpuVendor,
+    },
+    modes::types::Modes,
+    pci::{models::PciDevice, pci_device::read_pci_devices},
+};
+use cardwire_dbus::types::DbusPciDevice;
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
 use log::{error, info, warn};
 use std::{
-    collections::{BTreeMap, HashSet}, sync::Arc
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
 };
 use tokio::{sync::RwLock, task};
 use zbus::{fdo, interface};
 
 use crate::{
-    Result, file::{CardwireGpuState, CardwireModeState}, interface::{ConfigMemory, DaemonContext, GpuInterface, ModeInterface, Modes}
+    Result,
+    interface::{DaemonContext, GpuInterface, ModeInterface},
 };
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct DebugInterface {
     pub mode_state: Arc<RwLock<CardwireModeState>>,
     pub mode_interface: ModeInterface,
     pub gpu_state: Arc<RwLock<CardwireGpuState>>,
     pub gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
-    pub config: Arc<ConfigMemory>,
+    pub config: Arc<RwLock<CardwireConfig>>,
     pub blocker: Arc<RwLock<EbpfBlocker>>,
     pub pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>>,
     pub object_server: Option<zbus::ObjectServer>,
@@ -122,8 +134,7 @@ impl DebugInterface {
     pub async fn refresh_gpu(&self) -> fdo::Result<()> {
         // read a new pci list, if it's different than the current one, refresh the gpus, else do
         // nothing
-        let new_pci_list =
-            pci::read_pci_devices().map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        let new_pci_list = read_pci_devices().map_err(|err| fdo::Error::Failed(err.to_string()))?;
         let mut pci_list = self.pci_list.write().await;
         let changed = new_pci_list != *pci_list;
         if changed && let Some(object_server) = &self.object_server {
@@ -158,6 +169,7 @@ impl DebugInterface {
                 .iter()
                 .filter(|(_, gpu)| gpu.is_available())
                 .count();
+
             for (id, device) in new_gpu_list {
                 let gpu_env = compute_switcheroo_env(
                     gpu_count,

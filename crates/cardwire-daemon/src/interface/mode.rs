@@ -1,27 +1,38 @@
 //! Define the mode dbus
-use crate::{
-    Result, core::{
-        errors::CardwireError, gpu::{start_nvidia_powerd, stop_nvidia_powerd}
-    }, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface, config::ConfigMemory}, types::SystemType
-};
+use crate::interface::{DaemonContext, GpuInterface, SwitcherooInterface};
+
+use anyhow::Result;
+
 use aya::maps::Array as AyaArray;
+use cardwire_config::{
+    config::CardwireConfig,
+    state::{CardwireGpuState, CardwireModeState},
+};
+use cardwire_core::{
+    gpu::{
+        models::GpuType,
+        vendor_specific::nvidia::{start_nvidia_powerd, stop_nvidia_powerd},
+    },
+    modes::types::Modes,
+    system_type::types::SystemType,
+};
 use log::{error, info, warn};
 use std::{
-    collections::BTreeMap, sync::{Arc, OnceLock, atomic::Ordering}
+    collections::BTreeMap,
+    sync::{Arc, OnceLock},
 };
 use tokio::{
-    sync::{Mutex, RwLock}, task
+    sync::{Mutex, RwLock},
+    task,
 };
 use zbus::{fdo, interface, object_server::SignalEmitter};
-
-pub use crate::types::Modes;
 
 #[derive(Clone)]
 pub struct ModeInterface {
     mode_state: Arc<RwLock<CardwireModeState>>,
     gpu_state: Arc<RwLock<CardwireGpuState>>,
     gpu_list: Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
-    config: Arc<ConfigMemory>,
+    config: Arc<RwLock<CardwireConfig>>,
     mode_map: Arc<Mutex<AyaArray<aya::maps::MapData, u8>>>,
     // Mutex to serialize mode transitions
     transition: Arc<Mutex<()>>,
@@ -122,7 +133,19 @@ impl ModeInterface {
     /// Apply a mode to GPU blocking and the eBPF map without persisting it
     pub(crate) async fn apply_mode(&self, mode: Modes) -> fdo::Result<()> {
         let gpu_list = self.gpu_list.read().await;
-        let system_type = SystemType::from_gpulist(&gpu_list);
+        let gpus: Vec<(usize, bool, GpuType)> = gpu_list
+            .iter()
+            .filter(|(_, gpu)| gpu.device.is_available())
+            .map(|(id, gpu)| {
+                (
+                    *id,
+                    gpu.device.is_default(),
+                    gpu.device.device_type().clone(),
+                )
+            })
+            .collect();
+
+        let system_type = SystemType::from_gpus(&gpus);
 
         match mode {
             // Integrated and Smart modes only work on hybrid setups with a offload discrete GPU
@@ -131,7 +154,7 @@ impl ModeInterface {
                 // Check if there is an offload discrete GPU (discrete and not the default display)
                 if system_type != SystemType::Laptop {
                     let error_message = format!(
-                        "Couldn't set mode to {}, Integrated and Smart modes require a offload discrete GPU (not supported on desktops where the discrete GPU is the primary display)",
+                        "Couldn't set mode to {}, Integrated and Smart modes are only available on laptops with a offload discrete GPU",
                         mode
                     );
                     error!("{}", error_message);
@@ -163,18 +186,20 @@ impl ModeInterface {
             // Else apply the gpu_state but still unblock other gpus
             Modes::Manual => {
                 // Manual is only allowed on Desktop or Manual
-                if system_type != SystemType::Manual && system_type != SystemType::Desktop {
+                if system_type != SystemType::Manual {
                     let error_message = format!(
-                        "Couldn't set mode to {}, Manual mode is only available on Desktop or system with either 1 GPU or 3+ GPUs",
+                        "Couldn't set mode to {}, Manual mode is only available laptops with a offload discrete GPU",
                         mode
                     );
                     error!("{}", error_message);
                     return Err(fdo::Error::NotSupported(error_message));
                 }
-                let config = self.config.auto_apply_gpu_state.load(Ordering::Relaxed);
+                let config = self.config.read().await;
+                let restore_states = config.global_settings.restore_gpu_states;
+                drop(config);
                 let gpu_state = self.gpu_state.read().await;
                 for (id, gpu) in gpu_list.iter().filter(|(_, gpu)| gpu.device.is_available()) {
-                    if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && config {
+                    if gpu_state.gpu_block_state(gpu.device.pci().pci_address()) && restore_states {
                         if gpu.device.is_default() {
                             // For safety, warn and unblock if default
                             warn!(
@@ -213,7 +238,6 @@ impl ModeInterface {
         let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
         match self.internal_set_mode(mode, true).await {
             Ok(()) => Ok(()),
-            Err(CardwireError::FdoError(err)) => Err(err),
             Err(err) => Err(fdo::Error::Failed(err.to_string())),
         }
     }
@@ -233,14 +257,26 @@ impl ModeInterface {
     pub async fn available_modes(&self) -> fdo::Result<Vec<Modes>> {
         let system_type = {
             let gpu_list = self.gpu_list.read().await;
+            let gpus: Vec<(usize, bool, GpuType)> = gpu_list
+                .iter()
+                .filter(|(_, gpu)| gpu.device.is_available())
+                .map(|(id, gpu)| {
+                    (
+                        *id,
+                        gpu.device.is_default(),
+                        gpu.device.device_type().clone(),
+                    )
+                })
+                .collect();
 
-            SystemType::from_gpulist(&gpu_list)
+            SystemType::from_gpus(&gpus)
         };
+
         Ok(match system_type {
             SystemType::Laptop => {
                 vec![Modes::Integrated, Modes::Hybrid, Modes::Smart]
             }
-            SystemType::Desktop | SystemType::Manual => {
+            SystemType::Manual => {
                 vec![Modes::Hybrid, Modes::Manual]
             }
         })

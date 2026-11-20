@@ -53,6 +53,7 @@
       ];
     };
   };
+  systemd.services.cardwired.environment.CARDWIRE_TESTING = "1";
   programs.bash = {
     enable = true;
     shellAliases = {

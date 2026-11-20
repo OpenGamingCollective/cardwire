@@ -1,14 +1,24 @@
 use clap::Parser;
 use iced::{
-    Alignment, Element, Length::{Fill, Fixed}, Subscription, Task, widget::{column, container, row, stack}, window
+    Alignment, Element,
+    Length::{Fill, Fixed},
+    Subscription, Task,
+    widget::{column, container, row, stack},
+    window,
 };
 use log::error;
 use std::collections::BTreeMap;
 
 use crate::{
-    args::CardwireArgs, gui_config::{GuiConfig, PrimaryClickAction}, helpers::{CardwireDbus, GpuDevice}, message::Message, models::{
-        DaemonSettings, LogState, MainState, Mode, Page, PciDevice, SettingState, SmartState
-    }, tray::{self, TrayAction, TrayHandle}, ui::{self, daemon_setting_page, error_bar, info_bar, pci_page}
+    args::CardwireArgs,
+    gui_config::{GuiConfig, PrimaryClickAction},
+    helpers::{CardwireDbus, GpuDevice},
+    message::Message,
+    models::{
+        DaemonSettings, LogState, MainState, Mode, Page, PciDevice, SettingState, SmartState,
+    },
+    tray::{self, TrayAction, TrayHandle},
+    ui::{self, daemon_setting_page, error_bar, info_bar, pci_page},
 };
 
 #[derive(Debug)]

@@ -1,13 +1,25 @@
 //! DBUS Interface for single gpu interaction
 
 use std::{
-    collections::{BTreeMap, HashMap}, fs, sync::{Arc, OnceLock}
+    collections::{BTreeMap, HashMap},
+    fs,
+    sync::{Arc, OnceLock},
 };
 
-use crate::{
-    Result, core::{
-        env::is_gpu_launchable, gpu::{DbusGpuDevice, GpuDevice, is_gpu_active}, inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode}, pci::PciDevice, procfs
-    }, file::{CardwireGpuState, CardwireModeState}, interface::{Modes, SwitcherooInterface}
+use anyhow::Result;
+use cardwire_config::state::{CardwireGpuState, CardwireModeState};
+use cardwire_dbus::types::DbusGpuDevice;
+
+use crate::interface::SwitcherooInterface;
+use cardwire_core::{
+    gpu::{
+        generic::display::is_gpu_active,
+        inode::{card_to_inode, get_inodes, nvidia_to_inode, render_to_inode, single_pci_to_inode},
+        models::{GpuDevice, GpuType},
+        procfs::lsof_read,
+    },
+    modes::types::Modes,
+    pci::models::PciDevice,
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, InodeKey};
 use log::{info, warn};
@@ -78,7 +90,7 @@ impl GpuInterface {
                 *self.device.card(),
                 self.device.pci().pci_address().to_owned(),
                 self.device.pci().parent_pci().to_owned(),
-                *self.device.nvidia_minor(),
+                self.device.nvidia_minor(),
                 pci_list_guard.clone(),
             )
         };
@@ -162,7 +174,7 @@ impl GpuInterface {
         let nvidia = match self.device.nvidia_minor() {
             // GPU is nvidia
             Some(minor) => {
-                if let Ok(inode) = nvidia_to_inode(*minor) {
+                if let Ok(inode) = nvidia_to_inode(minor) {
                     blocker.is_inode_blocked(inode, gpu_id).into_fdo()?
                 } else {
                     false
@@ -251,6 +263,10 @@ impl GpuInterface {
     #[zbus(property)]
     /// Check if the GPU is blocked
     pub async fn block(&self) -> fdo::Result<bool> {
+        // Directly return for non-available GPUs
+        if *self.device.device_type() == GpuType::Unavailable {
+            return Ok(false);
+        }
         self.gpu_blocked().await
     }
 
@@ -261,7 +277,7 @@ impl GpuInterface {
         let mut proc_map: HashMap<String, Vec<String>> = HashMap::new();
 
         async fn read_lsof(path: String) -> fdo::Result<Vec<String>> {
-            tokio::task::spawn_blocking(move || procfs::lsof_read(&path))
+            tokio::task::spawn_blocking(move || lsof_read(&path))
                 .await
                 .map_err(|e| fdo::Error::Failed(e.to_string()))?
                 .map_err(|e| fdo::Error::Failed(e.to_string()))
@@ -318,17 +334,5 @@ impl GpuInterface {
             Some(v) => v.clone(),
             None => Vec::new(),
         }
-    }
-
-    #[zbus(property)]
-    /// Whether this GPU can be targeted by an offload launch in the current mode: available and
-    /// not blocked, or blocked in Smart mode where the smart policy can grant per-process access
-    pub async fn launchable(&self) -> bool {
-        let mode = self.mode_state.read().await.mode();
-        is_gpu_launchable(
-            self.device.is_available(),
-            self.gpu_blocked().await.unwrap_or(true),
-            mode,
-        )
     }
 }

@@ -1,6 +1,9 @@
+#[cfg(feature = "bpf")]
 use anyhow::{Context as _, anyhow};
+#[cfg(feature = "bpf")]
 use aya_build::Toolchain;
 
+#[cfg(feature = "bpf")]
 fn main() -> anyhow::Result<()> {
     let cargo_metadata::Metadata { packages, .. } = cargo_metadata::MetadataCommand::new()
         .no_deps()
@@ -23,10 +26,11 @@ fn main() -> anyhow::Result<()> {
             .as_str(),
         ..Default::default()
     };
-    // aya-build only routes through rustup when it is on PATH; distro builds
-    // (nixpkgs and friends) drive their own toolchain and ignore this pin
-    // NOTE: The build will fail if bpf-linker is not linked to llvm23
-    // See <https://github.com/OpenGamingCollective/cardwire/issues/193>
     const EBPF_NIGHTLY: &str = "nightly-2026-08-12";
     aya_build::build_ebpf([ebpf_package], Toolchain::Custom(EBPF_NIGHTLY))
+}
+
+#[cfg(not(feature = "bpf"))]
+fn main() {
+    // do nothing
 }

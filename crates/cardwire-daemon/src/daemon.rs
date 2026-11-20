@@ -1,23 +1,17 @@
 //! entry point of cardwired
-mod analyzer;
-mod core;
-mod file;
 mod interface;
 mod manager;
 mod tasks;
-pub mod types;
+pub mod whitelist;
 
-use crate::{core::errors::Result, manager::DaemonManager, tasks::watch_power_state};
+use anyhow::Result;
+
+use crate::{manager::DaemonManager, tasks::watch_power_state};
 use env_logger::Env;
 use log::info;
 use std::{future::pending, sync::Arc};
 use tokio::task;
 use zbus::connection;
-
-/// Cardwire configuration directory.
-pub const CONFIG_PATH: &str = "/etc/cardwire";
-/// Cardwire state directory.
-pub const STATE_PATH: &str = "/var/lib/cardwire";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -117,7 +111,6 @@ async fn main() -> Result<()> {
     }
     task::spawn(daemon.battery_switch_future());
     task::spawn(daemon.monitor_udev_future());
-    task::spawn(daemon.monitor_display_future());
     task::spawn(daemon.run_analyzer());
     info!("Daemon started succesfully");
     pending::<()>().await;

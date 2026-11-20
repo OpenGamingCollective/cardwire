@@ -1,5 +1,7 @@
 use std::{
-    collections::VecDeque, sync::{Arc, OnceLock}, time::SystemTime
+    collections::VecDeque,
+    sync::{Arc, OnceLock},
+    time::SystemTime,
 };
 
 use tokio::sync::RwLock;

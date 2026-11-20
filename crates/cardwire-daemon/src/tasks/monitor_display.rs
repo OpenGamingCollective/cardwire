@@ -4,19 +4,23 @@
 //! the effective mode is temporarily changed to Hybrid and restored after the display disconnects.
 
 use std::{
-    collections::{BTreeMap, HashSet}, sync::{
-        Arc, atomic::{AtomicBool, Ordering}
-    }, time::Duration
+    collections::{BTreeMap, HashSet},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
 };
 
+use cardwire_config::state::CardwireModeState;
+use cardwire_core::{gpu::generic::display::is_gpu_active, modes::types::Modes};
 use log::warn;
 use tokio::{
-    io::{Interest, unix::AsyncFd}, sync::RwLock
+    io::{Interest, unix::AsyncFd},
+    sync::RwLock,
 };
 
-use crate::{
-    core::gpu::is_gpu_active, file::CardwireModeState, interface::{GpuInterface, ModeInterface, Modes}
-};
+use crate::interface::{GpuInterface, ModeInterface};
 
 // Give connector status files time to settle after a burst of DRM uevents.
 const DISPLAY_DEBOUNCE: Duration = Duration::from_millis(250);

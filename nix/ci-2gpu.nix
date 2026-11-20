@@ -1,15 +1,13 @@
 {
   pkgs,
-  system,
   self,
-  lib,
 }:
 let
   # Fills a sandbox's private tmpfs until a file lands on the inode number
   # given as $1, then checks that file and its neighbours survive
-  sandboxCollision = (pkgs system).writeShellScript "sandbox-collision" ''
+  sandboxCollision = pkgs.writeShellScript "sandbox-collision" ''
     set -eu
-    export PATH=${(pkgs system).coreutils}/bin:$PATH
+    export PATH=${pkgs.coreutils}/bin:$PATH
 
     # tmpfs hands out inode numbers in percpu blocks of 1024 and can skip
     # straight past the target, so overshoot by more than one block
@@ -37,11 +35,10 @@ let
     [ "$(ls -1 /tmp | wc -l)" -eq "$n" ]
   '';
 in
-(pkgs system).testers.runNixOSTest {
+pkgs.testers.runNixOSTest {
   name = "cardwire-test";
   nodes.machine =
     {
-      config,
       lib,
       ...
     }:

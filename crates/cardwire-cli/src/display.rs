@@ -1,46 +1,30 @@
 //! The purpose of this file is to format the received String from daemon into a displayable format
 //! for the user
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{Ok, Result};
-// Define the struct here instead of importing from cardwire_core,
-// I want cardwire-cli to be independent of the rest of cardwire
-// This allow other dev to make their own client for cardwire
-// Here the struct are used to parse the json
+use cardwire_core::gpu::models::GpuType;
+use cardwire_dbus::types::DbusPciDevice;
+use zbus::zvariant::OwnedValue;
+
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug)]
-pub struct GpuDevice {
+pub struct DisplayGpuDevice {
     pub id: u32,
     pub name: String,
     pub pci: String,
     pub render: u32,
     pub card: u32,
     pub default: bool,
-    pub discrete: bool,
-    pub virtual_gpu: bool,
-    pub available: bool,
+    pub device_type: GpuType,
     pub vendor: String,
     pub driver: String,
     pub blocked: bool,
-    pub launchable: bool,
-    pub nvidia: bool,
-    pub nvidia_minor: String,
-}
-#[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type)]
-pub struct PciDevice {
-    iommu_group: String,
-    vendor_id: String,
-    device_id: String,
-    vendor_name: String,
-    device_name: String,
-    driver: String,
-    class: String,
-    parent_pci: String,
-    child_pci: String,
+    pub additional_properties: HashMap<String, OwnedValue>,
 }
 
 /// Take a Map and print it
-pub fn print_devices(gpu_list: BTreeMap<usize, GpuDevice>, is_json: bool) -> Result<()> {
+pub fn print_devices(gpu_list: BTreeMap<usize, DisplayGpuDevice>, is_json: bool) -> Result<()> {
     if is_json {
         println!("{}", serde_json::to_string_pretty(&gpu_list)?);
     } else {
@@ -50,12 +34,12 @@ pub fn print_devices(gpu_list: BTreeMap<usize, GpuDevice>, is_json: bool) -> Res
     Ok(())
 }
 /// Take a Map and print it
-pub fn print_devices_pci(pci_list: BTreeMap<String, PciDevice>) -> Result<()> {
+pub fn print_devices_pci(pci_list: BTreeMap<String, DbusPciDevice>) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&pci_list)?);
     Ok(())
 }
 /// Take a Map and print it into a good looking table
-fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
+fn pretty_print_gpu(gpu_list: BTreeMap<usize, DisplayGpuDevice>) {
     let mut id_w = 2usize;
     let mut name_w = 4usize;
     let mut pci_w = 3usize;
@@ -119,7 +103,11 @@ fn pretty_print_gpu(gpu_list: BTreeMap<usize, GpuDevice>) {
             render_full,
             card_full,
             if gpu.default { "(*)" } else { "( )" },
-            if gpu.discrete { "(*)" } else { "( )" },
+            if gpu.device_type == GpuType::Discrete {
+                "(*)"
+            } else {
+                "( )"
+            },
             gpu.blocked,
             id_w = id_w,
             name_w = name_w,
@@ -144,29 +132,24 @@ mod tests {
         name: &str,
         pci: &str,
         default: bool,
-        discrete: bool,
-        virtual_gpu: bool,
-        available: bool,
+        device_type: GpuType,
         vendor: &str,
         driver: &str,
         blocked: bool,
-    ) -> GpuDevice {
-        GpuDevice {
+        additional_properties: HashMap<String, OwnedValue>,
+    ) -> DisplayGpuDevice {
+        DisplayGpuDevice {
             id,
             name: name.to_string(),
             pci: pci.to_string(),
             render: 128,
             card: 0,
             default,
-            discrete,
-            virtual_gpu,
-            available,
+            device_type: device_type.clone(),
             vendor: vendor.to_string(),
             driver: driver.to_string(),
             blocked,
-            launchable: !blocked && available,
-            nvidia: false,
-            nvidia_minor: String::new(),
+            additional_properties,
         }
     }
 
@@ -180,14 +163,15 @@ mod tests {
                 "Intel UHD",
                 "0000:00:02.0",
                 true,
-                false,
-                false,
-                true,
+                GpuType::Integrated,
                 "Intel",
                 "xe",
                 false,
+                HashMap::default(),
             ),
         );
+        let mut prop: HashMap<String, OwnedValue> = HashMap::default();
+        prop.insert("nvidia_minor".into(), OwnedValue::from(0));
         map.insert(
             1,
             make_gpu(
@@ -195,26 +179,30 @@ mod tests {
                 "RTX 4060",
                 "0000:01:00.0",
                 false,
-                true,
-                false,
-                true,
+                GpuType::Discrete,
                 "Nvidia",
                 "nouveau",
                 true,
+                prop,
             ),
         );
 
         let json_str = serde_json::to_string_pretty(&map).unwrap();
         // Verify it parses back
-        let parsed: BTreeMap<usize, GpuDevice> = serde_json::from_str(&json_str).unwrap();
+        let parsed: BTreeMap<usize, DisplayGpuDevice> = serde_json::from_str(&json_str).unwrap();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[&0].name, "Intel UHD");
         assert!(parsed[&1].blocked);
+        assert!(
+            parsed[&1]
+                .additional_properties
+                .contains_key("nvidia_minor")
+        )
     }
 
     #[test]
     fn test_print_devices_json_empty_map() {
-        let map: BTreeMap<usize, GpuDevice> = BTreeMap::new();
+        let map: BTreeMap<usize, DisplayGpuDevice> = BTreeMap::new();
         let json_str = serde_json::to_string_pretty(&map).unwrap();
         assert_eq!(json_str, "{}");
     }
@@ -226,15 +214,14 @@ mod tests {
             "RX 7900 XTX",
             "0000:03:00.0",
             false,
-            true,
-            false,
-            true,
+            GpuType::Discrete,
             "AMD",
             "amdgpu",
             false,
+            HashMap::default(),
         );
         let json = serde_json::to_string(&gpu).unwrap();
-        let parsed: GpuDevice = serde_json::from_str(&json).unwrap();
+        let parsed: DisplayGpuDevice = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.id, 42);
         assert_eq!(parsed.name, "RX 7900 XTX");
         assert_eq!(parsed.pci, "0000:03:00.0");
@@ -242,6 +229,6 @@ mod tests {
         assert_eq!(parsed.card, 0);
         assert!(!parsed.default);
         assert!(!parsed.blocked);
-        assert!(!parsed.nvidia);
+        assert!(parsed.vendor != "Nvidia");
     }
 }

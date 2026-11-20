@@ -1,17 +1,31 @@
 //! Daemon composition root: builds the shared [`DaemonContext`] and every D-Bus interface, owns
 //! startup tasks and background-task futures.
 use crate::{
-    Result, analyzer::CardwireAnalyzer, core::{
-        env::compute_switcheroo_env, gpu::GpuEnumerator, pci::{self}
-    }, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
-        ConfigInterface, ConfigMemory, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
-    }, tasks
+    interface::{
+        ConfigInterface, DaemonContext, DebugInterface, GpuInterface, LoggerInterface,
+        ModeInterface, SmartPolicyInterface, SwitcherooInterface,
+    },
+    tasks,
+    whitelist::ALLOWED_PROGRAMS,
+};
+use cardwire_config::{
+    config::CardwireConfig,
+    sql::CardwireDatabase,
+    state::{CardwireGpuState, CardwireModeState},
+};
+use cardwire_core::{
+    gpu::{enumerator::GpuEnumerator, env::compute_switcheroo_env},
+    modes::types::Modes,
+    pci::{self, models::PciDevice},
 };
 use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
+use cardwire_smart::SmartAnalyzer;
 use log::error;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
 use zbus::{fdo, interface};
+
+use anyhow::{Result, anyhow};
 
 #[derive(Clone)]
 pub struct DaemonManager {
@@ -30,16 +44,16 @@ impl DaemonManager {
         let mode_state: Arc<RwLock<CardwireModeState>> = Arc::new(RwLock::new(mode_state));
 
         let user_config: CardwireConfig = CardwireConfig::build()?;
-        let user_config = Arc::new(ConfigMemory::build(user_config));
+        let user_config = Arc::new(RwLock::new(user_config));
 
         let gpu_state: CardwireGpuState = CardwireGpuState::build()?;
         let gpu_state: Arc<RwLock<CardwireGpuState>> = Arc::new(RwLock::new(gpu_state));
 
-        let pci_devices: BTreeMap<String, pci::PciDevice> = pci::read_pci_devices()?;
+        let pci_devices: BTreeMap<String, PciDevice> = pci::pci_device::read_pci_devices()?;
+
         let gpu_enumerator = GpuEnumerator::build();
         let gpu_list = gpu_enumerator.enumerate(&pci_devices);
-        let pci_list: Arc<RwLock<BTreeMap<String, pci::PciDevice>>> =
-            Arc::new(RwLock::new(pci_devices));
+        let pci_list: Arc<RwLock<BTreeMap<String, PciDevice>>> = Arc::new(RwLock::new(pci_devices));
 
         let mut blocker = EbpfBlocker::new()?;
         let database = CardwireDatabase::build()?;
@@ -153,14 +167,11 @@ impl DaemonManager {
     async fn set_nvidia_setting(&self) -> Result<()> {
         // Get lock on ebpf-blocker
         let mut blocker = self.inner.blocker.write().await;
+        let config = self.inner.config.read().await;
         blocker
             .set_ebpf_setting(
                 EbpfSettings::ExperimentalNvidia,
-                self.debug_interface
-                    .config
-                    .experimental_nvidia_block
-                    .load(std::sync::atomic::Ordering::Relaxed)
-                    .into(),
+                config.experimental_features.advanced_nvidia_blocking.into(),
             )
             .map_err(|err| err.into())
     }
@@ -168,7 +179,7 @@ impl DaemonManager {
         let mut blocker = self.inner.blocker.write().await;
 
         // Iter over the ALLOWED_PROGRAMS array and allow each comm
-        for comm in crate::core::whitelist::ALLOWED_PROGRAMS {
+        for comm in ALLOWED_PROGRAMS {
             blocker.allow_comm(comm)?;
         }
         Ok(())
@@ -193,21 +204,20 @@ impl DaemonManager {
                 Modes::into(mode_lock.mode())
             }
         };
-        let mode = Modes::try_from(mode_to_apply)?;
+        let mode = Modes::try_from(mode_to_apply)
+            .map_err(|err| anyhow!("could not parse mode {}: {:?}", err, mode_arg))?;
         // On first attempt: don't save (already persisted)
         // On fallback: persist so the broken mode isn't retried on every boot
         let save = mode_arg.is_some();
         self.mode_interface.internal_set_mode(mode, save).await
     }
     pub fn battery_switch_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
-        let auto_switch = Arc::clone(&self.inner.config.battery_auto_switch);
-        let auto_switch_mode = Arc::clone(&self.inner.config.battery_auto_switch_mode);
+        let config = self.inner.config.clone();
         let mode_interface = self.mode_interface.clone();
         async move {
-            let res =
-                tasks::watch_battery_status(auto_switch, auto_switch_mode, mode_interface).await;
+            let res = tasks::watch_battery_status(config, mode_interface).await;
             if let Err(ref e) = res {
-                error!("battery_switch task failed: {}", e);
+                error!("battery_sewitch task failed: {}", e);
             }
             res
         }
@@ -222,32 +232,16 @@ impl DaemonManager {
             res
         }
     }
-    pub fn monitor_display_future(
-        &self,
-    ) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
-        let mode = self.mode_interface.clone();
-        let gpu_list = Arc::clone(&self.inner.gpu_list);
-        let external_display_switch = Arc::clone(&self.inner.config.external_display_auto_switch);
-        async move {
-            let res = tasks::monitor_display_changes(mode, gpu_list, external_display_switch).await;
-            if let Err(ref e) = res {
-                error!("monitor_display task failed: {}", e);
-            }
-            res
-        }
-    }
-    pub fn run_analyzer(&self) -> impl Future<Output = Result<()>> + 'static {
+    pub fn run_analyzer(&self) -> impl Future<Output = cardwire_smart::Result<()>> + 'static {
         let blocker = Arc::clone(&self.inner.blocker);
-        let logger = Arc::clone(&self.logger_interface.report_logs);
-        let signal = Arc::clone(&self.logger_interface.signal_emitter);
         let db_cache = self.smart_policy_interface.database.cache.clone();
         let tx = self.smart_policy_interface.database.tx.clone();
 
-        let new_app_signal = Arc::clone(&self.smart_policy_interface.new_app_signal);
+        let _new_app_signal = Arc::clone(&self.smart_policy_interface.new_app_signal);
 
         async move {
             let cardwire_analyzer =
-                CardwireAnalyzer::build(blocker, logger, signal, db_cache, tx, new_app_signal)
+                SmartAnalyzer::build(blocker, db_cache, tx)
                     .await
                     .map_err(|err| {
                         error!("Failed to build CardwireAnalyzer: {}", err);

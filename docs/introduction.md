@@ -1,6 +1,13 @@
 # Introduction
 
-Cardwire is a GPU manager for Linux laptops and multi-GPU desktops. It allows users to block the GPU of their choice, and to route applications on a specific GPU.
+## What is Cardwire ?
+
+Cardwire is a GPU manager for Linux systems, that uses eBPF to manages graphic cards by masking GPUs from programs.
+
+> [!CAUTION]
+> Cardwire is in an early development stage, expect breaking changes.
+
+You can skip to the [requirements](getting-started/requirements.md) if you don't want the explainations
 
 ## Why Cardwire?
 
@@ -9,6 +16,29 @@ Traditional GPU managers for Linux (like envycontrol, optimus-manager, supergfxc
 Cardwire solves this by using **eBPF and LSM** to dynamically block access to the GPU (more info about those [here](https://youtu.be/eVsMkXDE_5I)). This ensures the GPU is blocked at a userspace level.
 
 Furthermore, unlike older managers, **Cardwire never unbinds PCI devices or unload kernel drivers**. Unbinding drivers on the fly is notoriously unstable and is a frequent cause of crashes on AMD GPUs or system deadlocks on NVIDIA GPUs. Cardwire's eBPF approach is entirely seamless and significantly more stable.
+
+## Features
+
+Cardwire provides multiple features (and more in the future) for multi-GPUs owners (from laptops to workstations)
+
+### GPU Blocking
+
+Using the Linux Security Modules (LSM), cardwire provides a way to prevent programs from accessing a GPU by returning -ENOENT.
+
+### Application routing
+
+The Cardwire daemon provides two ways of routing an application (or program) to a specific GPU
+
+**Using eBPF**
+
+This method is provided by inserting `CARDWIRE_FORCE_GPU=<id>` in the program envs before launching it.
+
+Using the cardwire-smart analyzer, the eBPF program will only show the selected GPU to the program, doing so will hide the other GPUs present on the system, and the program will have no choice but to use the only one showed to it
+
+**Offloading Environments**
+
+Cardwire still provides the old envs method based on switcheroo-control
+work throught either `cardwire launch`, or with a switcheroo DBus shim
 
 ## Modes
 
@@ -26,9 +56,6 @@ Cardwire provides several GPU management modes:
 > Integrated and Smart mode are only available for laptops, desktop/multi-gpus have access to Hybrid & Manual
 
 Switching between modes is fast and does not require reboots or logouts.
-
-> [!CAUTION]
-> Cardwire is in an early development stage, expect breaking changes.
 
 ## Getting Started
 
