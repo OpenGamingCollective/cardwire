@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    fenix.url = "github:nix-community/fenix/monthly";
+    fenix.url = "github:nix-community/fenix";
     git-hooks.url = "github:cachix/git-hooks.nix";
   };
 
