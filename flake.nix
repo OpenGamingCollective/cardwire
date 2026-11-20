@@ -109,7 +109,6 @@
             RUSTC_BOOTSTRAP = "1";
 
             shellHook = ''
-              export PATH="$HOME/.cargo/bin:$PATH"
               ${preCommit.shellHook}
             '';
           };
