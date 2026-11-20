@@ -70,6 +70,8 @@ jobs:
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Remove preinstalled Rust
+        run: rm -rf ~/.cargo ~/.rustup
       - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
       - name: Cargo Clippy
         run: nix develop .# --command just lint
@@ -83,6 +85,8 @@ jobs:
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Remove preinstalled Rust
+        run: rm -rf ~/.cargo ~/.rustup
       - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
       - name: Cargo Test
         run: nix develop .# --command just test
@@ -97,6 +101,8 @@ jobs:
     if: needs.prepare.outputs.run_rust_checks == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Remove preinstalled Rust
+        run: rm -rf ~/.cargo ~/.rustup
       - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
       - name: Cargo Format
         run: nix develop .# --command just fmt-ci
