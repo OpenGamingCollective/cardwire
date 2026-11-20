@@ -26,7 +26,7 @@ impl CardwireConfig {
         // create the folder if it doesnt exist
         if !config_path.exists() {
             info!(
-                "[CONFIG] {} doesn't exist, creating the directory...",
+                "[CONFIG] {} doesn't exist, creating the directorye...",
                 CONFIG_PATH
             );
             // propagate the error if this fail
