@@ -98,6 +98,8 @@
               mdbook
               mdbook-mermaid
               vulkan-headers
+              nushell
+              just
             ])
             ++ runtimeLibs
             ++ preCommit.enabledPackages;
