@@ -11,6 +11,10 @@ build:
 fmt:
     cargo fmt --all
 
+[group: 'misc']
+fmt-ci:
+    cargo fmt --all --check
+
 [group: 'test']
 test:
     cargo test --all
