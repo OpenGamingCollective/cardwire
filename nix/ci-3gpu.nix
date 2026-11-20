@@ -1,14 +1,11 @@
 {
   pkgs,
-  system,
   self,
-  lib,
 }:
-(pkgs system).testers.runNixOSTest {
+pkgs.testers.runNixOSTest {
   name = "cardwire-test";
   nodes.machine =
     {
-      config,
       lib,
       ...
     }:

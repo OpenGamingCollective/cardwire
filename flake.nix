@@ -133,12 +133,7 @@
           vmTest =
             file:
             import file {
-              inherit
-                pkgs
-                system
-                self
-                lib
-                ;
+              inherit pkgs self;
             };
         in
         {
