@@ -48,6 +48,10 @@
             inherit toolchain;
             sourceDate = self.lastModified;
           };
+          debian = pkgs.callPackage ./nix/debian.nix {
+            inherit toolchain;
+            sourceDate = self.lastModified;
+          };
           vm-test = self.checks.${system}.vm-ci-2gpu;
           vm-test-2gpu = self.checks.${system}.vm-ci-2gpu;
           vm-test-3gpu = self.checks.${system}.vm-ci-3gpu;
@@ -80,7 +84,6 @@
             vulkan-loader
             libGL
             udev
-            libxcb
             egl-wayland
             egl-x11
             libglvnd
