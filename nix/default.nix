@@ -1,16 +1,33 @@
 {
   lib,
   pkgs,
+  toolchain,
 }:
 let
-  cargoToml = builtins.fromTOML (builtins.readFile ../Cargo.toml);
+  cargoToml = fromTOML (builtins.readFile ../Cargo.toml);
   version = cargoToml.workspace.package.version;
+  rustPlatform = pkgs.makeRustPlatform {
+    cargo = toolchain;
+    rustc = toolchain;
+  };
 in
-pkgs.rustPlatform.buildRustPackage {
+rustPlatform.buildRustPackage {
   inherit version;
   pname = "cardwire";
   src = ./..;
-  cargoLock.lockFile = ../Cargo.lock;
+
+  cargoDeps = pkgs.symlinkJoin {
+    name = "cargo-vendor-dir";
+    paths = [
+      (pkgs.rustPlatform.importCargoLock {
+        lockFile = ../Cargo.lock;
+      })
+      # cardwire-ebpf builds the core with ebpf target
+      (pkgs.rustPlatform.importCargoLock {
+        lockFile = "${toolchain}/lib/rustlib/src/rust/library/Cargo.lock";
+      })
+    ];
+  };
 
   __structuredAttrs = true;
 
@@ -37,23 +54,14 @@ pkgs.rustPlatform.buildRustPackage {
   };
 
   postPatch = ''
-
-    # Fix from nixpkgs <https://github.com/NixOS/nixpkgs/blob/nixos-unstable/pkgs/development/python-modules/mitmproxy-linux/default.nix>
-
-    sed -i 's/"+nightly"/"-v"/g' ../cargo-vendor-dir/aya-build-*/src/lib.rs
-    sed -i 's/"-Z"/"-v"/g' ../cargo-vendor-dir/aya-build-*/src/lib.rs
-    sed -i 's/"build-std=core"/"-v"/g' ../cargo-vendor-dir/aya-build-*/src/lib.rs
-
-    find . -name config.toml -path "*/.cargo/config.toml" -exec sed -i 's/build-std = \["core"\]//g' {} +
-
     # Point to the correct hwdata location
     substituteInPlace crates/cardwire-core/src/pci/pci_device.rs \
       --replace-fail "/usr/share/hwdata/pci.ids" "${pkgs.hwdata}/share/hwdata/pci.ids"
   '';
 
   env = {
-    RUSTFLAGS = "-C target-feature=";
     RUSTC_BOOTSTRAP = 1;
+    RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
   };
 
   postInstall = ''

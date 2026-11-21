@@ -43,7 +43,7 @@
           ...
         }:
         {
-          default = pkgs.callPackage ./nix { };
+          default = pkgs.callPackage ./nix { inherit toolchain; };
           archlinux = pkgs.callPackage ./nix/archlinux.nix {
             inherit toolchain;
             sourceDate = self.lastModified;
