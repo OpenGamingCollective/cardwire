@@ -42,6 +42,7 @@ pkgs.stdenv.mkDerivation {
 
   buildInputs = [
     pkgs.udev
+    pkgs.sqlite
   ];
 
   env = {
@@ -72,7 +73,8 @@ pkgs.stdenv.mkDerivation {
 
     patchelf --set-interpreter "$NIX_FOREIGN_INTERP" --remove-rpath ./target/$NIX_ARCH/release/cardwire
 
-    patchelf --set-interpreter "$NIX_FOREIGN_INTERP" --remove-rpath ./target/$NIX_ARCH/release/cardwired
+    # nixpkgs' libsqlite3.so has no SONAME, so the NEEDED entry is the dev-only name
+    patchelf --set-interpreter "$NIX_FOREIGN_INTERP" --remove-rpath --replace-needed libsqlite3.so libsqlite3.so.0 ./target/$NIX_ARCH/release/cardwired
 
     patchelf --set-interpreter "$NIX_FOREIGN_INTERP" --remove-rpath ./target/$NIX_ARCH/release/cardwire-gui
 

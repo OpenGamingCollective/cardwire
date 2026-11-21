@@ -40,6 +40,7 @@ rustPlatform.buildRustPackage {
 
   buildInputs = [
     pkgs.udev
+    pkgs.sqlite
   ];
 
   doCheck = false;

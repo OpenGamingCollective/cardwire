@@ -44,7 +44,7 @@ env_logger = "0.11"
 toml = "1.0.3"
 vulkano = { version = "0.35.2", default-features = false }
 khronos-egl = { version = "6.0.0", features = ["dynamic", "1_5"] }
-rusqlite = { version = "0.40.1", features = ["bundled"] }
+rusqlite = "0.40.1"
 libdrm_amdgpu_sys = { version = "0.9.0", default-features = false, features = [
     "dynamic_loading",
 ] }
