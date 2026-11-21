@@ -14,6 +14,7 @@ jobs:
     outputs:
       run_nix_vm: ${{ steps.files.outputs.run_nix_vm }}
       run_rust_checks: ${{ steps.files.outputs.run_rust_checks }}
+      run_yaml_checks: ${{ steps.files.outputs.run_yaml_checks }}
       run_mdbook_check: ${{ steps.files.outputs.run_mdbook_check }}
     steps:
       - name: Determine changed files
@@ -96,3 +97,21 @@ jobs:
       - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
       - name: mdBook Test
         run: nix develop .# --command mdbook test
+  yamlfmt:
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    if: needs.prepare.outputs.run_yaml_check == 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
+      - name: YAML format
+        run: nix develop -c treefmt -f yamlfmt ./ --ci
+  zizmor:
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    if: needs.prepare.outputs.run_yaml_check == 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
+      - name: Zizmor
+        run: nix develop -c zizmor .github/ --format github -p
