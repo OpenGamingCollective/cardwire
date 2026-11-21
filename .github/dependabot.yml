@@ -20,7 +20,6 @@ updates:
     commit-message:
       prefix: "chore(deps):"
       include: "scope"
-
   # Nix dependencies
   - package-ecosystem: "nix"
     directory: "/"
@@ -33,7 +32,6 @@ updates:
     commit-message:
       prefix: "chore(nix):"
       include: "scope"
-
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"

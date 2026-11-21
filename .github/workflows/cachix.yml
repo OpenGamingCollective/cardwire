@@ -3,11 +3,9 @@ on:
   push:
     branches:
       - main
-
 concurrency:
   group: ci-cachix
   cancel-in-progress: true
-
 jobs:
   cachix:
     runs-on: ubuntu-24.04

@@ -14,7 +14,6 @@ body:
         FYI:
         Cardwire does not support X11.
         Cardwire is currently not stable (< 1.0.0), only reports made with the latest version will be taken into account
-
   - type: input
     id: distribution
     attributes:
@@ -23,7 +22,6 @@ body:
       placeholder: ex. Bazzite 45
     validations:
       required: true
-
   - type: input
     id: kernel
     attributes:
@@ -32,7 +30,6 @@ body:
       placeholder: ex. `7.2.3-cachyos-lto`
     validations:
       required: true
-
   - type: input
     id: cardwire-version
     attributes:
@@ -41,7 +38,6 @@ body:
       placeholder: ex. `cardwire-cli 0.12.1`
     validations:
       required: true
-
   - type: textarea
     id: cardwire-list
     attributes:
@@ -50,7 +46,6 @@ body:
       render: json
     validations:
       required: true
-
   - type: textarea
     id: bug-description
     attributes:
@@ -58,7 +53,6 @@ body:
       description: A clear and concise description of the bug, please write it with your own words, if it's an LLM output, please put it in the `LLM output` section.
     validations:
       required: true
-
   - type: textarea
     id: expected-actual
     attributes:
@@ -66,7 +60,6 @@ body:
       description: What did you expect to happen, and what actually happened?
     validations:
       required: true
-
   - type: textarea
     id: cardwired-logs
     attributes:

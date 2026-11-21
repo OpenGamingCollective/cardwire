@@ -5,11 +5,9 @@ on:
 permissions:
   contents: read
   pull-requests: read
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -22,43 +20,7 @@ jobs:
         id: files
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
-          script: |
-            const files = (await github.paginate(github.rest.pulls.listFiles, {
-              ...context.repo,
-              pull_number: context.payload.pull_request.number,
-              per_page: 100,
-            })).map(file => file.filename)
-
-            const isDraft = context.payload.pull_request.draft;
-
-            const needsVMTest = !isDraft && files.some(file => 
-              file.endsWith('.rs') || 
-              file.includes('.nix') ||
-              file.includes('flake.lock') ||
-              file.includes('Cargo.toml') || 
-              file.includes('Cargo.lock')
-            );
-
-            const needsMdBookCheck = files.some(file => 
-              file.startsWith('docs/')
-            );
-
-            const needsRustQuality = files.some(file => 
-              file.endsWith('.rs') ||
-              file.includes('Cargo.toml') || 
-              file.includes('Cargo.lock')
-            );
-
-            if (needsVMTest) {
-              core.setOutput('run_nix_vm', 'true');
-            }
-            if (needsRustQuality) {
-              core.setOutput('run_rust_checks', 'true');
-            }
-            if (needsMdBookCheck) {
-              core.setOutput('run_mdbook_check', 'true');
-            }
-
+          script: "const files = (await github.paginate(github.rest.pulls.listFiles, {\n  ...context.repo,\n  pull_number: context.payload.pull_request.number,\n  per_page: 100,\n})).map(file => file.filename)\n\nconst isDraft = context.payload.pull_request.draft;\n\nconst needsVMTest = !isDraft && files.some(file => \n  file.endsWith('.rs') || \n  file.includes('.nix') ||\n  file.includes('flake.lock') ||\n  file.includes('Cargo.toml') || \n  file.includes('Cargo.lock')\n);\n\nconst needsMdBookCheck = files.some(file => \n  file.startsWith('docs/')\n);\n\nconst needsRustQuality = files.some(file => \n  file.endsWith('.rs') ||\n  file.includes('Cargo.toml') || \n  file.includes('Cargo.lock')\n);\n\nif (needsVMTest) {\n  core.setOutput('run_nix_vm', 'true');\n}\nif (needsRustQuality) {\n  core.setOutput('run_rust_checks', 'true');\n}\nif (needsMdBookCheck) {\n  core.setOutput('run_mdbook_check', 'true');\n}\n"
   rust-lint:
     name: Rust Lint
     runs-on: ubuntu-latest
@@ -75,7 +37,6 @@ jobs:
       - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
       - name: Cargo Clippy
         run: nix develop .# --command just lint
-
   rust-test:
     name: Rust Test
     runs-on: ubuntu-latest
@@ -90,7 +51,6 @@ jobs:
       - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
       - name: Cargo Test
         run: nix develop .# --command just test
-
   rust-format:
     name: Rust Format
     runs-on: ubuntu-latest
@@ -106,7 +66,6 @@ jobs:
       - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
       - name: Cargo Format
         run: nix develop .# --command just fmt-ci
-  
   vm-test:
     name: VM Test (${{ matrix.vm }})
     runs-on: ubuntu-latest
