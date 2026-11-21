@@ -40,8 +40,6 @@ rustPlatform.buildRustPackage {
 
   buildInputs = [
     pkgs.udev
-    pkgs.libxcb
-    pkgs.sqlite
   ];
 
   doCheck = false;
@@ -85,7 +83,8 @@ rustPlatform.buildRustPackage {
           pkgs.libglvnd
           pkgs.libdrm
         ]
-      }
+      } \
+      --prefix LD_LIBRARY_PATH : ${pkgs.addDriverRunpath.driverLink}/lib
 
     wrapProgram $out/bin/cardwire-gui \
       --prefix LD_LIBRARY_PATH : ${

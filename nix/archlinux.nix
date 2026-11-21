@@ -43,7 +43,6 @@ pkgs.stdenv.mkDerivation {
 
   buildInputs = [
     pkgs.udev
-    pkgs.libxcb
     pkgs.sqlite
   ];
 
