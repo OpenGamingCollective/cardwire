@@ -31,6 +31,10 @@ lint:
 doc:
     cargo doc --all --open
 
+[group: 'misc']
+toolbox:
+    nu .github/scripts/toolbox.nu
+
 [group: 'install']
 install:
     cargo build --all --release --frozen
