@@ -105,6 +105,8 @@
               nushell
               just
               yamlfmt
+              zizmor
+              treefmt
             ])
             ++ runtimeLibs
             ++ preCommit.enabledPackages;

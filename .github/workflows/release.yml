@@ -1,3 +1,4 @@
+---
 name: Release
 on:
   push:
@@ -12,7 +13,7 @@ jobs:
         os: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -30,8 +31,8 @@ jobs:
           toolchain: nightly-2026-08-12
           components: rust-src
       - name: Install Stable Rust
-        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
-      - uses: cargo-bins/cargo-binstall@7bebc2e59eb8820162b7ac8f62a92bfdb2732447 # v1.25.1
+        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff  # 1.95.0
+      - uses: cargo-bins/cargo-binstall@7bebc2e59eb8820162b7ac8f62a92bfdb2732447  # v1.25.1
         with:
           version: "1.21.1"
       - name: Install bpf-linker
@@ -46,7 +47,7 @@ jobs:
           DEB_FILE=$(basename target/debian/*.deb)
           echo "name=${DEB_FILE}" >> "$GITHUB_OUTPUT"
       - name: Upload deb
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ steps.deb.outputs.name }}
           path: "target/debian/*.deb"
@@ -57,7 +58,7 @@ jobs:
       image: archlinux:latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Install dependencies
         run: |
           pacman -Sy git base-devel pacman-contrib cargo-binstall rust cargo --noconfirm
@@ -85,7 +86,7 @@ jobs:
           PKG_FILE=$(basename ./*.pkg.tar.zst)
           echo "name=${PKG_FILE}" >> "$GITHUB_OUTPUT"
       - name: Upload pkg
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ steps.pkg.outputs.name }}
           path: "/build/*.pkg.tar.zst"
@@ -96,12 +97,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4.2.2
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v4.2.2
         with:
           path: artifacts
           merge-multiple: true
       - name: Upload assets and publish release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
           draft: true
           files: |
