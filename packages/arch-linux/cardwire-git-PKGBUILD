@@ -15,6 +15,9 @@ conflicts=("$_pkgname")
 source=("$_pkgname::git+$url.git")
 sha256sums=('SKIP')
 
+conflicts=('switcheroo-control')
+provides=('switcheroo-control')
+
 pkgver() {
   cd "$srcdir/$_pkgname"
   printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"

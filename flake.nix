@@ -39,10 +39,15 @@
         {
           pkgs,
           system,
+          toolchain,
           ...
         }:
         {
           default = pkgs.callPackage ./nix { };
+          archlinux = pkgs.callPackage ./nix/archlinux.nix {
+            inherit toolchain;
+            sourceDate = self.lastModified;
+          };
           vm-test = self.checks.${system}.vm-ci-2gpu;
           vm-test-2gpu = self.checks.${system}.vm-ci-2gpu;
           vm-test-3gpu = self.checks.${system}.vm-ci-3gpu;
@@ -99,6 +104,7 @@
               vulkan-headers
               nushell
               just
+              pacman
             ])
             ++ runtimeLibs
             ++ preCommit.enabledPackages;
