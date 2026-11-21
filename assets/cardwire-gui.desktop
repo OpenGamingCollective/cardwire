@@ -8,3 +8,24 @@ Terminal=false
 Type=Application
 Categories=System;Settings;HardwareSettings;
 Keywords=GPU;Graphics;Hardware;Management;
+Actions=Hybrid;Integrated;Smart;Manual;
+
+[Desktop Action Hybrid]
+Name=Switch to Hybrid Mode
+Exec=cardwire set hybrid
+Icon=org.opengamingcollective.cardwire.tray-hybrid
+
+[Desktop Action Integrated]
+Name=Switch to Integrated Mode
+Exec=cardwire set integrated
+Icon=org.opengamingcollective.cardwire.tray-integrated
+
+[Desktop Action Smart]
+Name=Switch to Smart Mode
+Exec=cardwire set smart
+Icon=org.opengamingcollective.cardwire.tray-smart
+
+[Desktop Action Manual]
+Name=Switch to Manual Mode
+Exec=cardwire set manual
+Icon=org.opengamingcollective.cardwire.tray-manual
