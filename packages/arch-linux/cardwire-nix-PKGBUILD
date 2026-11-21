@@ -14,7 +14,7 @@ arch=('x86_64' 'aarch64')
 url='https://github.com/OpenGamingCollective/cardwire'
 license=('GPL3')
 depends=('hwdata' 'dbus' 'sqlite' 'systemd' 'upower' 'libdrm')
-makedepends=('rust' 'rust-src' 'cargo-binstall' 'libxcb')
+makedepends=('rust' 'rust-src' 'bpf-linker')
 source=("https://github.com/OpenGamingCollective/cardwire/archive/refs/tags/v${_tag}.tar.gz")
 sha256sums=('eba92c952f002767abead1391d9d2d229e3637a756ac4786759a0012b7e96649')
 
