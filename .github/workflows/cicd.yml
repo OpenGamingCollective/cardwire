@@ -43,6 +43,11 @@ jobs:
               file.startsWith('docs/')
             );
 
+            const needsYamlCheck = files.some(file =>
+              file.includes('.yml') ||
+              file.includes('.yaml')
+            );
+
             const needsRustQuality = files.some(file =>
               file.endsWith('.rs') ||
               file.includes('Cargo.toml') ||
@@ -57,6 +62,9 @@ jobs:
             }
             if (needsMdBookCheck) {
               core.setOutput('run_mdbook_check', 'true');
+            }
+            if (needsYamlCheck) {
+              core.setOutput('run_yaml_checks', 'true');
             }
   rust-lint:
     name: Rust Lint
