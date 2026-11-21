@@ -32,7 +32,7 @@ jobs:
           components: rust-src
       - name: Install Stable Rust
         uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff  # 1.95.0
-      - uses: cargo-bins/cargo-binstall@7bebc2e59eb8820162b7ac8f62a92bfdb2732447  # v1.25.1
+      - uses: cargo-bins/cargo-binstall@5885714d0a40a14b2535c6ffc051fd8e49aa9665  # v1.27.0
         with:
           version: "1.21.1"
       - name: Install bpf-linker
