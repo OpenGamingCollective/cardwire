@@ -790,13 +790,26 @@ pub fn shortcuts_sub() -> Subscription<Message> {
                 NewShortcut::new("toggle_gui", "Open / Focus Cardwire Window"),
             ];
 
-            if let Err(err) = proxy
+            let bound = match proxy
                 .bind_shortcuts(&session, &shortcuts, None, BindShortcutsOptions::default())
                 .await
             {
-                log::warn!("Failed to bind global shortcuts: {err}");
-                std::future::pending::<()>().await;
-                return;
+                Ok(request) => match request.response() {
+                    Ok(response) => response,
+                    Err(err) => {
+                        log::warn!("Global shortcuts were not bound: {err}");
+                        std::future::pending::<()>().await;
+                        return;
+                    }
+                },
+                Err(err) => {
+                    log::warn!("Failed to bind global shortcuts: {err}");
+                    std::future::pending::<()>().await;
+                    return;
+                }
+            };
+            if bound.shortcuts().is_empty() {
+                log::warn!("No global shortcuts were assigned by the portal");
             }
 
             // Listen for activation signals
