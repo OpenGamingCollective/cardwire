@@ -20,43 +20,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config libxcb1-dev
-      - name: Install gcc-multilib
-        if: runner.arch == 'X64'
-        run: sudo apt-get install -y gcc-multilib
-      - name: Fix missing asm/types.h on arm64
-        if: runner.arch == 'ARM64'
-        run: |
-          sudo ln -s /usr/include/aarch64-linux-gnu/asm /usr/include/asm
-      - name: Install Nightly Rust (for aya-ebpf)
-        uses: dtolnay/rust-toolchain@6a52aad76a94a5fbc50d567bb5be24419801c1fb  # nightly
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9  # v32.0.0
         with:
-          toolchain: nightly-2026-08-12
-          components: rust-src
-      - name: Install Stable Rust
-        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff  # 1.95.0
-      - uses: cargo-bins/cargo-binstall@7bebc2e59eb8820162b7ac8f62a92bfdb2732447  # v1.25.1
-        with:
-          version: "1.21.1"
-      - name: Install bpf-linker
-        run: cargo binstall bpf-linker
-      - name: Build cardwire
-        run: |
-          cargo install cargo-deb
-          cargo deb -- --locked --config profile.release.lto=false
+          extra_nix_config: |
+            extra-substituters = https://cardwire.cachix.org
+            extra-trusted-public-keys = cardwire.cachix.org-1:7+C7X4MVLz+IIQ/S0ZmMgEA/0ZL89kQytaUAA1cNLYA=
+      - name: Build Debian package
+        run: nix build .#debian
       - name: Find deb filename
         id: deb
         run: |
-          DEB_FILE=$(basename target/debian/*.deb)
+          DEB_FILE=$(basename result/*.deb)
           echo "name=${DEB_FILE}" >> "$GITHUB_OUTPUT"
       - name: Upload deb
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ steps.deb.outputs.name }}
-          path: "target/debian/*.deb"
+          path: "result/*.deb"
           if-no-files-found: error
   ArchLinux:
     name: Arch Linux (${{ matrix.os }})
