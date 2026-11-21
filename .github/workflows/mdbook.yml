@@ -8,19 +8,19 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  pages: write
-  id-token: write
 concurrency:
   group: "pages"
   cancel-in-progress: false
 jobs:
-  # Build job
   build:
+    name: Build mdBook site
     runs-on: ubuntu-latest
     env:
       MDBOOK_VERSION: 0.5.2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install mdBook
         run: |
           curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf -y | sh
@@ -38,6 +38,10 @@ jobs:
           path: ./book
   # Deployment job
   deploy:
+    name: Deploy mdBook site
+    permissions:
+      pages: write  # deploy-pages needs this to publish the artifact
+      id-token: write  # deploy-pages mints an OIDC token for the deployment
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
