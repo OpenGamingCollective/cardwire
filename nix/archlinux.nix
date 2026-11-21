@@ -73,6 +73,15 @@ pkgs.stdenv.mkDerivation {
 
     mkdir -p result
 
+    # Fix bsdtar permissions
+    mkdir -p bsdtar-wrapper
+    cat > bsdtar-wrapper/bsdtar <<EOF
+    #!${pkgs.runtimeShell}
+    exec ${pkgs.libarchive}/bin/bsdtar --no-acls "\$@"
+    EOF
+    chmod +x bsdtar-wrapper/bsdtar
+    export PATH="$PWD/bsdtar-wrapper:$PATH"
+
     PKGDEST=result PKGEXT=".pkg.tar.zst" makepkg --noextract --nodeps --noconfirm
   '';
 
