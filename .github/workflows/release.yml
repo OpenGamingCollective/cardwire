@@ -73,7 +73,7 @@ jobs:
         with:
           extra_nix_config: |
             extra-substituters = https://cardwire.cachix.org
-            extra-trusted-public-keys = cardwire.cachix.org-1:7+C7X4MVLz+IIQ/S0ZmMgEA/0ZL89kQytaUAA1cLYA=
+            extra-trusted-public-keys = cardwire.cachix.org-1:7+C7X4MVLz+IIQ/S0ZmMgEA/0ZL89kQytaUAA1cNLYA=
       - name: Build Arch package
         run: nix build .#archlinux
       - name: Find pkg filename
