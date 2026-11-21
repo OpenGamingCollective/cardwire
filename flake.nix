@@ -104,7 +104,7 @@
               vulkan-headers
               nushell
               just
-              pacman
+              yamlfmt
             ])
             ++ runtimeLibs
             ++ preCommit.enabledPackages;
@@ -113,7 +113,6 @@
             LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
             RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
             RUSTC_BOOTSTRAP = "1";
-
             shellHook = ''
               ${preCommit.shellHook}
             '';
