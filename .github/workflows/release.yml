@@ -1,123 +1,87 @@
+---
 name: Release
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
 permissions:
-  contents: write
-
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   Debian:
+    name: Debian (${{ matrix.os }})
     strategy:
       matrix:
-        os: [ubuntu-24.04, ubuntu-24.04-arm]
+        os: [ubuntu-26.04, ubuntu-26.04-arm]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang libbpf-dev libudev-dev pkg-config libxcb1-dev
-
-      - name: Install gcc-multilib
-        if: matrix.os == 'ubuntu-24.04'
-        run: sudo apt-get install -y gcc-multilib
-
-      - name: Fix missing asm/types.h on arm64
-        if: matrix.os == 'ubuntu-24.04-arm'
-        run: |
-          sudo ln -s /usr/include/aarch64-linux-gnu/asm /usr/include/asm
-
-
-      - name: Install Nightly Rust (for aya-ebpf)
-        uses: dtolnay/rust-toolchain@nightly
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          toolchain: nightly-2026-08-12
-          components: rust-src
-
-      - name: Install Stable Rust
-        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
-
-      - uses: cargo-bins/cargo-binstall@7bebc2e59eb8820162b7ac8f62a92bfdb2732447 # v1.25.1
+          persist-credentials: false
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9  # v32.0.0
         with:
-          version: "1.21.1"
-      - name: Install bpf-linker
-        run: cargo binstall bpf-linker
-
-      - name: Build cardwire
-        run: |
-          cargo install cargo-deb
-          cargo deb -- --locked --config profile.release.lto=false
-
+          extra_nix_config: |
+            extra-substituters = https://cardwire.cachix.org
+            extra-trusted-public-keys = cardwire.cachix.org-1:7+C7X4MVLz+IIQ/S0ZmMgEA/0ZL89kQytaUAA1cNLYA=
+      - name: Build Debian package
+        run: nix build .#debian
       - name: Find deb filename
         id: deb
         run: |
-          DEB_FILE=$(basename target/debian/*.deb)
+          DEB_FILE=$(basename result/*.deb)
           echo "name=${DEB_FILE}" >> "$GITHUB_OUTPUT"
-
       - name: Upload deb
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ steps.deb.outputs.name }}
-          path: "target/debian/*.deb"
+          path: "result/*.deb"
           if-no-files-found: error
-
   ArchLinux:
-    runs-on: ubuntu-24.04
-    container:
-      image: archlinux:latest
+    name: Arch Linux (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-26.04, ubuntu-26.04-arm]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install dependencies
-        run: |
-          pacman -Sy git base-devel pacman-contrib cargo-binstall rust cargo --noconfirm
-      - name: Install bpf-linker
-        run: |
-          cargo binstall --locked --no-confirm --version 0.11.0 bpf-linker
-      - name: Prepare PKGBUILD
-        run: |
-          mkdir /build
-          cp packages/arch-linux/cardwire-PKGBUILD /build/PKGBUILD
-          useradd -m builder
-          echo 'builder ALL=(ALL) NOPASSWD: /usr/bin/pacman' > /etc/sudoers.d/builder-pacman
-          chmod 0440 /etc/sudoers.d/builder-pacman
-          chown -R builder:builder /build
-          cd /build
-          su builder -c "updpkgsums"
-      - name: Build package
-        working-directory: /build
-        run: |
-          su builder -c "makepkg -s --noconfirm"
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9  # v32.0.0
+        with:
+          extra_nix_config: |
+            extra-substituters = https://cardwire.cachix.org
+            extra-trusted-public-keys = cardwire.cachix.org-1:7+C7X4MVLz+IIQ/S0ZmMgEA/0ZL89kQytaUAA1cNLYA=
+      - name: Build Arch package
+        run: nix build .#archlinux
       - name: Find pkg filename
         id: pkg
-        working-directory: /build
         run: |
-          PKG_FILE=$(basename ./*.pkg.tar.zst)
+          PKG_FILE=$(basename result/*.pkg.tar.zst)
           echo "name=${PKG_FILE}" >> "$GITHUB_OUTPUT"
-
       - name: Upload pkg
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ steps.pkg.outputs.name }}
-          path: "/build/*.pkg.tar.zst"
+          path: "result/*.pkg.tar.zst"
           if-no-files-found: error
-
   Release:
+    name: Release
     if: github.event_name == 'push'
     needs: [Debian, ArchLinux]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write  # action-gh-release publishes the release
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4.2.2
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v4.2.2
         with:
           path: artifacts
           merge-multiple: true
-
       - name: Upload assets and publish release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
           draft: true
           files: |

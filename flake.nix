@@ -39,10 +39,19 @@
         {
           pkgs,
           system,
+          toolchain,
           ...
         }:
         {
-          default = pkgs.callPackage ./nix { };
+          default = pkgs.callPackage ./nix { inherit toolchain; };
+          archlinux = pkgs.callPackage ./nix/archlinux.nix {
+            inherit toolchain;
+            sourceDate = self.lastModified;
+          };
+          debian = pkgs.callPackage ./nix/debian.nix {
+            inherit toolchain;
+            sourceDate = self.lastModified;
+          };
           vm-test = self.checks.${system}.vm-ci-2gpu;
           vm-test-2gpu = self.checks.${system}.vm-ci-2gpu;
           vm-test-3gpu = self.checks.${system}.vm-ci-3gpu;
@@ -75,7 +84,6 @@
             vulkan-loader
             libGL
             udev
-            libxcb
             egl-wayland
             egl-x11
             libglvnd
@@ -99,6 +107,9 @@
               vulkan-headers
               nushell
               just
+              yamlfmt
+              zizmor
+              treefmt
             ])
             ++ runtimeLibs
             ++ preCommit.enabledPackages;
@@ -107,7 +118,6 @@
             LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
             RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
             RUSTC_BOOTSTRAP = "1";
-
             shellHook = ''
               ${preCommit.shellHook}
             '';

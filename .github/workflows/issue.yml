@@ -1,15 +1,22 @@
+---
 name: Issue assignment
 on:
   issues:
     types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: issue-assignment-${{ github.event.issue.number }}
+  cancel-in-progress: true
 jobs:
   auto-assign:
+    name: Auto-assign issue
     runs-on: ubuntu-latest
     permissions:
-      issues: write
+      issues: write  # auto-assign-issue edits the issue's assignees
     steps:
       - name: 'Auto-assign issue'
-        uses: pozil/auto-assign-issue@7bf9d82c77d45976224660b873fc83e60576c5aa # v2
+        uses: pozil/auto-assign-issue@7bf9d82c77d45976224660b873fc83e60576c5aa  # v2
         with:
           assignees: luytan
           numOfAssignee: 1

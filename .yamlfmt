@@ -1,0 +1,11 @@
+---
+match_type: doublestar
+exclude:
+  - '.direnv/**'
+formatter:
+  include_document_start: true
+  pad_line_comments: 2
+  retain_line_breaks: true
+  retain_line_breaks_single: true
+  trim_trailing_whitespace: true
+  eof_newline: true

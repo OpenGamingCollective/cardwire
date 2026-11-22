@@ -1,3 +1,4 @@
+---
 # Dependabot configuration for Rust project
 # Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 version: 2
@@ -17,10 +18,11 @@ updates:
       cargo-dependencies:
         patterns:
           - "*"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(deps):"
       include: "scope"
-
   # Nix dependencies
   - package-ecosystem: "nix"
     directory: "/"
@@ -30,10 +32,11 @@ updates:
       time: "03:00"
     target-branch: "main"
     open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(nix):"
       include: "scope"
-
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -43,6 +46,8 @@ updates:
       time: "03:00"
     target-branch: "main"
     open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "ci(actions):"
       include: "scope"

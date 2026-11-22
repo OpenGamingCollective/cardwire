@@ -5,13 +5,13 @@ pkgname="${_pkgname}-git"
 pkgver=r520.96dffa5
 pkgrel=1
 pkgdesc='GPU manager for Linux using eBPF LSM hooks'
-arch=('x86_64')
+arch=('x86_64' 'aarch64')
 url='https://github.com/OpenGamingCollective/cardwire'
 license=('GPL-3.0-only')
 depends=('hwdata' 'dbus' 'sqlite' 'systemd' 'upower' 'libdrm')
-makedepends=('git' 'rust' 'rust-src' 'libxcb')
-provides=("$_pkgname")
-conflicts=("$_pkgname")
+makedepends=('git' 'rust' 'rust-src' 'bpf-linker')
+provides=("$_pkgname" 'switcheroo-control')
+conflicts=("$_pkgname" 'switcheroo-control')
 source=("$_pkgname::git+$url.git")
 sha256sums=('SKIP')
 
@@ -23,12 +23,6 @@ pkgver() {
 prepare() {
   cd "$srcdir/$_pkgname"
   cargo fetch --locked
-  # This is a workaround to get cardwire-ebpf building
-	# bpf-linker linked to llvm 22 or built with llvm 22 cannot compile the crate
-	# the official binstall ship a llvm 23 static linked bpf-linker, this is what is used
-	cargo binstall --locked --no-confirm \
-		--root "${srcdir}/cardwire-tools"\
-	       --version 0.11.0 bpf-linker
 }
 
 build() {
@@ -36,7 +30,6 @@ build() {
   export LIBSQLITE3_SYS_USE_PKG_CONFIG=1
   export RUSTC_BOOTSTRAP=1
   export CARGO_TARGET_DIR=target
-  export PATH="${srcdir}/cardwire-tools/bin:$PATH"
   cargo build --frozen --release --bins
 }
 

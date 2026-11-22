@@ -40,6 +40,8 @@ fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, PciErro
         for pci_address in group.devices {
             let vendor_id = get_vendor_id(&pci_address);
             let device_id = get_device_id(&pci_address);
+            let subsystem_vendor_id = get_subsystem_vendor_id(&pci_address);
+            let subsystem_device_id = get_subsystem_device_id(&pci_address);
 
             let vendor_key = vendor_id.as_deref().map(normalize_device_id);
             let device_key = device_id.as_deref().map(normalize_device_id);
@@ -60,6 +62,8 @@ fn read_pci_devices_using_iommu() -> Result<BTreeMap<String, PciDevice>, PciErro
                 Some(group_id),
                 vendor_id,
                 device_id,
+                subsystem_vendor_id,
+                subsystem_device_id,
                 vendor_name,
                 device_name,
                 get_driver(&pci_address),
@@ -92,6 +96,8 @@ fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, PciErro
             .ok_or("File name contains invalid UTF-8")?;
         let vendor_id = get_vendor_id(name);
         let device_id = get_device_id(name);
+        let subsystem_vendor_id = get_subsystem_vendor_id(name);
+        let subsystem_device_id = get_subsystem_device_id(name);
 
         let vendor_key = vendor_id.as_deref().map(normalize_device_id);
         let device_key = device_id.as_deref().map(normalize_device_id);
@@ -112,6 +118,8 @@ fn read_pci_devices_using_sysfs() -> Result<BTreeMap<String, PciDevice>, PciErro
             None,
             vendor_id,
             device_id,
+            subsystem_vendor_id,
+            subsystem_device_id,
             vendor_name,
             device_name,
             get_driver(name),
@@ -137,6 +145,24 @@ fn get_device_id(pci_address: &str) -> Option<String> {
         Path::new("/sys/bus/pci/devices")
             .join(pci_address)
             .join("device"),
+    )
+    .ok()
+}
+
+fn get_subsystem_vendor_id(pci_address: &str) -> Option<String> {
+    read_sysfs_trim(
+        Path::new("/sys/bus/pci/devices")
+            .join(pci_address)
+            .join("subsystem_vendor"),
+    )
+    .ok()
+}
+
+fn get_subsystem_device_id(pci_address: &str) -> Option<String> {
+    read_sysfs_trim(
+        Path::new("/sys/bus/pci/devices")
+            .join(pci_address)
+            .join("subsystem_device"),
     )
     .ok()
 }

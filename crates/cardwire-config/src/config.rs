@@ -14,6 +14,7 @@ use crate::{CONFIG_PATH, errors::Result};
 pub struct CardwireConfig {
     pub global_settings: Settings,
     pub experimental_features: ExperimentalFeatures,
+    pub ebpf: Ebpf,
     pub switcheroo_settings: SwitcherooControlShim,
     pub internal_whitelist: InternalWhitelist,
 }
@@ -156,6 +157,17 @@ impl Default for ExperimentalFeatures {
             // Still experimental and unstable
             fake_drm_uevent: false,
         }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Ebpf {
+    pub enabled: bool,
+}
+
+impl Default for Ebpf {
+    fn default() -> Self {
+        Self { enabled: true }
     }
 }
 
