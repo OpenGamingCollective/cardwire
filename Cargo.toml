@@ -45,6 +45,7 @@ toml = "1.0.3"
 vulkano = { version = "0.35.2", default-features = false }
 khronos-egl = { version = "6.0.0", features = ["dynamic", "1_5"] }
 rusqlite = "0.40.1"
+ashpd = { version = "0.13.13", features = ["global_shortcuts"] }
 libdrm_amdgpu_sys = { version = "0.9.0", default-features = false, features = [
     "dynamic_loading",
 ] }
