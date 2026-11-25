@@ -80,7 +80,7 @@ jobs:
           persist-credentials: false
       - name: Remove preinstalled Rust
         run: rm -rf ~/.cargo ~/.rustup
-      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9  # v32.0.0
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086  # v31.11.5
       - name: Cargo Clippy
         run: nix develop .# --command just lint
   rust-test:
@@ -96,7 +96,7 @@ jobs:
           persist-credentials: false
       - name: Remove preinstalled Rust
         run: rm -rf ~/.cargo ~/.rustup
-      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9  # v32.0.0
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086  # v31.11.5
       - name: Cargo Test
         run: nix develop .# --command just test
   rust-format:
@@ -112,7 +112,7 @@ jobs:
           persist-credentials: false
       - name: Remove preinstalled Rust
         run: rm -rf ~/.cargo ~/.rustup
-      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9  # v32.0.0
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086  # v31.11.5
       - name: Cargo Format
         run: nix develop .# --command just fmt-ci
   vm-test:
@@ -147,7 +147,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9  # v32.0.0
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086  # v31.11.5
       - name: mdBook Test
         run: nix develop .# --command mdbook test
   yamlfmt:
@@ -159,7 +159,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9  # v32.0.0
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086  # v31.11.5
       - name: YAML format
         run: nix develop -c treefmt -f yamlfmt ./ --ci
   zizmor:
@@ -171,6 +171,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9  # v32.0.0
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086  # v31.11.5
       - name: Zizmor
         run: nix develop -c zizmor .github/ --format github -p
