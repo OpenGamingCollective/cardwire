@@ -7,9 +7,13 @@ use tokio::io::unix::AsyncFd;
 /// listen to pci/thunderbolt event and refres the GPU list when necessary
 pub async fn monitor_pci_changes(debug_int: DebugInterface) -> zbus::Result<()> {
     let udev_pci_monitor = udev::MonitorBuilder::new()?.match_subsystem("pci")?;
-    let udev_pci_fd = AsyncFd::new(udev_pci_monitor.listen()?)?;
+    // SAFETY: MonitorSocket owns its fd and keeps it open for the AsyncFd lifetime
+    let udev_pci_fd =
+        unsafe { AsyncFd::register(udev_pci_monitor.listen()?) }.map_err(std::io::Error::other)?;
     let udev_thunderbolt_monitor = udev::MonitorBuilder::new()?.match_subsystem("thunderbolt")?;
-    let udev_thunderbolt_fd = AsyncFd::new(udev_thunderbolt_monitor.listen()?)?;
+    // SAFETY: MonitorSocket owns its fd and keeps it open for the AsyncFd lifetime
+    let udev_thunderbolt_fd = unsafe { AsyncFd::register(udev_thunderbolt_monitor.listen()?) }
+        .map_err(std::io::Error::other)?;
     loop {
         tokio::select! {
             guard_res = udev_pci_fd.readable() => {

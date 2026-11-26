@@ -59,7 +59,7 @@ pub unsafe fn is_inode_blocked(key: InodeKey) -> bool {
 
     'inode_check: {
         // Check if the file is in the blocked list
-        if let Some(v) = unsafe { CW_BLOCKED_INO.get(key) } {
+        if let Some(v) = unsafe { CW_BLOCKED_INO.get(&key) } {
             tracked = true;
             ino_gpu_id = v.gpu_id;
             blocked = v.blocked == 1;
@@ -67,7 +67,7 @@ pub unsafe fn is_inode_blocked(key: InodeKey) -> bool {
         }
         // We didn't match any inode, try with nvidia inodes
         if unsafe { is_nvidia_setting_enabled() }
-            && let Some(v) = unsafe { CW_EXP_BLK_INO.get(key) }
+            && let Some(v) = unsafe { CW_EXP_BLK_INO.get(&key) }
         {
             tracked = true;
             ino_gpu_id = *v;
@@ -106,7 +106,7 @@ pub unsafe fn is_inode_blocked(key: InodeKey) -> bool {
 
             // Check if the PID or PPID is in the forced map
             let forced_gpu_id =
-                unsafe { CW_FORCED_PID.get(pid).or_else(|| CW_FORCED_PID.get(ppid)) };
+                unsafe { CW_FORCED_PID.get(&pid).or_else(|| CW_FORCED_PID.get(&ppid)) };
 
             if let Some(pid_gpu_id) = forced_gpu_id {
                 // If forced GPU ID matches the inode's GPU ID, allow access
@@ -138,8 +138,8 @@ pub unsafe fn is_inode_blocked(key: InodeKey) -> bool {
             // gpu(hybrid) laptops
 
             // First we try with the pid
-            if unsafe { CW_ALLOWED_PID.get(pid).is_some() }
-                || unsafe { CW_ALLOWED_PID.get(ppid).is_some() }
+            if unsafe { CW_ALLOWED_PID.get(&pid).is_some() }
+                || unsafe { CW_ALLOWED_PID.get(&ppid).is_some() }
             {
                 // We got a match, pid is allowed !
                 break 'end;
@@ -147,7 +147,7 @@ pub unsafe fn is_inode_blocked(key: InodeKey) -> bool {
 
             // If we are here, the pid AND the ppid are not in the allowed map, check the FORCED map
             let forced_gpu_id =
-                unsafe { CW_FORCED_PID.get(pid).or_else(|| CW_FORCED_PID.get(ppid)) };
+                unsafe { CW_FORCED_PID.get(&pid).or_else(|| CW_FORCED_PID.get(&ppid)) };
 
             if let Some(pid_gpu_id) = forced_gpu_id {
                 // We match the ino_gpu_id with the pid_gpu_id
@@ -223,7 +223,7 @@ fn get_task_ppid() -> Option<u32> {
 #[inline(always)]
 pub fn is_comm_whitelisted() -> bool {
     if let Ok(comm) = bpf_get_current_comm()
-        && unsafe { CW_ALLOWED_COMM.get(comm).is_some() }
+        && unsafe { CW_ALLOWED_COMM.get(&comm).is_some() }
     {
         return true;
     }
@@ -257,7 +257,7 @@ pub unsafe fn is_manual() -> Option<bool> {
 
 #[inline(always)]
 pub unsafe fn is_nvidia_setting_enabled() -> bool {
-    match unsafe { CW_SETTINGS.get(CardwiredSetting::EXP_NVIDIA) } {
+    match unsafe { CW_SETTINGS.get(&CardwiredSetting::EXP_NVIDIA) } {
         Some(setting) => *setting,
         None => false,
     }

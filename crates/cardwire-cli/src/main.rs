@@ -38,11 +38,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Connect to D-Bus
-    let connection: zbus::Connection = match zbus::connection::Builder::system() {
-        Ok(builder) => match builder.build().await {
-            Ok(conn) => conn,
-            Err(e) => handle_error(e),
-        },
+    let connection: zbus::Connection = match zbus::connection::Builder::system().build().await {
+        Ok(conn) => conn,
         Err(e) => handle_error(e),
     };
     let client: DaemonClient<'_> = match DaemonClient::connect(&connection).await {

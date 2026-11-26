@@ -361,7 +361,7 @@ unsafe fn try_tracepoint_enter_getdents64(ctx: TracePointContext) -> Result<i32,
 
     let dirp_ptr: u64 = unsafe { ctx.read_at(DIRP_OFFSET)? };
 
-    CW_DIRENT.insert(tid, dirp_ptr, 0)?;
+    CW_DIRENT.insert(&tid, &dirp_ptr, 0)?;
 
     ReturnCode::SUCCESS
 }
@@ -378,8 +378,8 @@ unsafe fn try_tracepoint_exit_getdents64(ctx: TracePointContext) -> Result<i32, 
     let tid = bpf_get_current_pid_tgid() as u32;
 
     // Drain the map up front to avoid a map leak on an early return
-    let dirp = unsafe { CW_DIRENT.get(tid) }.copied();
-    let _ = CW_DIRENT.remove(tid);
+    let dirp = unsafe { CW_DIRENT.get(&tid) }.copied();
+    let _ = CW_DIRENT.remove(&tid);
 
     let Some(dirp) = dirp else {
         return ReturnCode::SUCCESS;

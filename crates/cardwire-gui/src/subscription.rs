@@ -16,12 +16,7 @@ use crate::{
     models::{DaemonSettings, LogEntry, Mode, PciDevice},
     tray,
 };
-use zbus::{
-    Connection, Proxy,
-    names::OwnedInterfaceName,
-    proxy,
-    zvariant::{OwnedObjectPath, OwnedValue},
-};
+use zbus::{Connection, OwnedObjectPath, OwnedVariant, Proxy, names::OwnedInterfaceName, proxy};
 
 use ashpd::desktop::{
     CreateSessionOptions,
@@ -329,7 +324,7 @@ trait CardwireGpuInt {
     fn get_managed_objects(
         &self,
     ) -> zbus::Result<
-        HashMap<OwnedObjectPath, HashMap<OwnedInterfaceName, HashMap<String, OwnedValue>>>,
+        HashMap<OwnedObjectPath, HashMap<OwnedInterfaceName, HashMap<String, OwnedVariant>>>,
     >;
 }
 fn gpu_sub() -> Subscription<Message> {
@@ -442,7 +437,7 @@ fn gpu_sub() -> Subscription<Message> {
                     Some(msg) = om_added.next() => {
                         if let Ok((path, _)) = msg.body().deserialize::<(
                             OwnedObjectPath,
-                            HashMap<OwnedInterfaceName, HashMap<String, OwnedValue>>,
+                            HashMap<OwnedInterfaceName, HashMap<String, OwnedVariant>>,
                         )>()
                             && path.as_str().starts_with("/org/opengamingcollective/cardwire/Gpu/")
                         {
@@ -746,7 +741,7 @@ pub fn shortcuts_sub() -> Subscription<Message> {
             };
 
             // Register this connection as cardwire-gui with the portal
-            let options = HashMap::<String, zbus::zvariant::Value>::new();
+            let options = HashMap::<String, zbus::Variant>::new();
             if let Err(err) = conn
                 .call_method(
                     Some("org.freedesktop.portal.Desktop"),

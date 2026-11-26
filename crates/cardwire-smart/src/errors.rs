@@ -21,6 +21,9 @@ pub enum SmartAnalyzerError {
 
     #[error("IO Error: {0}")]
     Io(#[from] io::Error),
+
+    #[error("AsyncFdRegister error: {0}")]
+    AsyncFdRegister(String),
 }
 
 pub type Result<T, E = SmartAnalyzerError> = std::result::Result<T, E>;

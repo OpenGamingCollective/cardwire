@@ -70,7 +70,7 @@ impl ModeInterface {
         let mut mode_map = self.mode_map.lock().await;
         let mode: u32 = Modes::into(mode);
         mode_map
-            .set(0, mode as u8, 0)
+            .set(0, &(mode as u8), 0)
             .map_err(|err| fdo::Error::Failed(err.to_string()))
     }
 

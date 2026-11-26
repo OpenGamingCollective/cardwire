@@ -10,11 +10,7 @@ use cardwire_dbus::{
     smart::CardwireSmartPolicyProxy,
     types::{DbusAppMetadata, DbusGpuDevice, DbusPciDevice},
 };
-use zbus::{
-    Connection, Proxy,
-    names::OwnedInterfaceName,
-    zvariant::{OwnedObjectPath, OwnedValue},
-};
+use zbus::{Connection, OwnedObjectPath, OwnedVariant, Proxy, names::OwnedInterfaceName};
 
 use zbus::Result;
 
@@ -143,14 +139,14 @@ impl<'a> DaemonClient<'a> {
 
     async fn build_gpu_proxy(&self, id: u32) -> Result<CardwireGpuProxy<'_>> {
         CardwireGpuProxy::builder(self.proxy.connection())
-            .path(format!("/org/opengamingcollective/cardwire/Gpu/{}", id))?
+            .path(format!("/org/opengamingcollective/cardwire/Gpu/{}", id))
             .build()
             .await
     }
 
     pub async fn get_gpu_objects(
         &self,
-    ) -> Result<HashMap<OwnedObjectPath, HashMap<OwnedInterfaceName, HashMap<String, OwnedValue>>>>
+    ) -> Result<HashMap<OwnedObjectPath, HashMap<OwnedInterfaceName, HashMap<String, OwnedVariant>>>>
     {
         let proxy = CardwireGpuIntProxy::new(self.proxy.connection()).await?;
         proxy.get_managed_objects().await

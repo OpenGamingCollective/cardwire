@@ -1,11 +1,6 @@
 use std::collections::HashMap;
 
-use zbus::{
-    Result,
-    names::OwnedInterfaceName,
-    proxy,
-    zvariant::{OwnedObjectPath, OwnedValue},
-};
+use zbus::{OwnedObjectPath, OwnedVariant, Result, names::OwnedInterfaceName, proxy};
 
 use crate::types::DbusGpuDevice;
 
@@ -23,7 +18,7 @@ pub trait CardwireGpuInt {
     fn get_managed_objects(
         &self,
     ) -> zbus::Result<
-        HashMap<OwnedObjectPath, HashMap<OwnedInterfaceName, HashMap<String, OwnedValue>>>,
+        HashMap<OwnedObjectPath, HashMap<OwnedInterfaceName, HashMap<String, OwnedVariant>>>,
     >;
 }
 

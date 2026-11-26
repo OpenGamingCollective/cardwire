@@ -28,27 +28,27 @@ async fn main() -> Result<()> {
     daemon.pre_daemon_tasks().await?;
 
     // Now connect to the system dbus
-    let conn_builder = connection::Builder::system()?;
+    let conn_builder = connection::Builder::system();
     let conn = conn_builder
-        .name("org.opengamingcollective.cardwire")?
-        .serve_at("/org/opengamingcollective/cardwire", daemon.clone())?
+        .name("org.opengamingcollective.cardwire")
+        .serve_at("/org/opengamingcollective/cardwire", daemon.clone())
         .serve_at(
             "/org/opengamingcollective/cardwire",
             zbus::fdo::ObjectManager,
-        )?
+        )
         .replace_existing_names(false)
         .allow_name_replacements(false)
         .build()
         .await?;
 
     let _conn = match async {
-        let conn_builder = connection::Builder::system()?;
+        let conn_builder = connection::Builder::system();
         conn_builder
-            .name("net.hadess.SwitcherooControl")?
+            .name("net.hadess.SwitcherooControl")
             .serve_at(
                 "/net/hadess/SwitcherooControl",
                 daemon.switcheroo_interface.clone(),
-            )?
+            )
             .replace_existing_names(true)
             .build()
             .await

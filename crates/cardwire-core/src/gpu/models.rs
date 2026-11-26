@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, str::FromStr};
 
-use zbus::zvariant::{self, OwnedValue};
+use zbus::OwnedVariant;
 
 use crate::pci::models::PciDevice;
 
@@ -87,9 +87,7 @@ impl Display for GpuVendor {
     }
 }
 
-#[derive(
-    Clone, Debug, serde::Serialize, serde::Deserialize, Default, PartialEq, zvariant::Type,
-)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default, PartialEq, zbus::Type)]
 #[repr(u32)]
 pub enum GpuType {
     Integrated = 0,
@@ -107,10 +105,10 @@ pub enum AdditionalProperty {
     NvidiaMinor(u32),
 }
 
-impl From<AdditionalProperty> for OwnedValue {
+impl From<AdditionalProperty> for OwnedVariant {
     fn from(value: AdditionalProperty) -> Self {
         match value {
-            AdditionalProperty::NvidiaMinor(minor) => OwnedValue::from(minor),
+            AdditionalProperty::NvidiaMinor(minor) => OwnedVariant::from(minor),
         }
     }
 }
