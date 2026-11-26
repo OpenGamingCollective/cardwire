@@ -5,7 +5,7 @@ use cardwire_core::{
     gpu::models::{GpuDevice, GpuType},
     pci::models::PciDevice,
 };
-use zbus::zvariant::{self, OwnedValue};
+use zbus::OwnedVariant;
 
 /// The GpuDevice communicated over D-Bus
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug)]
@@ -18,7 +18,7 @@ pub struct DbusGpuDevice {
     pub device_type: GpuType,
     pub vendor: String,
     pub driver: String,
-    pub additional_properties: HashMap<String, OwnedValue>,
+    pub additional_properties: HashMap<String, OwnedVariant>,
 }
 
 impl From<&GpuDevice> for DbusGpuDevice {
@@ -78,7 +78,7 @@ impl From<&PciDevice> for DbusPciDevice {
     }
 }
 
-#[derive(Debug, Clone, zvariant::Type, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, zbus::Type, serde::Serialize, serde::Deserialize)]
 pub struct DbusAppMetadata {
     pub display_name: String,
     pub desktop_file_id: Option<String>,

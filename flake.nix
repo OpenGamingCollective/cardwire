@@ -110,6 +110,7 @@
               yamlfmt
               zizmor
               treefmt
+              sqlite
             ])
             ++ runtimeLibs
             ++ preCommit.enabledPackages;

@@ -85,7 +85,9 @@ impl SmartAnalyzer {
         let mut blocker = blocker.write().await;
 
         let exec_ring = blocker.get_exec_ring()?;
-        let exec_ring = AsyncFd::new(exec_ring)?;
+        // SAFETY: RingBuf owns its fd and keeps it open for the AsyncFd lifetime
+        let exec_ring = unsafe { AsyncFd::register(exec_ring) }
+            .map_err(|err| SmartAnalyzerError::AsyncFdRegister(err.to_string()))?;
         let exec_ring = Arc::new(Mutex::new(exec_ring));
 
         let maps = Maps {
@@ -177,13 +179,13 @@ impl SmartAnalyzer {
                 GpuPolicy::Allowed => {
                     let mut allowed_map = self.bpf_maps.allowed_map.write().await;
                     // TODO: use the GPU id as value
-                    if let Err(err) = allowed_map.insert(event.pid, 1, 0) {
+                    if let Err(err) = allowed_map.insert(&event.pid, &1, 0) {
                         warn!("Failed to insert into eBPF map: {}", err)
                     }
                 }
                 GpuPolicy::Forced => {
                     let mut forced_map = self.bpf_maps.forced_map.write().await;
-                    if let Err(e) = forced_map.insert(event.pid, res.gpu_id, 0) {
+                    if let Err(e) = forced_map.insert(&event.pid, &res.gpu_id, 0) {
                         warn!("Failed to insert into eBPF map: {}", e);
                     }
                 }

@@ -10,11 +10,7 @@ use cardwire_core::{
 };
 use log::warn;
 use tokio::sync::RwLock;
-use zbus::{
-    interface,
-    object_server::SignalEmitter,
-    zvariant::{self, OwnedValue, Value},
-};
+use zbus::{OwnedVariant, Str, Variant, interface, object_server::SignalEmitter};
 
 use crate::interface::GpuInterface;
 
@@ -53,10 +49,10 @@ impl SwitcherooInterface {
             )
         };
 
-        let mut changed: HashMap<&str, OwnedValue> = HashMap::new();
-        changed.insert("HasDualGpu", OwnedValue::from(has_dual_gpu));
-        changed.insert("NumGPUs", OwnedValue::from(num_gpus));
-        let gpus_value = match OwnedValue::try_from(Value::from(gpus)) {
+        let mut changed: HashMap<&str, OwnedVariant> = HashMap::new();
+        changed.insert("HasDualGpu", OwnedVariant::from(has_dual_gpu));
+        changed.insert("NumGPUs", OwnedVariant::from(num_gpus));
+        let gpus_value = match OwnedVariant::try_from(Variant::from(gpus)) {
             Ok(value) => value,
             Err(err) => {
                 warn!("could not build switcheroo GPUs payload: {err}");
@@ -107,8 +103,8 @@ impl SwitcherooInterface {
     async fn gpus_locked(
         gpu_list: &BTreeMap<usize, Arc<GpuInterface>>,
         mode: Modes,
-    ) -> Vec<HashMap<&'static str, OwnedValue>> {
-        let mut vec: Vec<HashMap<&str, OwnedValue>> = Vec::new();
+    ) -> Vec<HashMap<&'static str, OwnedVariant>> {
+        let mut vec: Vec<HashMap<&str, OwnedVariant>> = Vec::new();
         let mut visible_gpus: Vec<&Arc<GpuInterface>> = Vec::new();
         for gpu in gpu_list.values() {
             if is_gpu_launchable(
@@ -125,8 +121,8 @@ impl SwitcherooInterface {
             let mut dict = HashMap::new();
 
             // The name (s)
-            let name_str = zvariant::Str::from(gpu.device.name());
-            dict.insert("Name", OwnedValue::from(name_str));
+            let name_str = Str::from(gpu.device.name());
+            dict.insert("Name", OwnedVariant::from(name_str));
             // Env Vars
             let env_vars = compute_switcheroo_env(
                 gpu_count,
@@ -137,8 +133,8 @@ impl SwitcherooInterface {
                 gpu.device.pci().pci_address(),
             );
 
-            let env_val = Value::from(env_vars);
-            match OwnedValue::try_from(env_val) {
+            let env_val = Variant::from(env_vars);
+            match OwnedVariant::try_from(env_val) {
                 Ok(value) => {
                     dict.insert("Environment", value);
                 }
@@ -151,9 +147,9 @@ impl SwitcherooInterface {
                 }
             }
             // "Default" (b)
-            dict.insert("Default", OwnedValue::from(gpu.device.is_default()));
+            dict.insert("Default", OwnedVariant::from(gpu.device.is_default()));
             // "Discrete" (b)
-            dict.insert("Discrete", OwnedValue::from(gpu.device.is_discrete()));
+            dict.insert("Discrete", OwnedVariant::from(gpu.device.is_discrete()));
 
             vec.push(dict);
         }
@@ -178,7 +174,7 @@ impl SwitcherooInterface {
     }
 
     #[zbus(property, name = "GPUs")]
-    pub async fn gpus(&self) -> Vec<HashMap<&'static str, OwnedValue>> {
+    pub async fn gpus(&self) -> Vec<HashMap<&'static str, OwnedVariant>> {
         let gpu_list = self.gpu_list.read().await;
         let mode = self.mode_state.read().await.mode();
         Self::gpus_locked(&gpu_list, mode).await

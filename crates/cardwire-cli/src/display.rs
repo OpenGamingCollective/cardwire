@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use anyhow::{Ok, Result};
 use cardwire_core::gpu::models::GpuType;
 use cardwire_dbus::types::DbusPciDevice;
-use zbus::zvariant::OwnedValue;
+use zbus::OwnedVariant;
 
 #[derive(serde::Deserialize, serde::Serialize, zbus::zvariant::Type, Debug)]
 pub struct DisplayGpuDevice {
@@ -20,7 +20,7 @@ pub struct DisplayGpuDevice {
     pub vendor: String,
     pub driver: String,
     pub blocked: bool,
-    pub additional_properties: HashMap<String, OwnedValue>,
+    pub additional_properties: HashMap<String, OwnedVariant>,
 }
 
 /// Take a Map and print it
@@ -136,7 +136,7 @@ mod tests {
         vendor: &str,
         driver: &str,
         blocked: bool,
-        additional_properties: HashMap<String, OwnedValue>,
+        additional_properties: HashMap<String, OwnedVariant>,
     ) -> DisplayGpuDevice {
         DisplayGpuDevice {
             id,
@@ -170,8 +170,8 @@ mod tests {
                 HashMap::default(),
             ),
         );
-        let mut prop: HashMap<String, OwnedValue> = HashMap::default();
-        prop.insert("nvidia_minor".into(), OwnedValue::from(0));
+        let mut prop: HashMap<String, OwnedVariant> = HashMap::default();
+        prop.insert("nvidia_minor".into(), OwnedVariant::from(0));
         map.insert(
             1,
             make_gpu(

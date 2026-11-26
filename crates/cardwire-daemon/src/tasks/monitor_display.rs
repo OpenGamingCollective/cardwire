@@ -125,7 +125,10 @@ async fn run_display_monitor(
     external_display_switch: Arc<AtomicBool>,
 ) -> zbus::Result<()> {
     let drm_monitor = udev::MonitorBuilder::new()?.match_subsystem("drm")?;
-    let drm_fd = AsyncFd::new(drm_monitor.listen()?)?;
+    // SAFETY: MonitorSocket owns its fd and keeps it open for the AsyncFd lifetime
+    let drm_fd =
+        unsafe { AsyncFd::register_with_interest(drm_monitor.listen()?, Interest::READABLE) }
+            .map_err(std::io::Error::other)?;
     let mut retry = tokio::time::interval(RETRY_INTERVAL);
     retry.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut cards_seen: HashSet<u32> = HashSet::new();

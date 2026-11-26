@@ -250,7 +250,7 @@ pub async fn notify(message: String) {
                 "Cardwire",
                 message,
                 Vec::<String>::new(),
-                HashMap::<String, zbus::zvariant::OwnedValue>::new(),
+                HashMap::<String, zbus::OwnedVariant>::new(),
                 -1_i32,
             ),
         )

@@ -1,10 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use zbus::{
-    self, Connection, fdo,
-    names::OwnedInterfaceName,
-    zvariant::{OwnedObjectPath, OwnedValue},
-};
+use zbus::{self, Connection, OwnedObjectPath, OwnedVariant, fdo, names::OwnedInterfaceName};
 
 use crate::models::{DaemonSettings, DbusAppMetadata, LsofData, Mode};
 
@@ -82,12 +78,12 @@ impl CardwireDbus {
     async fn get_managed_objects(
         &self,
     ) -> zbus::fdo::Result<
-        HashMap<OwnedObjectPath, HashMap<OwnedInterfaceName, HashMap<String, OwnedValue>>>,
+        HashMap<OwnedObjectPath, HashMap<OwnedInterfaceName, HashMap<String, OwnedVariant>>>,
     > {
         let connection = Connection::system().await?;
         let proxy = zbus::fdo::ObjectManagerProxy::builder(&connection)
-            .destination("org.opengamingcollective.cardwire")?
-            .path("/org/opengamingcollective/cardwire")?
+            .destination("org.opengamingcollective.cardwire")
+            .path("/org/opengamingcollective/cardwire")
             .build()
             .await?;
         proxy.get_managed_objects().await

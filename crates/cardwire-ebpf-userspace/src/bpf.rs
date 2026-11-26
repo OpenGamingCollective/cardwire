@@ -187,7 +187,7 @@ impl EbpfBlocker {
         )
         .map_err(CardwireEbpfError::aya)?;
         info!("inserting: {} into map", pid);
-        array_map.set(0, pid, 0).map_err(CardwireEbpfError::aya)?;
+        array_map.set(0, &pid, 0).map_err(CardwireEbpfError::aya)?;
         Ok(())
     }
 
@@ -211,8 +211,8 @@ impl EbpfBlocker {
         .map_err(CardwireEbpfError::aya)?;
         inode_map
             .insert(
-                key,
-                InodeState {
+                &key,
+                &InodeState {
                     gpu_id,
                     blocked: 1,
                     _padding: [0; 3],
@@ -233,8 +233,8 @@ impl EbpfBlocker {
         // Keep the inode in the map for tracking, but set blocked to 0
         inode_map
             .insert(
-                key,
-                InodeState {
+                &key,
+                &InodeState {
                     gpu_id,
                     blocked: 0,
                     _padding: [0; 3],
@@ -284,7 +284,7 @@ impl EbpfBlocker {
         )
         .map_err(CardwireEbpfError::aya)?;
         inode_map
-            .insert(key, value, 0)
+            .insert(&key, &value, 0)
             .map_err(CardwireEbpfError::aya)?;
         Ok(())
     }
@@ -349,7 +349,7 @@ impl EbpfBlocker {
         )
         .map_err(CardwireEbpfError::aya)?;
         setting_map
-            .insert(key, value, 0)
+            .insert(&key, &value, 0)
             .map_err(CardwireEbpfError::aya)
     }
 
@@ -371,7 +371,7 @@ impl EbpfBlocker {
         )
         .map_err(CardwireEbpfError::aya)?;
         allowed_comm_map
-            .insert(comm, 0, 0)
+            .insert(&comm, &0, 0)
             .map_err(CardwireEbpfError::aya)
     }
 
@@ -499,7 +499,8 @@ impl EbpfBlocker {
                 return Err(CardwireEbpfError::aya(err));
             }
         };
-        let async_fd = match AsyncFd::with_interest(logger, Interest::READABLE) {
+        let async_fd = match unsafe { AsyncFd::register_with_interest(logger, Interest::READABLE) }
+        {
             Ok(fd) => fd,
             Err(err) => {
                 error!("couldn't get the async_fd for ebpf_logger");

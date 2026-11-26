@@ -32,39 +32,39 @@ rust-version = "1.95.0"
 license = "GPL-3.0"
 
 [workspace.dependencies]
-tokio = { version = "1.52.3", features = ["full"] }
-zbus = { version = "5.16.0", features = ["tokio", "option-as-array"] }
-clap = { version = "4.6.1", features = ["derive"] }
-serde = { version = "1.0.228", features = ["derive"] }
-log = "0.4.32"
-thiserror = "2.0.18"
-clap_complete = "4.6.5"
-anyhow = "1.0.102"
+tokio = { version = "1.54.1", features = ["full"] }
+zbus = { version = "6.5.0", features = ["tokio", "option-as-array"] }
+clap = { version = "4.6.10", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
+log = "0.4.35"
+thiserror = "2.0.21"
+clap_complete = "4.6.12"
+anyhow = "1.0.105"
 env_logger = "0.11"
-toml = "1.0.3"
+toml = "1.2.3"
 vulkano = { version = "0.35.2", default-features = false }
 khronos-egl = { version = "6.0.0", features = ["dynamic", "1_5"] }
-rusqlite = "0.40.1"
-ashpd = { version = "0.13.13", features = ["global_shortcuts"] }
+rusqlite = "0.43.0"
+ashpd = { version = "0.14.3", features = ["global_shortcuts"] }
 libdrm_amdgpu_sys = { version = "0.9.0", default-features = false, features = [
     "dynamic_loading",
 ] }
 nvml-wrapper = "0.13.0"
 
 # EBPF
-aya = "0.14.0"
-aya-build = "0.2.0"
-aya-log = "0.3.0"
-aya-ebpf = "0.2.1"
-aya-log-ebpf = "0.2.0"
-which = "8.0.5"
+aya = "0.16.0"
+aya-build = "0.2.1"
+aya-log = "0.4.0"
+aya-ebpf = "0.3.0"
+aya-log-ebpf = "0.3.0"
+which = "8.0.6"
 cargo_metadata = "0.23.1"
 
 
-serde_json = "1.0.150"
-tokio-stream = "0.1.18"
+serde_json = "1.0.154"
+tokio-stream = "0.1.19"
 xdg = "3.0.0"
-freedesktop-desktop-entry = "0.8.1"
+freedesktop-desktop-entry = "0.8.4"
 udev = { version = "^0.9.3", features = ["send", "sync"] }
 # don't use default-features to remove X11
 # cardwire doesn't support X11 and will never support it unless someone maintains it
@@ -81,9 +81,9 @@ iced = { version = "0.14.0", default-features = false, features = [
 ] }
 iced_aw = "0.14.1"
 strum = { version = "0.28", features = ["derive"] }
-ksni = "0.3.6"
+ksni = "0.3.7"
 chrono = "0.4.45"
-inotify = "0.11.4"
+inotify = "0.11.5"
 
 [profile.dev]
 overflow-checks = true

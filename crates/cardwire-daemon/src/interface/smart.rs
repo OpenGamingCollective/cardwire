@@ -75,7 +75,7 @@ impl SmartPolicyInterface {
                 }
                 let mut pid_map = self.pid_map.write().await;
                 pid_map
-                    .insert(pid, 0, 0)
+                    .insert(&pid, &0, 0)
                     .map_err(|err| fdo::Error::Failed(err.to_string()))
             }
             // Equivalent to CARDWIRE_FORCE_DGPU=value
@@ -89,7 +89,7 @@ impl SmartPolicyInterface {
                 }
                 let mut force_map = self.forced_map.write().await;
                 force_map
-                    .insert(pid, value, 0)
+                    .insert(&pid, &value, 0)
                     .map_err(|err| Failed(err.to_string()))
             }
             // Equivalent to CARDWIRE_FORCE_GPU=value
@@ -103,7 +103,7 @@ impl SmartPolicyInterface {
                 }
                 let mut force_map = self.forced_map.write().await;
                 force_map
-                    .insert(pid, value, 0)
+                    .insert(&pid, &value, 0)
                     .map_err(|err| Failed(err.to_string()))
             }
             _ => Err(fdo::Error::InvalidArgs(format!("invalid arg: {}", policy))),
