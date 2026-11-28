@@ -15,8 +15,8 @@ pub struct CardwireConfig {
     pub global_settings: Settings,
     pub experimental_features: ExperimentalFeatures,
     pub ebpf: Ebpf,
-    pub switcheroo_settings: SwitcherooControlShim,
     pub internal_whitelist: InternalWhitelist,
+    pub switcheroo: SwitcherooControlShim,
 }
 
 impl CardwireConfig {

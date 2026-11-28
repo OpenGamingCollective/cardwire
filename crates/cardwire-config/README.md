@@ -33,7 +33,7 @@ fake_drm_uevent = false
 [ebpf]
 enabled = true
 
-[switcheroo_settings]
+[switcheroo]
 enabled = true
 cardwire_envs = true
 switcheroo_envs = true
